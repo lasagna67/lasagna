@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -30,14 +30,14 @@ func loadConfig() config {
 	return config{Address: net.JoinHostPort("", port), DataPath: path}
 }
 
-func run() error {
+func run(logger *slog.Logger) error {
 	cfg := loadConfig()
 	jsonRepository, err := repository.NewJSONRepository(cfg.DataPath)
 	if err != nil {
 		return fmt.Errorf("initialize registry: %w", err)
 	}
 	registryService := service.NewRegistryService(jsonRepository)
-	registryHandler := handler.NewRegistryHandler(registryService)
+	registryHandler := handler.NewRegistryHandler(registryService, logger)
 	routes := registryHandler.Routes()
 	server := &http.Server{
 		Addr:              cfg.Address,
@@ -46,8 +46,9 @@ func run() error {
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
+		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
-	log.Printf("Registry Mock listening on %s", cfg.Address)
+	logger.Info("Registry Mock listening", "address", cfg.Address, "data_path", cfg.DataPath)
 	if err := server.ListenAndServe(); err != nil {
 		return fmt.Errorf("serve registry: %w", err)
 	}
@@ -55,7 +56,9 @@ func run() error {
 }
 
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("service", "registry-mock")
+	if err := run(logger); err != nil {
+		logger.Error("Registry Mock stopped", "error", err)
+		os.Exit(1)
 	}
 }

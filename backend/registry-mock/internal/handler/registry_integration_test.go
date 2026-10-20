@@ -1,6 +1,8 @@
 package handler_test
 
 import (
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -46,7 +48,8 @@ func newRoutes(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return handler.NewRegistryHandler(service.NewRegistryService(r)).Routes()
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	return handler.NewRegistryHandler(service.NewRegistryService(r), logger).Routes()
 }
 
 func TestIntegrationCompanyPublicContract(t *testing.T) {
