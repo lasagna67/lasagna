@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v5"
+	authhandler "github.com/lasagna67/lasagna.git/internal/auth/handler"
 	"github.com/lasagna67/lasagna.git/internal/config"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 	"github.com/lasagna67/lasagna.git/pkg/server"
@@ -17,8 +18,13 @@ type Delivery struct {
 func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *Delivery {
 	srv := server.NewServer(cfg, logger.Named("http"))
 
-	//e := srv.Echo()
-	//api := e.Group("/api/v0")
+	e := srv.Echo()
+	api := e.Group("/api/v0")
+
+	auth := authhandler.New(services.Auth, logger.Named("auth"))
+	auth.RegisterRoutes(api)
+	// Защищённые маршруты других модулей:
+	// api.Group("/applications", auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 
 	return &Delivery{
 		server: srv,

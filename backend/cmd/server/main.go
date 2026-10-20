@@ -12,6 +12,14 @@ import (
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
 
+// @title Lasagna API
+// @version 0.1
+// @description Кредитный кабинет предпринимателя.
+// @BasePath /api/v0
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Токен из /auth/login в формате "Bearer <access_token>".
 func main() {
 	ctx, stop := signal.NotifyContext( // root ctx
 		context.Background(),
