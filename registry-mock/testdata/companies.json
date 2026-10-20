@@ -1,0 +1,708 @@
+[
+  {
+    "inn": "7705005410",
+    "ogrn": "1127706709294",
+    "kpp": "770501001",
+    "entity_type": "ЮЛ",
+    "source": "ЕГРЮЛ",
+    "name": {
+      "full": "Общество с ограниченной ответственностью «Кедровый контур Демо»",
+      "short": "ООО «Кедровый контур Демо»"
+    },
+    "registration": {
+      "date": "2012-04-17",
+      "region": "Москва",
+      "address": "г. Москва, ул. Кедрового контура, д. 12, офис 4 (синтетический адрес)"
+    },
+    "status": {
+      "code": "active",
+      "description": "Действующее юридическое лицо",
+      "since": "2012-04-17"
+    },
+    "capital": {
+      "amount_kopecks": 50000000,
+      "type": "authorized"
+    },
+    "activities": {
+      "primary_okved": "25.62",
+      "additional_okveds": [
+        "25.61",
+        "46.72"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "stable_business"
+    }
+  },
+  {
+    "inn": "7810969607",
+    "ogrn": "1197847488585",
+    "kpp": "781001001",
+    "entity_type": "ЮЛ",
+    "source": "ЕГРЮЛ",
+    "name": {
+      "full": "Общество с ограниченной ответственностью «Ладожский хлеб Демо»",
+      "short": "ООО «Ладожский хлеб Демо»"
+    },
+    "registration": {
+      "date": "2019-06-18",
+      "region": "Санкт-Петербург",
+      "address": "г. Санкт-Петербург, ул. Макетных пекарей, д. 12, офис 4 (синтетический адрес)"
+    },
+    "status": {
+      "code": "active",
+      "description": "Действующее юридическое лицо",
+      "since": "2019-06-18"
+    },
+    "capital": {
+      "amount_kopecks": 30000000,
+      "type": "authorized"
+    },
+    "activities": {
+      "primary_okved": "10.71",
+      "additional_okveds": [
+        "47.24",
+        "56.10"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "stable_business"
+    }
+  },
+  {
+    "inn": "1655501828",
+    "ogrn": "1261658207975",
+    "kpp": "165501001",
+    "entity_type": "ЮЛ",
+    "source": "ЕГРЮЛ",
+    "name": {
+      "full": "Общество с ограниченной ответственностью «Листок данных Демо»",
+      "short": "ООО «Листок данных Демо»"
+    },
+    "registration": {
+      "date": "2026-06-02",
+      "region": "Республика Татарстан",
+      "address": "г. Казань, ул. Учебных алгоритмов, д. 12, офис 4 (синтетический адрес)"
+    },
+    "status": {
+      "code": "active",
+      "description": "Действующее юридическое лицо",
+      "since": "2026-06-02"
+    },
+    "capital": {
+      "amount_kopecks": 10000000,
+      "type": "authorized"
+    },
+    "activities": {
+      "primary_okved": "62.01",
+      "additional_okveds": [
+        "62.02",
+        "63.11"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "new_business"
+    }
+  },
+  {
+    "inn": "6671986865",
+    "ogrn": "1266616706377",
+    "kpp": "667101001",
+    "entity_type": "ЮЛ",
+    "source": "ЕГРЮЛ",
+    "name": {
+      "full": "Общество с ограниченной ответственностью «Искра макетов Демо»",
+      "short": "ООО «Искра макетов Демо»"
+    },
+    "registration": {
+      "date": "2026-09-08",
+      "region": "Свердловская область",
+      "address": "г. Екатеринбург, ул. Макетных идей, д. 12, офис 4 (синтетический адрес)"
+    },
+    "status": {
+      "code": "active",
+      "description": "Действующее юридическое лицо",
+      "since": "2026-09-08"
+    },
+    "capital": {
+      "amount_kopecks": 1000000,
+      "type": "authorized"
+    },
+    "activities": {
+      "primary_okved": "73.11",
+      "additional_okveds": [
+        "73.20"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "new_business"
+    }
+  },
+  {
+    "inn": "5260947681",
+    "ogrn": "1165206582606",
+    "kpp": "526001001",
+    "entity_type": "ЮЛ",
+    "source": "ЕГРЮЛ",
+    "name": {
+      "full": "Общество с ограниченной ответственностью «Волжский ассортимент Демо»",
+      "short": "ООО «Волжский ассортимент Демо»"
+    },
+    "registration": {
+      "date": "2016-02-16",
+      "region": "Нижегородская область",
+      "address": "г. Нижний Новгород, ул. Учебных поставок, д. 12, офис 4 (синтетический адрес)"
+    },
+    "status": {
+      "code": "liquidated",
+      "description": "Юридическое лицо ликвидировано",
+      "since": "2025-11-14"
+    },
+    "capital": {
+      "amount_kopecks": 25000000,
+      "type": "authorized"
+    },
+    "activities": {
+      "primary_okved": "46.90",
+      "additional_okveds": [
+        "52.10"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "liquidated_business"
+    }
+  },
+  {
+    "inn": "5406020303",
+    "ogrn": "1135466199923",
+    "kpp": "540601001",
+    "entity_type": "ЮЛ",
+    "source": "ЕГРЮЛ",
+    "name": {
+      "full": "Общество с ограниченной ответственностью «Таёжный оттиск Демо»",
+      "short": "ООО «Таёжный оттиск Демо»"
+    },
+    "registration": {
+      "date": "2013-08-22",
+      "region": "Новосибирская область",
+      "address": "г. Новосибирск, ул. Макетных оттисков, д. 12, офис 4 (синтетический адрес)"
+    },
+    "status": {
+      "code": "liquidated",
+      "description": "Юридическое лицо ликвидировано",
+      "since": "2024-12-16"
+    },
+    "capital": {
+      "amount_kopecks": 10000000,
+      "type": "authorized"
+    },
+    "activities": {
+      "primary_okved": "18.12",
+      "additional_okveds": [
+        "18.13"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "liquidated_business"
+    }
+  },
+  {
+    "inn": "7709094259",
+    "ogrn": "1157786089889",
+    "kpp": "770901001",
+    "entity_type": "ЮЛ",
+    "source": "ЕГРЮЛ",
+    "name": {
+      "full": "Общество с ограниченной ответственностью «Маршрут кедра Демо»",
+      "short": "ООО «Маршрут кедра Демо»"
+    },
+    "registration": {
+      "date": "2015-03-24",
+      "region": "Москва",
+      "address": "г. Москва, ул. Учебных маршрутов, д. 12, офис 4 (синтетический адрес)"
+    },
+    "status": {
+      "code": "reorganizing",
+      "description": "Юридическое лицо находится в процессе реорганизации в форме присоединения к нему других юридических лиц",
+      "since": "2026-08-18"
+    },
+    "capital": {
+      "amount_kopecks": 150000000,
+      "type": "authorized"
+    },
+    "activities": {
+      "primary_okved": "49.41",
+      "additional_okveds": [
+        "52.10",
+        "52.29"
+      ]
+    },
+    "reorganization": {
+      "type": "accession",
+      "start_date": "2026-08-18",
+      "description": "Начата реорганизация в форме присоединения другого юридического лица к данному обществу. Данное общество является продолжающим деятельность юридическим лицом. Процедура не завершена."
+    },
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "reorganizing_business"
+    }
+  },
+  {
+    "inn": "7813099373",
+    "ogrn": "1187836938552",
+    "kpp": "781301001",
+    "entity_type": "ЮЛ",
+    "source": "ЕГРЮЛ",
+    "name": {
+      "full": "Общество с ограниченной ответственностью «Невский модуль Демо»",
+      "short": "ООО «Невский модуль Демо»"
+    },
+    "registration": {
+      "date": "2018-11-13",
+      "region": "Санкт-Петербург",
+      "address": "г. Санкт-Петербург, ул. Учебных модулей, д. 12, офис 4 (синтетический адрес)"
+    },
+    "status": {
+      "code": "reorganizing",
+      "description": "Юридическое лицо находится в процессе реорганизации в форме выделения",
+      "since": "2026-09-15"
+    },
+    "capital": {
+      "amount_kopecks": 200000000,
+      "type": "authorized"
+    },
+    "activities": {
+      "primary_okved": "46.69",
+      "additional_okveds": [
+        "33.12"
+      ]
+    },
+    "reorganization": {
+      "type": "spin_off",
+      "start_date": "2026-09-15",
+      "description": "Начата реорганизация в форме выделения одного нового юридического лица. Данное общество продолжает деятельность. Процедура не завершена."
+    },
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "reorganizing_business"
+    }
+  },
+  {
+    "inn": "2310569351",
+    "ogrn": "1202322263880",
+    "kpp": "231001001",
+    "entity_type": "ЮЛ",
+    "source": "ЕГРЮЛ",
+    "name": {
+      "full": "Общество с ограниченной ответственностью «Южный каркас Демо»",
+      "short": "ООО «Южный каркас Демо»"
+    },
+    "registration": {
+      "date": "2020-10-06",
+      "region": "Краснодарский край",
+      "address": "г. Краснодар, ул. Макетных каркасов, д. 12, офис 4 (синтетический адрес)"
+    },
+    "status": {
+      "code": "active",
+      "description": "Действующее юридическое лицо",
+      "since": "2020-10-06"
+    },
+    "capital": {
+      "amount_kopecks": 500000000,
+      "type": "authorized"
+    },
+    "activities": {
+      "primary_okved": "41.20",
+      "additional_okveds": [
+        "43.21",
+        "43.22"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "high_risk_industry"
+    }
+  },
+  {
+    "inn": "6315819669",
+    "ogrn": "1096353811993",
+    "kpp": "631501001",
+    "entity_type": "ЮЛ",
+    "source": "ЕГРЮЛ",
+    "name": {
+      "full": "Общество с ограниченной ответственностью «Волжский мебельный контур Демо»",
+      "short": "ООО «Волжский мебельный контур Демо»"
+    },
+    "registration": {
+      "date": "2009-09-15",
+      "region": "Самарская область",
+      "address": "г. Самара, ул. Учебных гарнитуров, д. 12, офис 4 (синтетический адрес)"
+    },
+    "status": {
+      "code": "active",
+      "description": "Действующее юридическое лицо",
+      "since": "2009-09-15"
+    },
+    "capital": {
+      "amount_kopecks": 100000000,
+      "type": "authorized"
+    },
+    "activities": {
+      "primary_okved": "31.01",
+      "additional_okveds": [
+        "31.09",
+        "46.65"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "negative_credit_history"
+    }
+  },
+  {
+    "inn": "770761836401",
+    "ogrn": "311772668894213",
+    "entity_type": "ИП",
+    "source": "ЕГРИП",
+    "name": {
+      "full": "Индивидуальный предприниматель Кедровцев Матвей Олегович",
+      "short": "ИП Кедровцев Матвей Олегович"
+    },
+    "registration": {
+      "date": "2011-05-17",
+      "region": "Москва",
+      "address": null
+    },
+    "status": {
+      "code": "active",
+      "description": "Индивидуальный предприниматель является действующим",
+      "since": "2011-05-17"
+    },
+    "activities": {
+      "primary_okved": "95.22",
+      "additional_okveds": [
+        "47.54"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "stable_business"
+    }
+  },
+  {
+    "inn": "781497718575",
+    "ogrn": "320788304462102",
+    "entity_type": "ИП",
+    "source": "ЕГРИП",
+    "name": {
+      "full": "Индивидуальный предприниматель Ладогина Вероника Ильинична",
+      "short": "ИП Ладогина Вероника Ильинична"
+    },
+    "registration": {
+      "date": "2020-02-11",
+      "region": "Санкт-Петербург",
+      "address": null
+    },
+    "status": {
+      "code": "active",
+      "description": "Индивидуальный предприниматель является действующим",
+      "since": "2020-02-11"
+    },
+    "activities": {
+      "primary_okved": "74.20",
+      "additional_okveds": [
+        "73.11"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "stable_business"
+    }
+  },
+  {
+    "inn": "165979491871",
+    "ogrn": "326160310771047",
+    "entity_type": "ИП",
+    "source": "ЕГРИП",
+    "name": {
+      "full": "Индивидуальный предприниматель Яснолесов Даниил Романович",
+      "short": "ИП Яснолесов Даниил Романович"
+    },
+    "registration": {
+      "date": "2026-05-19",
+      "region": "Республика Татарстан",
+      "address": null
+    },
+    "status": {
+      "code": "active",
+      "description": "Индивидуальный предприниматель является действующим",
+      "since": "2026-05-19"
+    },
+    "activities": {
+      "primary_okved": "62.01",
+      "additional_okveds": [
+        "62.02"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "new_business"
+    }
+  },
+  {
+    "inn": "667036260874",
+    "ogrn": "326665946107120",
+    "entity_type": "ИП",
+    "source": "ЕГРИП",
+    "name": {
+      "full": "Индивидуальный предприниматель Берестина Алиса Тимуровна",
+      "short": "ИП Берестина Алиса Тимуровна"
+    },
+    "registration": {
+      "date": "2026-09-22",
+      "region": "Свердловская область",
+      "address": null
+    },
+    "status": {
+      "code": "active",
+      "description": "Индивидуальный предприниматель является действующим",
+      "since": "2026-09-22"
+    },
+    "activities": {
+      "primary_okved": "47.71",
+      "additional_okveds": [
+        "47.72"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "new_business"
+    }
+  },
+  {
+    "inn": "526200583660",
+    "ogrn": "317521819336573",
+    "entity_type": "ИП",
+    "source": "ЕГРИП",
+    "name": {
+      "full": "Индивидуальный предприниматель Ручейников Глеб Павлович",
+      "short": "ИП Ручейников Глеб Павлович"
+    },
+    "registration": {
+      "date": "2017-04-11",
+      "region": "Нижегородская область",
+      "address": null
+    },
+    "status": {
+      "code": "ceased",
+      "description": "Индивидуальный предприниматель прекратил деятельность в связи с принятием им соответствующего решения",
+      "since": "2025-07-18"
+    },
+    "activities": {
+      "primary_okved": "56.10",
+      "additional_okveds": [
+        "56.30"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "ceased_entrepreneur"
+    }
+  },
+  {
+    "inn": "540742918750",
+    "ogrn": "314549179451880",
+    "entity_type": "ИП",
+    "source": "ЕГРИП",
+    "name": {
+      "full": "Индивидуальный предприниматель Таёжников Илья Андреевич",
+      "short": "ИП Таёжников Илья Андреевич"
+    },
+    "registration": {
+      "date": "2014-10-21",
+      "region": "Новосибирская область",
+      "address": null
+    },
+    "status": {
+      "code": "ceased",
+      "description": "Индивидуальный предприниматель прекратил деятельность в связи с принятием им соответствующего решения",
+      "since": "2023-09-15"
+    },
+    "activities": {
+      "primary_okved": "49.41",
+      "additional_okveds": [
+        "52.29"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "ceased_entrepreneur"
+    }
+  },
+  {
+    "inn": "770815348700",
+    "ogrn": "318770762957660",
+    "entity_type": "ИП",
+    "source": "ЕГРИП",
+    "name": {
+      "full": "Индивидуальный предприниматель Листопадова Марина Денисовна",
+      "short": "ИП Листопадова Марина Денисовна"
+    },
+    "registration": {
+      "date": "2018-07-10",
+      "region": "Москва",
+      "address": null
+    },
+    "status": {
+      "code": "active",
+      "description": "Индивидуальный предприниматель является действующим",
+      "since": "2018-07-10"
+    },
+    "activities": {
+      "primary_okved": "47.76",
+      "additional_okveds": [
+        "47.78.3"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "retail_entrepreneur"
+    }
+  },
+  {
+    "inn": "781663101333",
+    "ogrn": "321783836026372",
+    "entity_type": "ИП",
+    "source": "ЕГРИП",
+    "name": {
+      "full": "Индивидуальный предприниматель Искролесов Никита Сергеевич",
+      "short": "ИП Искролесов Никита Сергеевич"
+    },
+    "registration": {
+      "date": "2021-11-16",
+      "region": "Санкт-Петербург",
+      "address": null
+    },
+    "status": {
+      "code": "active",
+      "description": "Индивидуальный предприниматель является действующим",
+      "since": "2021-11-16"
+    },
+    "activities": {
+      "primary_okved": "62.01",
+      "additional_okveds": [
+        "62.02",
+        "62.09",
+        "63.11"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "it_entrepreneur"
+    }
+  },
+  {
+    "inn": "231101208844",
+    "ogrn": "325230600557582",
+    "entity_type": "ИП",
+    "source": "ЕГРИП",
+    "name": {
+      "full": "Индивидуальный предприниматель Светоключев Артём Михайлович",
+      "short": "ИП Светоключев Артём Михайлович"
+    },
+    "registration": {
+      "date": "2025-03-18",
+      "region": "Краснодарский край",
+      "address": null
+    },
+    "status": {
+      "code": "active",
+      "description": "Индивидуальный предприниматель является действующим",
+      "since": "2025-03-18"
+    },
+    "activities": {
+      "primary_okved": "43.21",
+      "additional_okveds": [
+        "43.22"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "young_business"
+    }
+  },
+  {
+    "inn": "631652222490",
+    "ogrn": "316636749971761",
+    "entity_type": "ИП",
+    "source": "ЕГРИП",
+    "name": {
+      "full": "Индивидуальный предприниматель Ветрокрылов Егор Вадимович",
+      "short": "ИП Ветрокрылов Егор Вадимович"
+    },
+    "registration": {
+      "date": "2016-06-14",
+      "region": "Самарская область",
+      "address": null
+    },
+    "status": {
+      "code": "active",
+      "description": "Индивидуальный предприниматель является действующим",
+      "since": "2016-06-14"
+    },
+    "activities": {
+      "primary_okved": "45.20",
+      "additional_okveds": [
+        "45.32"
+      ]
+    },
+    "reorganization": null,
+    "metadata": {
+      "as_of": "2026-10-20",
+      "is_synthetic": true,
+      "demo_scenario": "high_debt_load"
+    }
+  }
+]
