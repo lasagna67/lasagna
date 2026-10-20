@@ -4,7 +4,7 @@
 
 ## Запуск
 
-Команды выполняются из `lasagna/backend/registry-mock`:
+Команды выполняются из `lasagna/registry-mock`:
 
 ```powershell
 go run .
@@ -30,7 +30,7 @@ go run .
 
 ## Docker
 
-Сборка и запуск из `lasagna/backend/registry-mock`:
+Сборка и запуск из `lasagna/registry-mock`:
 
 ```powershell
 docker build -t registry-mock .
