@@ -1,0 +1,280 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Кредитный кабинет предпринимателя.",
+        "title": "Lasagna API",
+        "contact": {},
+        "version": "0.1"
+    },
+    "basePath": "/api/v0",
+    "paths": {
+        "/auth/login": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Вход",
+                "parameters": [
+                    {
+                        "description": "Email и пароль",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.AuthResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "неверный email или пароль",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "пользователь заблокирован",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Выход",
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает id и роль владельца токена.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Текущий пользователь",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.UserResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/register": {
+            "post": {
+                "description": "Создаёт пользователя с ролью client и сразу открывает сессию.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Регистрация клиента",
+                "parameters": [
+                    {
+                        "description": "Данные регистрации",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.RegisterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dto.AuthResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "409": {
+                        "description": "email или телефон уже заняты",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "dto.AuthResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string",
+                    "example": "q3Jx0o9cV2m4tJ7yHq1kB8nZ5wA6sD0fG2hK4lP9rT0"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "token_type": {
+                    "type": "string",
+                    "example": "Bearer"
+                },
+                "user": {
+                    "$ref": "#/definitions/dto.UserResponse"
+                }
+            }
+        },
+        "dto.LoginRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "owner@kedr-demo.ru"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "Secret123"
+                }
+            }
+        },
+        "dto.RegisterRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "owner@kedr-demo.ru"
+                },
+                "first_name": {
+                    "type": "string",
+                    "example": "Иван"
+                },
+                "last_name": {
+                    "type": "string",
+                    "example": "Петров"
+                },
+                "middle_name": {
+                    "type": "string",
+                    "example": "Сергеевич"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "Secret123"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "+79991234567"
+                }
+            }
+        },
+        "dto.UserResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "client",
+                        "underwriter",
+                        "admin"
+                    ],
+                    "example": "client"
+                }
+            }
+        },
+        "swagger.HTTPError": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "Неверный email или пароль"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Токен из /auth/login в формате \"Bearer \u003caccess_token\u003e\".",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}

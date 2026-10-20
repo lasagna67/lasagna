@@ -1,0 +1,185 @@
+basePath: /api/v0
+definitions:
+  dto.AuthResponse:
+    properties:
+      access_token:
+        example: q3Jx0o9cV2m4tJ7yHq1kB8nZ5wA6sD0fG2hK4lP9rT0
+        type: string
+      expires_at:
+        type: string
+      token_type:
+        example: Bearer
+        type: string
+      user:
+        $ref: '#/definitions/dto.UserResponse'
+    type: object
+  dto.LoginRequest:
+    properties:
+      email:
+        example: owner@kedr-demo.ru
+        type: string
+      password:
+        example: Secret123
+        type: string
+    type: object
+  dto.RegisterRequest:
+    properties:
+      email:
+        example: owner@kedr-demo.ru
+        type: string
+      first_name:
+        example: Иван
+        type: string
+      last_name:
+        example: Петров
+        type: string
+      middle_name:
+        example: Сергеевич
+        type: string
+      password:
+        example: Secret123
+        type: string
+      phone:
+        example: "+79991234567"
+        type: string
+    type: object
+  dto.UserResponse:
+    properties:
+      id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        type: string
+      role:
+        enum:
+        - client
+        - underwriter
+        - admin
+        example: client
+        type: string
+    type: object
+  swagger.HTTPError:
+    properties:
+      message:
+        example: Неверный email или пароль
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Кредитный кабинет предпринимателя.
+  title: Lasagna API
+  version: "0.1"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Email и пароль
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: неверный email или пароль
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: пользователь заблокирован
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      summary: Вход
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Выход
+      tags:
+      - auth
+  /auth/me:
+    get:
+      description: Возвращает id и роль владельца токена.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Текущий пользователь
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Создаёт пользователя с ролью client и сразу открывает сессию.
+      parameters:
+      - description: Данные регистрации
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "409":
+          description: email или телефон уже заняты
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      summary: Регистрация клиента
+      tags:
+      - auth
+securityDefinitions:
+  BearerAuth:
+    description: Токен из /auth/login в формате "Bearer <access_token>".
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
