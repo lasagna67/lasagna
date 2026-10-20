@@ -1,1 +1,35 @@
 skills-lock.json
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Test binary
+*.test
+
+# Go workspace file
+go.work
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env*
+# ...кроме шаблона
+!.env.example
+
+AGENTS.md
+# cmd/loadsim output
+report.json
