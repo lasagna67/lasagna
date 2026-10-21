@@ -16,7 +16,7 @@ RUN addgroup -S app && adduser -S -G app app
 WORKDIR /app
 
 COPY --from=build /out/registry-mock ./registry-mock
-COPY testdata/companies.json ./testdata/companies.json
+COPY testdata/egrip.json testdata/egrul.json ./testdata/
 
 USER app:app
 

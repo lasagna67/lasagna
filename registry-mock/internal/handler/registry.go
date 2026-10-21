@@ -12,7 +12,8 @@ import (
 )
 
 type CompanyService interface {
-	GetCompany(ctx context.Context, inn string) (model.Company, error)
+	GetEGRIP(ctx context.Context, inn string) (model.Company, error)
+	GetEGRUL(ctx context.Context, inn string) (model.Company, error)
 }
 
 type RegistryHandler struct {
@@ -27,7 +28,8 @@ func NewRegistryHandler(service CompanyService, logger *slog.Logger) *RegistryHa
 func (h *RegistryHandler) Routes() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", h.Health)
-	mux.HandleFunc("/v1/companies/{inn}", h.GetCompany)
+	mux.HandleFunc("/v1/egrip/{inn}", h.GetEGRIP)
+	mux.HandleFunc("/v1/egrul/{inn}", h.GetEGRUL)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, http.StatusNotFound, "NOT_FOUND", "Route not found")
 	})
@@ -43,15 +45,23 @@ func (h *RegistryHandler) Health(w http.ResponseWriter, r *http.Request) {
 	}{Status: "ok"})
 }
 
-func (h *RegistryHandler) GetCompany(w http.ResponseWriter, r *http.Request) {
+func (h *RegistryHandler) GetEGRIP(w http.ResponseWriter, r *http.Request) {
+	h.getCompany(w, r, h.service.GetEGRIP)
+}
+
+func (h *RegistryHandler) GetEGRUL(w http.ResponseWriter, r *http.Request) {
+	h.getCompany(w, r, h.service.GetEGRUL)
+}
+
+func (h *RegistryHandler) getCompany(w http.ResponseWriter, r *http.Request, lookup func(context.Context, string) (model.Company, error)) {
 	if !h.allowGET(w, r) {
 		return
 	}
-	company, err := h.service.GetCompany(r.Context(), r.PathValue("inn"))
+	company, err := lookup(r.Context(), r.PathValue("inn"))
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrInvalidINN):
-			h.writeError(w, r, http.StatusBadRequest, "INVALID_INN", "INN must contain 10 or 12 digits")
+			h.writeError(w, r, http.StatusBadRequest, "INVALID_INN", "Invalid INN for requested registry")
 		case errors.Is(err, model.ErrCompanyNotFound):
 			h.writeError(w, r, http.StatusNotFound, "COMPANY_NOT_FOUND", "Company not found")
 		default:
@@ -60,37 +70,7 @@ func (h *RegistryHandler) GetCompany(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	h.writeJSON(w, r, http.StatusOK, newCompanyResponse(company))
-}
-
-type companyResponse struct {
-	INN            string                `json:"inn"`
-	OGRN           string                `json:"ogrn"`
-	KPP            string                `json:"kpp,omitempty"`
-	EntityType     string                `json:"entity_type"`
-	Source         string                `json:"source"`
-	Name           model.Name            `json:"name"`
-	Registration   model.Registration    `json:"registration"`
-	Status         model.Status          `json:"status"`
-	Capital        *model.Capital        `json:"capital,omitempty"`
-	Activities     model.Activities      `json:"activities"`
-	Reorganization *model.Reorganization `json:"reorganization,omitempty"`
-}
-
-func newCompanyResponse(company model.Company) companyResponse {
-	return companyResponse{
-		INN:            company.INN,
-		OGRN:           company.OGRN,
-		KPP:            company.KPP,
-		EntityType:     company.EntityType,
-		Source:         company.Source,
-		Name:           company.Name,
-		Registration:   company.Registration,
-		Status:         company.Status,
-		Capital:        company.Capital,
-		Activities:     company.Activities,
-		Reorganization: company.Reorganization,
-	}
+	h.writeJSON(w, r, http.StatusOK, company)
 }
 
 type errorResponse struct {
