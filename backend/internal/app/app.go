@@ -27,7 +27,11 @@ func NewApp(cfg config.Config, logger *logger.Logger) (*App, error) {
 	}
 
 	repo := NewRepo(infra)
-	services := NewService(repo, logger.Named("services"))
+	services, err := NewService(cfg, repo, logger.Named("services"))
+	if err != nil {
+		_ = infra.Close()
+		return nil, err
+	}
 	delivery := NewDelivery(cfg, services, logger.Named("delivery"))
 
 	return &App{

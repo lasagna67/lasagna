@@ -44,6 +44,10 @@ func (infra *Infra) Postgres() *postgres.Postgres {
 	return infra.postgres
 }
 
+func (infra *Infra) Redis() *redis.RedisClient {
+	return infra.redis
+}
+
 func (infra *Infra) Close() error {
 	var errs []error
 

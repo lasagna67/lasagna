@@ -66,6 +66,10 @@ type (
 		Encoding LogEncoding `default:"json"`
 	}
 
+	AuthConfig struct {
+		SessionTTL time.Duration `default:"24h"`
+	}
+
 	Config struct {
 		Environment AppEnv         `default:"development"`
 		AppName     string         `default:"Lasagna"`
@@ -73,6 +77,7 @@ type (
 		HTTP        HTTPConfig     `prefix:"HTTP_"`
 		Redis       RedisConfig    `prefix:"REDIS_"`
 		Logging     LoggingConfig  `prefix:"LOGGING_"`
+		Auth        AuthConfig     `prefix:"AUTH_"`
 	}
 )
 
