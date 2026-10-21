@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 	"github.com/lasagna67/lasagna.git/internal/auth/domain"
 	autherrors "github.com/lasagna67/lasagna.git/internal/auth/errors"
@@ -17,7 +18,9 @@ import (
 
 const validToken = "valid-token"
 
-// fakeService знает один токен, выданный клиенту u1.
+var clientID = uuid.MustParse("7c9e6679-7425-40de-944b-e07fc1f90ae7")
+
+// fakeService знает один токен, выданный клиенту clientID.
 type fakeService struct {
 	Service
 }
@@ -26,7 +29,7 @@ func (fakeService) Authenticate(_ context.Context, token string) (domain.Claims,
 	if token != validToken {
 		return domain.Claims{}, autherrors.ErrUnauthenticated
 	}
-	return domain.Claims{UserID: "u1", Role: domain.RoleClient}, nil
+	return domain.Claims{UserID: clientID, Role: domain.RoleClient}, nil
 }
 
 func (fakeService) Authorize(claims domain.Claims, allowed ...domain.Role) error {
@@ -57,7 +60,7 @@ func TestAuthMiddleware(t *testing.T) {
 		{"no header", "/api/v0/auth/me", "", http.StatusUnauthorized, ""},
 		{"wrong scheme", "/api/v0/auth/me", "Basic " + validToken, http.StatusUnauthorized, ""},
 		{"unknown token", "/api/v0/auth/me", "Bearer nope", http.StatusUnauthorized, ""},
-		{"me returns id and role", "/api/v0/auth/me", "Bearer " + validToken, http.StatusOK, `{"id":"u1","role":"client"}`},
+		{"me returns id and role", "/api/v0/auth/me", "Bearer " + validToken, http.StatusOK, `{"id":"` + clientID.String() + `","role":"client"}`},
 		{"scheme is case-insensitive", "/api/v0/auth/me", "bearer " + validToken, http.StatusOK, ""},
 		{"allowed role", "/clients-only", "Bearer " + validToken, http.StatusOK, ""},
 		{"forbidden role", "/admins-only", "Bearer " + validToken, http.StatusForbidden, ""},

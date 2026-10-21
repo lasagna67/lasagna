@@ -126,9 +126,9 @@
                 }
             }
         },
-        "/auth/register": {
+        "/users": {
             "post": {
-                "description": "Создаёт пользователя с ролью client и сразу открывает сессию.",
+                "description": "Заводит пользователя с ролью client и статусом active, сессию не открывает.",
                 "consumes": [
                     "application/json"
                 ],
@@ -136,17 +136,17 @@
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "users"
                 ],
-                "summary": "Регистрация клиента",
+                "summary": "Создание клиента",
                 "parameters": [
                     {
-                        "description": "Данные регистрации",
+                        "description": "Данные клиента",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.RegisterRequest"
+                            "$ref": "#/definitions/userdto.CreateClientRequest"
                         }
                     }
                 ],
@@ -154,7 +154,7 @@
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/dto.AuthResponse"
+                            "$ref": "#/definitions/userdto.UserResponse"
                         }
                     },
                     "400": {
@@ -165,6 +165,183 @@
                     },
                     "409": {
                         "description": "email или телефон уже заняты",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Ставит статус deleted, запись остаётся в БД. Только для admin.",
+                "tags": [
+                    "users"
+                ],
+                "summary": "Удаление пользователя",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "id пользователя",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}/ban": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Ставит статус banned. Только для admin.",
+                "tags": [
+                    "users"
+                ],
+                "summary": "Бан пользователя",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "id пользователя",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/{id}/reset": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает статус active после бана или удаления. Только для admin.",
+                "tags": [
+                    "users"
+                ],
+                "summary": "Восстановление пользователя",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "id пользователя",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/swagger.HTTPError"
                         }
@@ -212,7 +389,35 @@
                 }
             }
         },
-        "dto.RegisterRequest": {
+        "dto.UserResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "client",
+                        "underwriter",
+                        "admin"
+                    ],
+                    "example": "client"
+                }
+            }
+        },
+        "swagger.HTTPError": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "Неверный email или пароль"
+                }
+            }
+        },
+        "userdto.CreateClientRequest": {
             "type": "object",
             "properties": {
                 "email": {
@@ -241,12 +446,36 @@
                 }
             }
         },
-        "dto.UserResponse": {
+        "userdto.UserResponse": {
             "type": "object",
             "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string",
+                    "example": "a.smirnova@lasagna-bank.ru"
+                },
+                "first_name": {
+                    "type": "string",
+                    "example": "Анна"
+                },
                 "id": {
                     "type": "string",
+                    "format": "uuid",
                     "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                },
+                "last_name": {
+                    "type": "string",
+                    "example": "Смирнова"
+                },
+                "middle_name": {
+                    "type": "string",
+                    "example": "Олеговна"
+                },
+                "phone": {
+                    "type": "string",
+                    "example": "+79991234567"
                 },
                 "role": {
                     "type": "string",
@@ -255,16 +484,19 @@
                         "underwriter",
                         "admin"
                     ],
-                    "example": "client"
-                }
-            }
-        },
-        "swagger.HTTPError": {
-            "type": "object",
-            "properties": {
-                "message": {
+                    "example": "underwriter"
+                },
+                "status": {
                     "type": "string",
-                    "example": "Неверный email или пароль"
+                    "enum": [
+                        "active",
+                        "banned",
+                        "deleted"
+                    ],
+                    "example": "active"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         }

@@ -5,8 +5,10 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v5"
+	authdomain "github.com/lasagna67/lasagna.git/internal/auth/domain"
 	authhandler "github.com/lasagna67/lasagna.git/internal/auth/handler"
 	"github.com/lasagna67/lasagna.git/internal/config"
+	userhandler "github.com/lasagna67/lasagna.git/internal/user/handler"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 	"github.com/lasagna67/lasagna.git/pkg/server"
 )
@@ -24,6 +26,9 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 
 	auth := authhandler.New(services.Auth, logger.Named("auth"))
 	auth.RegisterRoutes(api)
+
+	users := userhandler.New(services.User, logger.Named("user"))
+	users.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleAdmin))
 	// Защищённые маршруты других модулей:
 	// api.Group("/applications", auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 

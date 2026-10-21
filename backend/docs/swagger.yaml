@@ -22,7 +22,27 @@ definitions:
         example: Secret123
         type: string
     type: object
-  dto.RegisterRequest:
+  dto.UserResponse:
+    properties:
+      id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+      role:
+        enum:
+        - client
+        - underwriter
+        - admin
+        example: client
+        type: string
+    type: object
+  swagger.HTTPError:
+    properties:
+      message:
+        example: Неверный email или пароль
+        type: string
+    type: object
+  userdto.CreateClientRequest:
     properties:
       email:
         example: owner@kedr-demo.ru
@@ -43,23 +63,44 @@ definitions:
         example: "+79991234567"
         type: string
     type: object
-  dto.UserResponse:
+  userdto.UserResponse:
     properties:
+      created_at:
+        type: string
+      email:
+        example: a.smirnova@lasagna-bank.ru
+        type: string
+      first_name:
+        example: Анна
+        type: string
       id:
         example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+      last_name:
+        example: Смирнова
+        type: string
+      middle_name:
+        example: Олеговна
+        type: string
+      phone:
+        example: "+79991234567"
         type: string
       role:
         enum:
         - client
         - underwriter
         - admin
-        example: client
+        example: underwriter
         type: string
-    type: object
-  swagger.HTTPError:
-    properties:
-      message:
-        example: Неверный email или пароль
+      status:
+        enum:
+        - active
+        - banned
+        - deleted
+        example: active
+        type: string
+      updated_at:
         type: string
     type: object
 info:
@@ -142,25 +183,26 @@ paths:
       summary: Текущий пользователь
       tags:
       - auth
-  /auth/register:
+  /users:
     post:
       consumes:
       - application/json
-      description: Создаёт пользователя с ролью client и сразу открывает сессию.
+      description: Заводит пользователя с ролью client и статусом active, сессию не
+        открывает.
       parameters:
-      - description: Данные регистрации
+      - description: Данные клиента
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/dto.RegisterRequest'
+          $ref: '#/definitions/userdto.CreateClientRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/dto.AuthResponse'
+            $ref: '#/definitions/userdto.UserResponse'
         "400":
           description: Bad Request
           schema:
@@ -173,9 +215,123 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/swagger.HTTPError'
-      summary: Регистрация клиента
+      summary: Создание клиента
       tags:
-      - auth
+      - users
+  /users/{id}:
+    delete:
+      description: Ставит статус deleted, запись остаётся в БД. Только для admin.
+      parameters:
+      - description: id пользователя
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Удаление пользователя
+      tags:
+      - users
+  /users/{id}/ban:
+    post:
+      description: Ставит статус banned. Только для admin.
+      parameters:
+      - description: id пользователя
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Бан пользователя
+      tags:
+      - users
+  /users/{id}/reset:
+    post:
+      description: Возвращает статус active после бана или удаления. Только для admin.
+      parameters:
+      - description: id пользователя
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Восстановление пользователя
+      tags:
+      - users
 securityDefinitions:
   BearerAuth:
     description: Токен из /auth/login в формате "Bearer <access_token>".

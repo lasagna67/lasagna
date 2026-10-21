@@ -1,8 +1,11 @@
 package domain
 
-import "time"
+import (
+	"time"
 
-// Role совпадает с enum user_role в БД.
+	"github.com/google/uuid"
+)
+
 type Role string
 
 const (
@@ -11,7 +14,6 @@ const (
 	RoleAdmin       Role = "admin"
 )
 
-// Status совпадает с enum user_status в БД.
 type Status string
 
 const (
@@ -21,7 +23,7 @@ const (
 )
 
 type User struct {
-	ID           string
+	ID           uuid.UUID
 	Role         Role
 	Status       Status
 	Email        string
@@ -38,14 +40,4 @@ type User struct {
 
 func (u User) Claims() Claims {
 	return Claims{UserID: u.ID, Role: u.Role}
-}
-
-// RegisterInput — данные самостоятельной регистрации клиента.
-type RegisterInput struct {
-	Email      string
-	Password   string
-	Phone      *string
-	FirstName  string
-	LastName   string
-	MiddleName *string
 }

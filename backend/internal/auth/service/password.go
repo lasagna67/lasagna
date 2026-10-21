@@ -7,8 +7,12 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// bcryptCost — сотни миллисекунд на хеш: дорого для перебора, терпимо для входа.
-const bcryptCost = 12
+const (
+	// bcryptCost — сотни миллисекунд на хеш: дорого для перебора, терпимо для входа.
+	bcryptCost = 12
+	// maxPasswordLen — предел bcrypt, в байтах.
+	maxPasswordLen = 72
+)
 
 type BcryptHasher struct {
 	cost int
