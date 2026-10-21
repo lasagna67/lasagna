@@ -4,6 +4,7 @@
 CREATE TYPE info_request_status AS ENUM ('open', 'answered', 'cancelled');
 
 -- Запрос уточнений по заявке (статус info_requested).
+--
 -- requested_by IS NULL — запрос сформирован автоматической проверкой.
 -- document_type задан, если для ответа нужно загрузить конкретный документ.
 CREATE TABLE application_info_requests (

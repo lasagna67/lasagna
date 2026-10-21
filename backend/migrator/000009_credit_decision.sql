@@ -5,6 +5,7 @@ CREATE TYPE credit_decision_outcome  AS ENUM ('approved', 'counter_offer', 'reje
 CREATE TYPE credit_decision_response AS ENUM ('accepted', 'declined');
 
 -- Решение по заявке. Их может быть несколько (авто, затем ручное) — актуальное последнее.
+--
 -- decided_by IS NULL — решение принято автоматически.
 -- product_id может отличаться от запрошенного: банк предлагает другой продукт.
 -- reasons — коды причин, например {HIGH_DEBT_LOAD, NEGATIVE_CREDIT_HISTORY}.

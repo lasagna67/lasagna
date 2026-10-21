@@ -8,7 +8,8 @@ CREATE TYPE notification_type AS ENUM (
     'signature_required'
 );
 
--- Лента уведомлений в кабинете: по условиям кейса весь сценарий
+-- Лента уведомлений в кабинете: по условиям кейса весь сценарий;
+--
 -- проходит внутри продукта, без email/SMS/мессенджеров.
 CREATE TABLE notifications (
     id              UUID                PRIMARY KEY DEFAULT gen_random_uuid(),

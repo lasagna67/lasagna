@@ -1,6 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 
+-- Тип документа
 CREATE TYPE document_type AS ENUM (
     'financial_statement',  -- бухгалтерская отчётность
     'bank_statement',       -- выписка по счёту
@@ -12,6 +13,8 @@ CREATE TYPE document_type AS ENUM (
 );
 CREATE TYPE document_status AS ENUM ('uploaded', 'verified', 'rejected');
 
+-- Документ по заявке
+-- 
 -- Сам файл лежит в объектном хранилище, здесь — метаданные и ключ.
 -- uploaded_by IS NULL — документ сформирован системой (например, договор).
 -- signed_* — моделирование подписания.

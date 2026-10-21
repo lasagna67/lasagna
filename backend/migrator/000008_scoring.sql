@@ -4,6 +4,7 @@
 CREATE TYPE risk_grade AS ENUM ('low', 'medium', 'high', 'critical');
 
 -- Оценка риска — вход для кредитного решения, но не само решение.
+--
 -- factors — вклад каждого признака в итоговый балл, например
 -- [{"code": "business_age", "value": 84, "impact": -40}], для объяснимости.
 CREATE TABLE scoring_results (

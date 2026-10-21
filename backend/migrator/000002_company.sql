@@ -2,9 +2,12 @@
 -- +goose StatementBegin
 
 -- ЮЛ (ИНН 10 цифр, ЕГРЮЛ) или ИП (ИНН 12 цифр, ЕГРИП).
-CREATE TYPE company_entity_type     AS ENUM ('legal_entity', 'individual_entrepreneur');
--- Коды статуса из ЕГРЮЛ/ЕГРИП (registry-mock).
+CREATE TYPE company_entity_type AS ENUM ('legal_entity', 'individual_entrepreneur');
+
+-- Коды статуса из ЕГРЮЛ (registry-mock)
 CREATE TYPE company_registry_status AS ENUM ('active', 'reorganizing', 'liquidated', 'ceased');
+
+-- Коды статуса из ЕГРИП (registry-mock)
 CREATE TYPE company_member_position AS ENUM (
     'owner',
     'ceo',
@@ -14,7 +17,9 @@ CREATE TYPE company_member_position AS ENUM (
     'authorized_employee'
 );
 
--- Реквизиты заполняются из реестра, registry_synced_at — время последней сверки.
+-- Компания
+-- Реквизиты заполняются из реестра; 
+-- registry_synced_at — время последней сверки;
 CREATE TABLE companies (
     id                          UUID                     PRIMARY KEY DEFAULT gen_random_uuid(),
     inn                         VARCHAR(12)              NOT NULL UNIQUE,
@@ -48,6 +53,7 @@ CREATE TRIGGER companies_set_updated_at
     BEFORE UPDATE ON companies
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- Связка к users
 -- Кто может действовать от имени компании. can_sign — право подписи кредитной документации.
 CREATE TABLE company_members (
     company_id    UUID                      NOT NULL REFERENCES companies (id) ON DELETE CASCADE,

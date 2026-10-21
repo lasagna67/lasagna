@@ -18,17 +18,21 @@ CREATE TYPE application_status AS ENUM (
     'expired'          -- предложение не принято в срок
 );
 
+-- Основной домейн - проход состояний заявки
+--
 -- Черновик может быть заполнен частично; к моменту отправки (submitted_at)
 -- обязательные параметры запроса должны быть заданы.
--- Финансовые показатели — самостоятельная оценка клиента на момент подачи.
+-- *Финансовые показатели — самостоятельная оценка клиента на момент подачи.
 CREATE TABLE applications (
     id                          UUID                 PRIMARY KEY DEFAULT gen_random_uuid(),
     number                      BIGINT               GENERATED ALWAYS AS IDENTITY (START WITH 1000) UNIQUE,
+
+    -- Связки к таблицам
     company_id                  UUID                 NOT NULL REFERENCES companies (id),
     applicant_id                UUID                 NOT NULL REFERENCES users (id),
     product_id                  UUID                 REFERENCES credit_products (id),
-    status                      application_status   NOT NULL DEFAULT 'draft',
 
+    status                      application_status   NOT NULL DEFAULT 'draft',
     purpose                     credit_purpose,
     purpose_description         TEXT,
     requested_amount_kopecks    BIGINT               CHECK (requested_amount_kopecks > 0),

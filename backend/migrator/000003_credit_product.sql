@@ -1,6 +1,7 @@
 -- +goose Up
 -- +goose StatementBegin
 
+-- Намерение кредита
 CREATE TYPE credit_purpose AS ENUM (
     'working_capital',
     'cash_gap',
@@ -10,6 +11,7 @@ CREATE TYPE credit_purpose AS ENUM (
     'other'
 );
 
+-- Кредитный продукт - тип кредита
 -- Суммы везде в копейках (BIGINT), ставка — % годовых.
 -- purposes — под какие цели подходит продукт, используется для подбора.
 CREATE TABLE credit_products (
@@ -40,11 +42,12 @@ CREATE TRIGGER credit_products_set_updated_at
     BEFORE UPDATE ON credit_products
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+
 -- Синтетический каталог продуктов для демо.
 INSERT INTO credit_products
     (code, name, description, purposes,
-     min_amount_kopecks, max_amount_kopecks, min_term_months, max_term_months, base_rate,
-     collateral_required, min_business_age_months)
+    min_amount_kopecks, max_amount_kopecks, min_term_months, max_term_months, base_rate,
+    collateral_required, min_business_age_months)
 VALUES
     ('express', 'Экспресс-кредит',
      'Небольшая сумма без залога с решением в день обращения',

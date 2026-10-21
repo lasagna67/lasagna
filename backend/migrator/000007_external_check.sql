@@ -5,8 +5,8 @@
 CREATE TYPE external_check_source AS ENUM ('registry', 'credit_bureau');
 CREATE TYPE external_check_status AS ENUM ('pending', 'completed', 'failed');
 
--- Снимок ответа внешнего источника на момент рассмотрения заявки,
--- чтобы решение можно было воспроизвести и объяснить.
+-- Снимок ответа внешнего источника на момент рассмотрения заявки
+--
 -- Повторная проверка (например, после уточнений клиента) — новая строка.
 CREATE TABLE external_checks (
     id              UUID                    PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -22,8 +22,7 @@ CREATE TABLE external_checks (
     completed_at    TIMESTAMPTZ
 );
 
-CREATE INDEX external_checks_application_id_idx
-    ON external_checks (application_id, source, requested_at DESC);
+CREATE INDEX external_checks_application_id_idx ON external_checks (application_id, source, requested_at DESC);
 
 -- +goose StatementEnd
 

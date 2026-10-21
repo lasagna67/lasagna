@@ -9,12 +9,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Доп
 CREATE TYPE user_status AS ENUM ('active', 'banned', 'deleted');
 CREATE TYPE user_gender AS ENUM ('male', 'female');
 
 -- client — представитель бизнеса, остальные — сотрудники банка.
 CREATE TYPE user_role   AS ENUM ('client', 'underwriter', 'admin');
 
+-- 
 CREATE TABLE users (
     id            UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
     role          user_role         NOT NULL DEFAULT 'client',
