@@ -1,6 +1,50 @@
 # Build stage
 FROM golang:1.26-alpine AS builder
 
-# Install build dependencies
-RUN apk add --no-cache git make
+WORKDIR /src
 
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY cmd ./cmd
+COPY internal ./internal
+COPY pkg ./pkg
+
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrator ./cmd/migrator
+
+
+
+# Runtime base
+FROM alpine:3.24 AS runtime
+
+RUN addgroup -S app && adduser -S -G app app
+
+WORKDIR /app
+
+
+
+# Migrator: docker build --target migrator
+FROM runtime AS migrator
+
+COPY --from=builder /out/migrator ./migrator
+# cmd/migrator читает миграции из db/migration относительно рабочей директории
+COPY migrator/*.sql ./db/migration/
+
+USER app:app
+
+ENTRYPOINT ["/app/migrator"]
+CMD ["up"]
+
+
+
+# Server (стадия по умолчанию)
+FROM runtime AS server
+
+COPY --from=builder /out/server ./server
+
+USER app:app
+
+EXPOSE 8080
+
+ENTRYPOINT ["/app/server"]

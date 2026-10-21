@@ -19,6 +19,7 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 	srv := server.NewServer(cfg, logger.Named("http"))
 
 	e := srv.Echo()
+	e.GET("/health", healthCheck)
 	api := e.Group("/api/v0")
 
 	auth := authhandler.New(services.Auth, logger.Named("auth"))
