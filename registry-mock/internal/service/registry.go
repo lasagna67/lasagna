@@ -11,7 +11,8 @@ import (
 var ErrInvalidINN = errors.New("invalid INN")
 
 type Repository interface {
-	GetCompany(ctx context.Context, inn string) (model.Company, error)
+	GetEGRIP(ctx context.Context, inn string) (model.Company, error)
+	GetEGRUL(ctx context.Context, inn string) (model.Company, error)
 }
 
 type RegistryService struct {
@@ -22,21 +23,36 @@ func NewRegistryService(repository Repository) *RegistryService {
 	return &RegistryService{repository: repository}
 }
 
-func (s *RegistryService) GetCompany(ctx context.Context, inn string) (model.Company, error) {
-	if len(inn) != 10 && len(inn) != 12 {
-		return model.Company{}, fmt.Errorf("INN must contain 10 or 12 digits: %w", ErrInvalidINN)
+func (s *RegistryService) GetEGRIP(ctx context.Context, inn string) (model.Company, error) {
+	if err := validateINN(ctx, inn, 12); err != nil {
+		return model.Company{}, err
+	}
+	company, err := s.repository.GetEGRIP(ctx, inn)
+	if err != nil {
+		return model.Company{}, fmt.Errorf("get EGRIP report: %w", err)
+	}
+	return company, nil
+}
+
+func (s *RegistryService) GetEGRUL(ctx context.Context, inn string) (model.Company, error) {
+	if err := validateINN(ctx, inn, 10); err != nil {
+		return model.Company{}, err
+	}
+	company, err := s.repository.GetEGRUL(ctx, inn)
+	if err != nil {
+		return model.Company{}, fmt.Errorf("get EGRUL report: %w", err)
+	}
+	return company, nil
+}
+
+func validateINN(ctx context.Context, inn string, length int) error {
+	if len(inn) != length {
+		return fmt.Errorf("INN must contain %d digits: %w", length, ErrInvalidINN)
 	}
 	for i := 0; i < len(inn); i++ {
 		if inn[i] < '0' || inn[i] > '9' {
-			return model.Company{}, fmt.Errorf("INN must contain only ASCII digits: %w", ErrInvalidINN)
+			return fmt.Errorf("INN must contain only ASCII digits: %w", ErrInvalidINN)
 		}
 	}
-	if err := ctx.Err(); err != nil {
-		return model.Company{}, err
-	}
-	company, err := s.repository.GetCompany(ctx, inn)
-	if err != nil {
-		return model.Company{}, fmt.Errorf("get company: %w", err)
-	}
-	return company, nil
+	return ctx.Err()
 }

@@ -1,0 +1,9 @@
+*
+!go.mod
+!main.go
+!internal/
+!internal/**
+internal/**/*_test.go
+!testdata/
+!testdata/financials.json
+

@@ -28,7 +28,11 @@ func decodeObject(t *testing.T, data []byte) map[string]any {
 
 type serviceFunc func(context.Context, string) (model.Company, error)
 
-func (f serviceFunc) GetCompany(ctx context.Context, inn string) (model.Company, error) {
+func (f serviceFunc) GetEGRIP(ctx context.Context, inn string) (model.Company, error) {
+	return f(ctx, inn)
+}
+
+func (f serviceFunc) GetEGRUL(ctx context.Context, inn string) (model.Company, error) {
 	return f(ctx, inn)
 }
 
@@ -41,7 +45,7 @@ func TestHandlerErrorsAndRequestContext(t *testing.T) {
 	}{
 		{"internal", errors.New("secret storage path"), 500, "INTERNAL_ERROR", "Internal server error"},
 		{"wrapped not found", fmt.Errorf("lookup: %w", model.ErrCompanyNotFound), 404, "COMPANY_NOT_FOUND", "Company not found"},
-		{"wrapped invalid INN", fmt.Errorf("validate: %w", service.ErrInvalidINN), 400, "INVALID_INN", "INN must contain 10 or 12 digits"},
+		{"wrapped invalid INN", fmt.Errorf("validate: %w", service.ErrInvalidINN), 400, "INVALID_INN", "Invalid INN for requested registry"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			var logs bytes.Buffer
@@ -55,7 +59,7 @@ func TestHandlerErrorsAndRequestContext(t *testing.T) {
 				return model.Company{}, tt.err
 			}), logger)
 			w := httptest.NewRecorder()
-			h.Routes().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/companies/7705005410", nil).WithContext(ctx))
+			h.Routes().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/egrul/7705005410", nil).WithContext(ctx))
 			want := map[string]any{"error": map[string]any{"code": tt.code, "message": tt.message}}
 			if w.Code != tt.status || !reflect.DeepEqual(decodeObject(t, w.Body.Bytes()), want) {
 				t.Fatalf("unexpected response: %d %s", w.Code, w.Body.String())

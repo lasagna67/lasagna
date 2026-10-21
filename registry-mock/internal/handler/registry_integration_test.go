@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"registry-mock/internal/handler"
@@ -16,35 +15,42 @@ import (
 	"registry-mock/internal/service"
 )
 
-const fixture = `[
-  {
-    "inn":"7705005410","ogrn":"1127706709294","kpp":"770501001",
-    "entity_type":"ЮЛ","source":"ЕГРЮЛ",
-    "name":{"full":"Демо компания","short":"Демо"},
-    "registration":{"date":"2012-04-17","region":"Москва","address":"Демо адрес"},
-    "status":{"code":"reorganizing","description":"Реорганизация","since":"2026-01-01"},
-    "capital":{"amount_kopecks":50000000,"type":"authorized"},
-    "activities":{"primary_okved":"25.62","additional_okveds":["25.61","46.72"]},
-    "reorganization":{"type":"merger","start_date":"2026-01-01","description":"Слияние"},
-    "metadata":{"as_of":"2026-10-20","is_synthetic":true,"demo_scenario":"private-marker"}
-  },
-  {
-    "inn":"012345678901","ogrn":"012345678901234","entity_type":"ИП","source":"ЕГРИП",
-    "name":{"full":"ИП Демо","short":"ИП Демо"},
-    "registration":{"date":"2020-01-01","region":"Москва","address":null},
-    "status":{"code":"active","description":"Действующий ИП","since":"2020-01-01"},
-    "activities":{"primary_okved":"62.01","additional_okveds":[]},
-    "metadata":{"as_of":"2026-10-20","is_synthetic":true,"demo_scenario":"private-marker"}
-  }
+const egripFixture = `[
+  {"inn":"770123456789","status":"ok","report":{
+    "business_type":"ИП","name":"ИП Петров Иван Сергеевич",
+    "registration_date":"2019-04-15","business_status":"active",
+    "okved":[{"code":"47.91","name":"Торговля розничная по почте или по информационно-коммуникационной сети Интернет"}]
+  }},
+  {"inn":"770987654321","status":"ok","report":{
+    "business_type":"ИП","name":"ИП Сидоров Алексей Петрович",
+    "registration_date":"2016-02-10","business_status":"terminated","termination_date":"2025-11-30",
+    "okved":[{"code":"56.10","name":"Деятельность ресторанов и услуги по доставке продуктов питания"}]
+  }}
+]`
+
+const egrulFixture = `[
+  {"inn":"7701234567","status":"ok","report":{
+    "business_type":"ООО","name":"ООО «Ромашка»",
+    "registration_date":"2018-06-20","business_status":"active",
+    "okved":[{"code":"46.90","name":"Торговля оптовая неспециализированная"}]
+  }},
+  {"inn":"7709876543","status":"ok","report":{
+    "business_type":"ООО","name":"ООО «Демо»",
+    "registration_date":"2016-02-10","business_status":"terminated","termination_date":"2025-11-30",
+    "okved":[]
+  }}
 ]`
 
 func newRoutes(t *testing.T) http.Handler {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "registry.json")
-	if err := os.WriteFile(path, []byte(fixture), 0600); err != nil {
-		t.Fatal(err)
+	dir := t.TempDir()
+	egripPath, egrulPath := filepath.Join(dir, "egrip.json"), filepath.Join(dir, "egrul.json")
+	for path, data := range map[string]string{egripPath: egripFixture, egrulPath: egrulFixture} {
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
-	r, err := repository.NewJSONRepository(path)
+	r, err := repository.NewJSONRepository(egripPath, egrulPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,82 +58,83 @@ func newRoutes(t *testing.T) http.Handler {
 	return handler.NewRegistryHandler(service.NewRegistryService(r), logger).Routes()
 }
 
-func TestIntegrationCompanyPublicContract(t *testing.T) {
-	want := `{
-      "inn":"7705005410","ogrn":"1127706709294","kpp":"770501001",
-      "entity_type":"ЮЛ","source":"ЕГРЮЛ",
-      "name":{"full":"Демо компания","short":"Демо"},
-      "registration":{"date":"2012-04-17","region":"Москва","address":"Демо адрес"},
-      "status":{"code":"reorganizing","description":"Реорганизация","since":"2026-01-01"},
-      "capital":{"amount_kopecks":50000000,"type":"authorized"},
-      "activities":{"primary_okved":"25.62","additional_okveds":["25.61","46.72"]},
-      "reorganization":{"type":"merger","start_date":"2026-01-01","description":"Слияние"}
-    }`
-	w := httptest.NewRecorder()
-	newRoutes(t).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/companies/7705005410", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
-	}
-	if w.Header().Get("Content-Type") != "application/json" {
-		t.Fatalf("unexpected content type: %q", w.Header().Get("Content-Type"))
-	}
-	if got := decodeObject(t, w.Body.Bytes()); !reflect.DeepEqual(got, decodeObject(t, []byte(want))) {
-		t.Fatalf("public company differs from contract: %s", w.Body.String())
-	}
-	if strings.Contains(w.Body.String(), "metadata") || strings.Contains(w.Body.String(), "private-marker") {
-		t.Fatalf("private metadata leaked: %s", w.Body.String())
+func TestIntegrationPublicReportContract(t *testing.T) {
+	routes := newRoutes(t)
+	for _, tt := range []struct {
+		path, want string
+	}{
+		{"/v1/egrip/770123456789", `{
+          "inn":"770123456789","status":"ok","report":{
+            "business_type":"ИП","name":"ИП Петров Иван Сергеевич",
+            "registration_date":"2019-04-15","business_status":"active",
+            "okved":[{"code":"47.91","name":"Торговля розничная по почте или по информационно-коммуникационной сети Интернет"}]
+          }
+        }`},
+		{"/v1/egrul/7701234567", `{
+          "inn":"7701234567","status":"ok","report":{
+            "business_type":"ООО","name":"ООО «Ромашка»",
+            "registration_date":"2018-06-20","business_status":"active",
+            "okved":[{"code":"46.90","name":"Торговля оптовая неспециализированная"}]
+          }
+        }`},
+	} {
+		t.Run(tt.path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			routes.ServeHTTP(w, httptest.NewRequest(http.MethodGet, tt.path, nil))
+			if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "application/json" {
+				t.Fatalf("unexpected response: %d %s", w.Code, w.Body.String())
+			}
+			if !reflect.DeepEqual(decodeObject(t, w.Body.Bytes()), decodeObject(t, []byte(tt.want))) {
+				t.Fatalf("report differs from public contract: %s", w.Body.String())
+			}
+		})
 	}
 }
 
-func TestIntegrationIndividualEntrepreneurOptionalFields(t *testing.T) {
-	w := httptest.NewRecorder()
-	newRoutes(t).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/companies/012345678901", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
-	}
-	got := decodeObject(t, w.Body.Bytes())
-	if got["inn"] != "012345678901" || got["ogrn"] != "012345678901234" || got["source"] != "ЕГРИП" || got["entity_type"] != "ИП" {
-		t.Fatalf("Individual Entrepreneur identifiers or type changed: %v", got)
-	}
-	for _, field := range []string{"kpp", "capital", "reorganization", "metadata"} {
-		if _, ok := got[field]; ok {
-			t.Errorf("unexpected field %q: %v", field, got[field])
-		}
-	}
-	registration, ok := got["registration"].(map[string]any)
-	if !ok {
-		t.Fatal("missing registration object")
-	}
-	if address, exists := registration["address"]; !exists || address != nil {
-		t.Fatalf("want explicit null address, got %v", registration)
-	}
-	activities, ok := got["activities"].(map[string]any)
-	if !ok || !reflect.DeepEqual(activities["additional_okveds"], []any{}) {
-		t.Fatalf("want empty additional_okveds array, got %v", got["activities"])
+func TestIntegrationTerminatedBusinessReport(t *testing.T) {
+	routes := newRoutes(t)
+	for _, path := range []string{"/v1/egrip/770987654321", "/v1/egrul/7709876543"} {
+		t.Run(path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			routes.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+			got := decodeObject(t, w.Body.Bytes())
+			report, ok := got["report"].(map[string]any)
+			if w.Code != 200 || got["status"] != "ok" || !ok || report["business_status"] != "terminated" || report["termination_date"] != "2025-11-30" {
+				t.Fatalf("unexpected terminated business report: %d %v", w.Code, got)
+			}
+			if path == "/v1/egrul/7709876543" && !reflect.DeepEqual(report["okved"], []any{}) {
+				t.Fatalf("empty OKVED list changed: %v", report["okved"])
+			}
+		})
 	}
 }
 
 func TestIntegrationRoutes(t *testing.T) {
 	routes := newRoutes(t)
-	tests := []struct {
+	for _, tt := range []struct {
 		name, method, path string
 		status             int
 		code               string
 	}{
 		{"health", "GET", "/health", 200, ""},
-		{"short INN", "GET", "/v1/companies/123", 400, "INVALID_INN"},
-		{"letters in INN", "GET", "/v1/companies/770500541x", 400, "INVALID_INN"},
-		{"missing company", "GET", "/v1/companies/9999999999", 404, "COMPANY_NOT_FOUND"},
-		{"wrong method", "POST", "/v1/companies/7705005410", 405, "METHOD_NOT_ALLOWED"},
+		{"short INN", "GET", "/v1/egrip/123", 400, "INVALID_INN"},
+		{"EGRIP wrong INN type", "GET", "/v1/egrip/7701234567", 400, "INVALID_INN"},
+		{"EGRUL wrong INN type", "GET", "/v1/egrul/770123456789", 400, "INVALID_INN"},
+		{"letters in EGRUL INN", "GET", "/v1/egrul/770123456x", 400, "INVALID_INN"},
+		{"letters in EGRIP INN", "GET", "/v1/egrip/77012345678x", 400, "INVALID_INN"},
+		{"missing EGRUL company", "GET", "/v1/egrul/9999999999", 404, "COMPANY_NOT_FOUND"},
+		{"missing EGRIP company", "GET", "/v1/egrip/999999999999", 404, "COMPANY_NOT_FOUND"},
+		{"EGRUL wrong method", "POST", "/v1/egrul/7701234567", 405, "METHOD_NOT_ALLOWED"},
+		{"EGRIP wrong method", "POST", "/v1/egrip/770123456789", 405, "METHOD_NOT_ALLOWED"},
 		{"health wrong method", "POST", "/health", 405, "METHOD_NOT_ALLOWED"},
+		{"old route", "GET", "/v1/companies/7701234567", 404, "NOT_FOUND"},
 		{"unknown path", "GET", "/unknown", 404, "NOT_FOUND"},
-	}
-	for _, tt := range tests {
+	} {
 		t.Run(tt.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			routes.ServeHTTP(w, httptest.NewRequest(tt.method, tt.path, nil))
 			if w.Code != tt.status || w.Header().Get("Content-Type") != "application/json" {
-				t.Fatalf("unexpected response: %d, %v, %s", w.Code, w.Header(), w.Body.String())
+				t.Fatalf("unexpected response: %d %v %s", w.Code, w.Header(), w.Body.String())
 			}
 			got := decodeObject(t, w.Body.Bytes())
 			if tt.code == "" {
@@ -140,7 +147,7 @@ func TestIntegrationRoutes(t *testing.T) {
 			if !ok || errBody["code"] != tt.code || errBody["message"] == "" || len(errBody) != 2 || len(got) != 1 {
 				t.Fatalf("unexpected error envelope: %v", got)
 			}
-			if tt.status == http.StatusMethodNotAllowed && w.Header().Get("Allow") != "GET" {
+			if tt.status == 405 && w.Header().Get("Allow") != "GET" {
 				t.Fatalf("missing Allow: GET header: %v", w.Header())
 			}
 		})
