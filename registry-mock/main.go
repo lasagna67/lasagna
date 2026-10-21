@@ -14,8 +14,9 @@ import (
 )
 
 type config struct {
-	Address  string
-	DataPath string
+	Address       string
+	EGRIPDataPath string
+	EGRULDataPath string
 }
 
 func loadConfig() config {
@@ -23,16 +24,20 @@ func loadConfig() config {
 	if port == "" {
 		port = "8081"
 	}
-	path := os.Getenv("REGISTRY_DATA_PATH")
-	if path == "" {
-		path = "testdata/companies.json"
+	egripPath := os.Getenv("EGRIP_DATA_PATH")
+	if egripPath == "" {
+		egripPath = "testdata/egrip.json"
 	}
-	return config{Address: net.JoinHostPort("", port), DataPath: path}
+	egrulPath := os.Getenv("EGRUL_DATA_PATH")
+	if egrulPath == "" {
+		egrulPath = "testdata/egrul.json"
+	}
+	return config{Address: net.JoinHostPort("", port), EGRIPDataPath: egripPath, EGRULDataPath: egrulPath}
 }
 
 func run(logger *slog.Logger) error {
 	cfg := loadConfig()
-	jsonRepository, err := repository.NewJSONRepository(cfg.DataPath)
+	jsonRepository, err := repository.NewJSONRepository(cfg.EGRIPDataPath, cfg.EGRULDataPath)
 	if err != nil {
 		return fmt.Errorf("initialize registry: %w", err)
 	}
@@ -48,7 +53,7 @@ func run(logger *slog.Logger) error {
 		IdleTimeout:       60 * time.Second,
 		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
-	logger.Info("Registry Mock listening", "address", cfg.Address, "data_path", cfg.DataPath)
+	logger.Info("Registry Mock listening", "address", cfg.Address, "egrip_data_path", cfg.EGRIPDataPath, "egrul_data_path", cfg.EGRULDataPath)
 	if err := server.ListenAndServe(); err != nil {
 		return fmt.Errorf("serve registry: %w", err)
 	}

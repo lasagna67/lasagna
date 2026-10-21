@@ -1,0 +1,862 @@
+[
+    {
+        "business_id": "business_001",
+        "currency": "RUB",
+        "inn": "7705005410",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 8500000,
+                "expenses": 5440000,
+                "taxes": 510000,
+                "owner_withdrawals": 700000,
+                "free_cash": 1850000
+            },
+            {
+                "month": "2026-05",
+                "income": 8925000,
+                "expenses": 5712000,
+                "taxes": 535500,
+                "owner_withdrawals": 700000,
+                "free_cash": 1977500
+            },
+            {
+                "month": "2026-06",
+                "income": 8755000,
+                "expenses": 5603200,
+                "taxes": 525300,
+                "owner_withdrawals": 700000,
+                "free_cash": 1926500
+            },
+            {
+                "month": "2026-07",
+                "income": 9180000,
+                "expenses": 5875200,
+                "taxes": 550800,
+                "owner_withdrawals": 700000,
+                "free_cash": 2054000
+            },
+            {
+                "month": "2026-08",
+                "income": 9520000,
+                "expenses": 6092800,
+                "taxes": 571200,
+                "owner_withdrawals": 700000,
+                "free_cash": 2156000
+            },
+            {
+                "month": "2026-09",
+                "income": 9350000,
+                "expenses": 5984000,
+                "taxes": 561000,
+                "owner_withdrawals": 700000,
+                "free_cash": 2105000
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_002",
+        "currency": "RUB",
+        "inn": "7810969607",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 1600000,
+                "expenses": 1158000,
+                "taxes": 96000,
+                "owner_withdrawals": 250000,
+                "free_cash": 96000
+            },
+            {
+                "month": "2026-05",
+                "income": 1680000,
+                "expenses": 1232200,
+                "taxes": 100800,
+                "owner_withdrawals": 250000,
+                "free_cash": 97000
+            },
+            {
+                "month": "2026-06",
+                "income": 1648000,
+                "expenses": 1201120,
+                "taxes": 98880,
+                "owner_withdrawals": 250000,
+                "free_cash": 98000
+            },
+            {
+                "month": "2026-07",
+                "income": 1728000,
+                "expenses": 1275320,
+                "taxes": 103680,
+                "owner_withdrawals": 250000,
+                "free_cash": 99000
+            },
+            {
+                "month": "2026-08",
+                "income": 1792000,
+                "expenses": 1334480,
+                "taxes": 107520,
+                "owner_withdrawals": 250000,
+                "free_cash": 100000
+            },
+            {
+                "month": "2026-09",
+                "income": 1760000,
+                "expenses": 1303400,
+                "taxes": 105600,
+                "owner_withdrawals": 250000,
+                "free_cash": 101000
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_003",
+        "currency": "RUB",
+        "inn": "1655501828",
+        "monthly_data": [
+            {
+                "month": "2026-07",
+                "income": 702000,
+                "expenses": 449280,
+                "taxes": 42120,
+                "owner_withdrawals": 120000,
+                "free_cash": 90600
+            },
+            {
+                "month": "2026-08",
+                "income": 728000,
+                "expenses": 465920,
+                "taxes": 43680,
+                "owner_withdrawals": 120000,
+                "free_cash": 98400
+            },
+            {
+                "month": "2026-09",
+                "income": 715000,
+                "expenses": 457600,
+                "taxes": 42900,
+                "owner_withdrawals": 120000,
+                "free_cash": 94500
+            }
+        ],
+        "period": {
+            "from": "2026-07-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_004",
+        "currency": "RUB",
+        "error_code": "FINANCIAL_DATA_NOT_FOUND",
+        "inn": "6671986865",
+        "message": "Финансовые данные отсутствуют",
+        "monthly_data": null,
+        "period": null,
+        "status": "no_data"
+    },
+    {
+        "business_id": "business_005",
+        "currency": "RUB",
+        "error_code": "FINANCIAL_DATA_NOT_FOUND",
+        "inn": "5260947681",
+        "message": "Финансовые данные отсутствуют",
+        "monthly_data": null,
+        "period": null,
+        "status": "no_data"
+    },
+    {
+        "business_id": "business_006",
+        "currency": "RUB",
+        "error_code": "FINANCIAL_DATA_NOT_FOUND",
+        "inn": "5406020303",
+        "message": "Финансовые данные отсутствуют",
+        "monthly_data": null,
+        "period": null,
+        "status": "no_data"
+    },
+    {
+        "business_id": "business_007",
+        "currency": "RUB",
+        "inn": "7709094259",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 3000000,
+                "expenses": 2402000,
+                "taxes": 180000,
+                "owner_withdrawals": 250000,
+                "free_cash": 168000
+            },
+            {
+                "month": "2026-05",
+                "income": 3150000,
+                "expenses": 2555000,
+                "taxes": 189000,
+                "owner_withdrawals": 250000,
+                "free_cash": 156000
+            },
+            {
+                "month": "2026-06",
+                "income": 3090000,
+                "expenses": 2510600,
+                "taxes": 185400,
+                "owner_withdrawals": 250000,
+                "free_cash": 144000
+            },
+            {
+                "month": "2026-07",
+                "income": 3240000,
+                "expenses": 2663600,
+                "taxes": 194400,
+                "owner_withdrawals": 250000,
+                "free_cash": 132000
+            },
+            {
+                "month": "2026-08",
+                "income": 3360000,
+                "expenses": 2788400,
+                "taxes": 201600,
+                "owner_withdrawals": 250000,
+                "free_cash": 120000
+            },
+            {
+                "month": "2026-09",
+                "income": 3300000,
+                "expenses": 2744000,
+                "taxes": 198000,
+                "owner_withdrawals": 250000,
+                "free_cash": 108000
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_008",
+        "currency": "RUB",
+        "inn": "7813099373",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 2800000,
+                "expenses": 2151000,
+                "taxes": 168000,
+                "owner_withdrawals": 300000,
+                "free_cash": 181000
+            },
+            {
+                "month": "2026-05",
+                "income": 2940000,
+                "expenses": 2281600,
+                "taxes": 176400,
+                "owner_withdrawals": 300000,
+                "free_cash": 182000
+            },
+            {
+                "month": "2026-06",
+                "income": 2884000,
+                "expenses": 2227960,
+                "taxes": 173040,
+                "owner_withdrawals": 300000,
+                "free_cash": 183000
+            },
+            {
+                "month": "2026-07",
+                "income": 3024000,
+                "expenses": 2358560,
+                "taxes": 181440,
+                "owner_withdrawals": 300000,
+                "free_cash": 184000
+            },
+            {
+                "month": "2026-08",
+                "income": 3136000,
+                "expenses": 2462840,
+                "taxes": 188160,
+                "owner_withdrawals": 300000,
+                "free_cash": 185000
+            },
+            {
+                "month": "2026-09",
+                "income": 3080000,
+                "expenses": 2409200,
+                "taxes": 184800,
+                "owner_withdrawals": 300000,
+                "free_cash": 186000
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_009",
+        "currency": "RUB",
+        "inn": "2310569351",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 4500000,
+                "expenses": 3585000,
+                "taxes": 270000,
+                "owner_withdrawals": 400000,
+                "free_cash": 245000
+            },
+            {
+                "month": "2026-05",
+                "income": 4725000,
+                "expenses": 3814000,
+                "taxes": 283500,
+                "owner_withdrawals": 400000,
+                "free_cash": 227500
+            },
+            {
+                "month": "2026-06",
+                "income": 4635000,
+                "expenses": 3746900,
+                "taxes": 278100,
+                "owner_withdrawals": 400000,
+                "free_cash": 210000
+            },
+            {
+                "month": "2026-07",
+                "income": 4860000,
+                "expenses": 3975900,
+                "taxes": 291600,
+                "owner_withdrawals": 400000,
+                "free_cash": 192500
+            },
+            {
+                "month": "2026-08",
+                "income": 5040000,
+                "expenses": 4162600,
+                "taxes": 302400,
+                "owner_withdrawals": 400000,
+                "free_cash": 175000
+            },
+            {
+                "month": "2026-09",
+                "income": 4950000,
+                "expenses": 4095500,
+                "taxes": 297000,
+                "owner_withdrawals": 400000,
+                "free_cash": 157500
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_010",
+        "currency": "RUB",
+        "inn": "6315819669",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 3600000,
+                "expenses": 2304000,
+                "taxes": 216000,
+                "owner_withdrawals": 350000,
+                "free_cash": 730000
+            },
+            {
+                "month": "2026-05",
+                "income": 3780000,
+                "expenses": 2419200,
+                "taxes": 226800,
+                "owner_withdrawals": 350000,
+                "free_cash": 784000
+            },
+            {
+                "month": "2026-06",
+                "income": 3708000,
+                "expenses": 2373120,
+                "taxes": 222480,
+                "owner_withdrawals": 350000,
+                "free_cash": 762400
+            },
+            {
+                "month": "2026-07",
+                "income": 3888000,
+                "expenses": 2488320,
+                "taxes": 233280,
+                "owner_withdrawals": 350000,
+                "free_cash": 816400
+            },
+            {
+                "month": "2026-08",
+                "income": 4032000,
+                "expenses": 2580480,
+                "taxes": 241920,
+                "owner_withdrawals": 350000,
+                "free_cash": 859600
+            },
+            {
+                "month": "2026-09",
+                "income": 3960000,
+                "expenses": 2534400,
+                "taxes": 237600,
+                "owner_withdrawals": 350000,
+                "free_cash": 838000
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_011",
+        "currency": "RUB",
+        "inn": "770761836401",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 850000,
+                "expenses": 544000,
+                "taxes": 51000,
+                "owner_withdrawals": 70000,
+                "free_cash": 185000
+            },
+            {
+                "month": "2026-05",
+                "income": 892500,
+                "expenses": 571200,
+                "taxes": 53550,
+                "owner_withdrawals": 70000,
+                "free_cash": 197750
+            },
+            {
+                "month": "2026-06",
+                "income": 875500,
+                "expenses": 560320,
+                "taxes": 52530,
+                "owner_withdrawals": 70000,
+                "free_cash": 192650
+            },
+            {
+                "month": "2026-07",
+                "income": 918000,
+                "expenses": 587520,
+                "taxes": 55080,
+                "owner_withdrawals": 70000,
+                "free_cash": 205400
+            },
+            {
+                "month": "2026-08",
+                "income": 952000,
+                "expenses": 609280,
+                "taxes": 57120,
+                "owner_withdrawals": 70000,
+                "free_cash": 215600
+            },
+            {
+                "month": "2026-09",
+                "income": 935000,
+                "expenses": 598400,
+                "taxes": 56100,
+                "owner_withdrawals": 70000,
+                "free_cash": 210500
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_012",
+        "currency": "RUB",
+        "inn": "781497718575",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 480000,
+                "expenses": 335200,
+                "taxes": 28800,
+                "owner_withdrawals": 80000,
+                "free_cash": 36000
+            },
+            {
+                "month": "2026-05",
+                "income": 504000,
+                "expenses": 356760,
+                "taxes": 30240,
+                "owner_withdrawals": 80000,
+                "free_cash": 37000
+            },
+            {
+                "month": "2026-06",
+                "income": 494400,
+                "expenses": 346736,
+                "taxes": 29664,
+                "owner_withdrawals": 80000,
+                "free_cash": 38000
+            },
+            {
+                "month": "2026-07",
+                "income": 518400,
+                "expenses": 368296,
+                "taxes": 31104,
+                "owner_withdrawals": 80000,
+                "free_cash": 39000
+            },
+            {
+                "month": "2026-08",
+                "income": 537600,
+                "expenses": 385344,
+                "taxes": 32256,
+                "owner_withdrawals": 80000,
+                "free_cash": 40000
+            },
+            {
+                "month": "2026-09",
+                "income": 528000,
+                "expenses": 375320,
+                "taxes": 31680,
+                "owner_withdrawals": 80000,
+                "free_cash": 41000
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_013",
+        "currency": "RUB",
+        "inn": "165979491871",
+        "monthly_data": [
+            {
+                "month": "2026-06",
+                "income": 494400,
+                "expenses": 316416,
+                "taxes": 29664,
+                "owner_withdrawals": 90000,
+                "free_cash": 58320
+            },
+            {
+                "month": "2026-07",
+                "income": 518400,
+                "expenses": 331776,
+                "taxes": 31104,
+                "owner_withdrawals": 90000,
+                "free_cash": 65520
+            },
+            {
+                "month": "2026-08",
+                "income": 537600,
+                "expenses": 344064,
+                "taxes": 32256,
+                "owner_withdrawals": 90000,
+                "free_cash": 71280
+            },
+            {
+                "month": "2026-09",
+                "income": 528000,
+                "expenses": 337920,
+                "taxes": 31680,
+                "owner_withdrawals": 90000,
+                "free_cash": 68400
+            }
+        ],
+        "period": {
+            "from": "2026-06-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_014",
+        "currency": "RUB",
+        "error_code": "FINANCIAL_DATA_NOT_FOUND",
+        "inn": "667036260874",
+        "message": "Финансовые данные отсутствуют",
+        "monthly_data": null,
+        "period": null,
+        "status": "no_data"
+    },
+    {
+        "business_id": "business_015",
+        "currency": "RUB",
+        "error_code": "FINANCIAL_DATA_NOT_FOUND",
+        "inn": "526200583660",
+        "message": "Финансовые данные отсутствуют",
+        "monthly_data": null,
+        "period": null,
+        "status": "no_data"
+    },
+    {
+        "business_id": "business_016",
+        "currency": "RUB",
+        "error_code": "FINANCIAL_DATA_NOT_FOUND",
+        "inn": "540742918750",
+        "message": "Финансовые данные отсутствуют",
+        "monthly_data": null,
+        "period": null,
+        "status": "no_data"
+    },
+    {
+        "business_id": "business_017",
+        "currency": "RUB",
+        "inn": "770815348700",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 900000,
+                "expenses": 663500,
+                "taxes": 54000,
+                "owner_withdrawals": 130000,
+                "free_cash": 52500
+            },
+            {
+                "month": "2026-05",
+                "income": 945000,
+                "expenses": 709550,
+                "taxes": 56700,
+                "owner_withdrawals": 130000,
+                "free_cash": 48750
+            },
+            {
+                "month": "2026-06",
+                "income": 927000,
+                "expenses": 696380,
+                "taxes": 55620,
+                "owner_withdrawals": 130000,
+                "free_cash": 45000
+            },
+            {
+                "month": "2026-07",
+                "income": 972000,
+                "expenses": 742430,
+                "taxes": 58320,
+                "owner_withdrawals": 130000,
+                "free_cash": 41250
+            },
+            {
+                "month": "2026-08",
+                "income": 1008000,
+                "expenses": 780020,
+                "taxes": 60480,
+                "owner_withdrawals": 130000,
+                "free_cash": 37500
+            },
+            {
+                "month": "2026-09",
+                "income": 990000,
+                "expenses": 766850,
+                "taxes": 59400,
+                "owner_withdrawals": 130000,
+                "free_cash": 33750
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_018",
+        "currency": "RUB",
+        "inn": "781663101333",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 1800000,
+                "expenses": 1152000,
+                "taxes": 108000,
+                "owner_withdrawals": 250000,
+                "free_cash": 290000
+            },
+            {
+                "month": "2026-05",
+                "income": 1890000,
+                "expenses": 1209600,
+                "taxes": 113400,
+                "owner_withdrawals": 250000,
+                "free_cash": 317000
+            },
+            {
+                "month": "2026-06",
+                "income": 1854000,
+                "expenses": 1186560,
+                "taxes": 111240,
+                "owner_withdrawals": 250000,
+                "free_cash": 306200
+            },
+            {
+                "month": "2026-07",
+                "income": 1944000,
+                "expenses": 1244160,
+                "taxes": 116640,
+                "owner_withdrawals": 250000,
+                "free_cash": 333200
+            },
+            {
+                "month": "2026-08",
+                "income": 2016000,
+                "expenses": 1290240,
+                "taxes": 120960,
+                "owner_withdrawals": 250000,
+                "free_cash": 354800
+            },
+            {
+                "month": "2026-09",
+                "income": 1980000,
+                "expenses": 1267200,
+                "taxes": 118800,
+                "owner_withdrawals": 250000,
+                "free_cash": 344000
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_019",
+        "currency": "RUB",
+        "inn": "231101208844",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 950000,
+                "expenses": 662000,
+                "taxes": 57000,
+                "owner_withdrawals": 150000,
+                "free_cash": 81000
+            },
+            {
+                "month": "2026-05",
+                "income": 997500,
+                "expenses": 705650,
+                "taxes": 59850,
+                "owner_withdrawals": 150000,
+                "free_cash": 82000
+            },
+            {
+                "month": "2026-06",
+                "income": 978500,
+                "expenses": 686790,
+                "taxes": 58710,
+                "owner_withdrawals": 150000,
+                "free_cash": 83000
+            },
+            {
+                "month": "2026-07",
+                "income": 1026000,
+                "expenses": 730440,
+                "taxes": 61560,
+                "owner_withdrawals": 150000,
+                "free_cash": 84000
+            },
+            {
+                "month": "2026-08",
+                "income": 1064000,
+                "expenses": 765160,
+                "taxes": 63840,
+                "owner_withdrawals": 150000,
+                "free_cash": 85000
+            },
+            {
+                "month": "2026-09",
+                "income": 1045000,
+                "expenses": 746300,
+                "taxes": 62700,
+                "owner_withdrawals": 150000,
+                "free_cash": 86000
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    },
+    {
+        "business_id": "business_020",
+        "currency": "RUB",
+        "inn": "631652222490",
+        "monthly_data": [
+            {
+                "month": "2026-04",
+                "income": 1100000,
+                "expenses": 831000,
+                "taxes": 66000,
+                "owner_withdrawals": 140000,
+                "free_cash": 63000
+            },
+            {
+                "month": "2026-05",
+                "income": 1155000,
+                "expenses": 887200,
+                "taxes": 69300,
+                "owner_withdrawals": 140000,
+                "free_cash": 58500
+            },
+            {
+                "month": "2026-06",
+                "income": 1133000,
+                "expenses": 871020,
+                "taxes": 67980,
+                "owner_withdrawals": 140000,
+                "free_cash": 54000
+            },
+            {
+                "month": "2026-07",
+                "income": 1188000,
+                "expenses": 927220,
+                "taxes": 71280,
+                "owner_withdrawals": 140000,
+                "free_cash": 49500
+            },
+            {
+                "month": "2026-08",
+                "income": 1232000,
+                "expenses": 973080,
+                "taxes": 73920,
+                "owner_withdrawals": 140000,
+                "free_cash": 45000
+            },
+            {
+                "month": "2026-09",
+                "income": 1210000,
+                "expenses": 956900,
+                "taxes": 72600,
+                "owner_withdrawals": 140000,
+                "free_cash": 40500
+            }
+        ],
+        "period": {
+            "from": "2026-04-01",
+            "to": "2026-09-30"
+        },
+        "status": "ok"
+    }
+]

@@ -10,10 +10,28 @@ import (
 )
 
 type JSONRepository struct {
-	companies map[string]model.Company
+	egripCompanies map[string]model.Company
+	egrulCompanies map[string]model.Company
 }
 
-func NewJSONRepository(path string) (*JSONRepository, error) {
+func NewJSONRepository(egripPath, egrulPath string) (*JSONRepository, error) {
+	egripCompanies, err := loadCompanies(egripPath)
+	if err != nil {
+		return nil, err
+	}
+	egrulCompanies, err := loadCompanies(egrulPath)
+	if err != nil {
+		return nil, err
+	}
+	for inn := range egrulCompanies {
+		if _, exists := egripCompanies[inn]; exists {
+			return nil, fmt.Errorf("load registry data: duplicate INN %q across %q and %q", inn, egripPath, egrulPath)
+		}
+	}
+	return &JSONRepository{egripCompanies: egripCompanies, egrulCompanies: egrulCompanies}, nil
+}
+
+func loadCompanies(path string) (map[string]model.Company, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read registry data %q: %w", path, err)
@@ -23,7 +41,7 @@ func NewJSONRepository(path string) (*JSONRepository, error) {
 		return nil, fmt.Errorf("decode registry data %q: %w", path, err)
 	}
 	if companies == nil {
-		return nil, fmt.Errorf("decode registry data %q: expected an array of companies, got null", path)
+		return nil, fmt.Errorf("decode registry data %q: expected an array of reports, got null", path)
 	}
 	index := make(map[string]model.Company, len(companies))
 	for _, company := range companies {
@@ -32,14 +50,22 @@ func NewJSONRepository(path string) (*JSONRepository, error) {
 		}
 		index[company.INN] = company
 	}
-	return &JSONRepository{companies: index}, nil
+	return index, nil
 }
 
-func (r *JSONRepository) GetCompany(ctx context.Context, inn string) (model.Company, error) {
+func (r *JSONRepository) GetEGRIP(ctx context.Context, inn string) (model.Company, error) {
+	return findCompany(ctx, r.egripCompanies, inn)
+}
+
+func (r *JSONRepository) GetEGRUL(ctx context.Context, inn string) (model.Company, error) {
+	return findCompany(ctx, r.egrulCompanies, inn)
+}
+
+func findCompany(ctx context.Context, companies map[string]model.Company, inn string) (model.Company, error) {
 	if err := ctx.Err(); err != nil {
 		return model.Company{}, err
 	}
-	company, ok := r.companies[inn]
+	company, ok := companies[inn]
 	if !ok {
 		return model.Company{}, fmt.Errorf("find company with INN %q: %w", inn, model.ErrCompanyNotFound)
 	}

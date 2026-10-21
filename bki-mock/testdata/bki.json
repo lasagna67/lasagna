@@ -1,0 +1,510 @@
+[
+    {
+        "business_id": "business_001",
+        "inn": "7705005410",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 54,
+            "loans": [
+                {
+                    "loan_id": "loan_business_001_01",
+                    "loan_type": "equipment_loan",
+                    "currency": "RUB",
+                    "status": "closed",
+                    "opened_date": "2022-04-15",
+                    "closed_date": "2024-12-15",
+                    "amount": 10800000,
+                    "outstanding_amount": 0,
+                    "monthly_payment": 0,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2024-12-15"
+                },
+                {
+                    "loan_id": "loan_business_001_02",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-04-15",
+                    "amount": 16200000,
+                    "outstanding_amount": 8100000,
+                    "monthly_payment": 450000,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2026-10-15"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_002",
+        "inn": "7810969607",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 16,
+            "loans": [
+                {
+                    "loan_id": "loan_business_002_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-06-15",
+                    "amount": 3420000,
+                    "outstanding_amount": 1900000,
+                    "monthly_payment": 95000,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2026-10-15"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_003",
+        "inn": "1655501828",
+        "report": {
+            "has_credit_history": false,
+            "history_months": 0,
+            "loans": []
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_004",
+        "inn": "6671986865",
+        "report": {
+            "has_credit_history": false,
+            "history_months": 0,
+            "loans": []
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_005",
+        "inn": "5260947681",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 93,
+            "loans": [
+                {
+                    "loan_id": "loan_business_005_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "closed",
+                    "opened_date": "2019-01-15",
+                    "closed_date": "2025-10-15",
+                    "amount": 1200000,
+                    "outstanding_amount": 0,
+                    "monthly_payment": 0,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2025-10-15"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_006",
+        "inn": "5406020303",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 93,
+            "loans": [
+                {
+                    "loan_id": "loan_business_006_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "closed",
+                    "opened_date": "2019-01-15",
+                    "closed_date": "2024-11-16",
+                    "amount": 1200000,
+                    "outstanding_amount": 0,
+                    "monthly_payment": 0,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2024-11-16"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_007",
+        "inn": "7709094259",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 20,
+            "loans": [
+                {
+                    "loan_id": "loan_business_007_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-02-15",
+                    "amount": 8640000,
+                    "outstanding_amount": 5280000,
+                    "monthly_payment": 240000,
+                    "overdue_amount": 480000,
+                    "overdue_days": 45,
+                    "overdue_since": "2026-09-05",
+                    "last_payment_date": "2026-08-31"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_008",
+        "inn": "7813099373",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 16,
+            "loans": [
+                {
+                    "loan_id": "loan_business_008_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-06-15",
+                    "amount": 6480000,
+                    "outstanding_amount": 3600000,
+                    "monthly_payment": 180000,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2026-10-15"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_009",
+        "inn": "2310569351",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 20,
+            "loans": [
+                {
+                    "loan_id": "loan_business_009_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-02-15",
+                    "amount": 12600000,
+                    "outstanding_amount": 7700000,
+                    "monthly_payment": 350000,
+                    "overdue_amount": 700000,
+                    "overdue_days": 45,
+                    "overdue_since": "2026-09-05",
+                    "last_payment_date": "2026-08-31"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_010",
+        "inn": "6315819669",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 54,
+            "loans": [
+                {
+                    "loan_id": "loan_business_010_01",
+                    "loan_type": "equipment_loan",
+                    "currency": "RUB",
+                    "status": "closed",
+                    "opened_date": "2022-04-15",
+                    "closed_date": "2024-12-15",
+                    "amount": 4800000,
+                    "outstanding_amount": 0,
+                    "monthly_payment": 0,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2024-12-15"
+                },
+                {
+                    "loan_id": "loan_business_010_02",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-04-15",
+                    "amount": 7200000,
+                    "outstanding_amount": 3600000,
+                    "monthly_payment": 200000,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2026-10-15"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_011",
+        "inn": "770761836401",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 54,
+            "loans": [
+                {
+                    "loan_id": "loan_business_011_01",
+                    "loan_type": "equipment_loan",
+                    "currency": "RUB",
+                    "status": "closed",
+                    "opened_date": "2022-04-15",
+                    "closed_date": "2024-12-15",
+                    "amount": 1080000,
+                    "outstanding_amount": 0,
+                    "monthly_payment": 0,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2024-12-15"
+                },
+                {
+                    "loan_id": "loan_business_011_02",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-04-15",
+                    "amount": 1620000,
+                    "outstanding_amount": 810000,
+                    "monthly_payment": 45000,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2026-10-15"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_012",
+        "inn": "781497718575",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 16,
+            "loans": [
+                {
+                    "loan_id": "loan_business_012_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-06-15",
+                    "amount": 1260000,
+                    "outstanding_amount": 700000,
+                    "monthly_payment": 35000,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2026-10-15"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_013",
+        "inn": "165979491871",
+        "report": {
+            "has_credit_history": false,
+            "history_months": 0,
+            "loans": []
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_014",
+        "inn": "667036260874",
+        "report": {
+            "has_credit_history": false,
+            "history_months": 0,
+            "loans": []
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_015",
+        "inn": "526200583660",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 93,
+            "loans": [
+                {
+                    "loan_id": "loan_business_015_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "closed",
+                    "opened_date": "2019-01-15",
+                    "closed_date": "2025-06-18",
+                    "amount": 1200000,
+                    "outstanding_amount": 0,
+                    "monthly_payment": 0,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2025-06-18"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_016",
+        "inn": "540742918750",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 93,
+            "loans": [
+                {
+                    "loan_id": "loan_business_016_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "closed",
+                    "opened_date": "2019-01-15",
+                    "closed_date": "2023-08-16",
+                    "amount": 1200000,
+                    "outstanding_amount": 0,
+                    "monthly_payment": 0,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2023-08-16"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_017",
+        "inn": "770815348700",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 20,
+            "loans": [
+                {
+                    "loan_id": "loan_business_017_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-02-15",
+                    "amount": 2700000,
+                    "outstanding_amount": 1650000,
+                    "monthly_payment": 75000,
+                    "overdue_amount": 150000,
+                    "overdue_days": 45,
+                    "overdue_since": "2026-09-05",
+                    "last_payment_date": "2026-08-31"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_018",
+        "inn": "781663101333",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 54,
+            "loans": [
+                {
+                    "loan_id": "loan_business_018_01",
+                    "loan_type": "equipment_loan",
+                    "currency": "RUB",
+                    "status": "closed",
+                    "opened_date": "2022-04-15",
+                    "closed_date": "2024-12-15",
+                    "amount": 2400000,
+                    "outstanding_amount": 0,
+                    "monthly_payment": 0,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2024-12-15"
+                },
+                {
+                    "loan_id": "loan_business_018_02",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-04-15",
+                    "amount": 3600000,
+                    "outstanding_amount": 1800000,
+                    "monthly_payment": 100000,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2026-10-15"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_019",
+        "inn": "231101208844",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 16,
+            "loans": [
+                {
+                    "loan_id": "loan_business_019_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-06-15",
+                    "amount": 2880000,
+                    "outstanding_amount": 1600000,
+                    "monthly_payment": 80000,
+                    "overdue_amount": 0,
+                    "overdue_days": 0,
+                    "last_payment_date": "2026-10-15"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    },
+    {
+        "business_id": "business_020",
+        "inn": "631652222490",
+        "report": {
+            "has_credit_history": true,
+            "history_months": 20,
+            "loans": [
+                {
+                    "loan_id": "loan_business_020_01",
+                    "loan_type": "business_loan",
+                    "currency": "RUB",
+                    "status": "active",
+                    "opened_date": "2025-02-15",
+                    "amount": 3240000,
+                    "outstanding_amount": 1980000,
+                    "monthly_payment": 90000,
+                    "overdue_amount": 180000,
+                    "overdue_days": 45,
+                    "overdue_since": "2026-09-05",
+                    "last_payment_date": "2026-08-31"
+                }
+            ]
+        },
+        "report_date": "2026-10-20",
+        "status": "ok"
+    }
+]
