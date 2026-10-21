@@ -16,7 +16,16 @@ type Report struct {
 	RegistrationDate string     `json:"registration_date"`
 	BusinessStatus   string     `json:"business_status"`
 	TerminationDate  *string    `json:"termination_date,omitempty"`
+	Head             *Head      `json:"head,omitempty"`
 	OKVED            []Activity `json:"okved"`
+}
+
+// Head — лицо, имеющее право без доверенности действовать от имени ЮЛ.
+// Есть только в ЕГРЮЛ: у ИП руководитель — сам предприниматель.
+type Head struct {
+	FullName string `json:"full_name"`
+	Position string `json:"position"`
+	INN      string `json:"inn"`
 }
 
 type Activity struct {

@@ -7,6 +7,6 @@
 !internal/**
 !pkg/
 !pkg/**
-!migrator/
-!migrator/*.sql
+!migration/
+!migration/*.sql
 **/*_test.go

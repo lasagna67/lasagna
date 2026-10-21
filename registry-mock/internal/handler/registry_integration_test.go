@@ -32,6 +32,7 @@ const egrulFixture = `[
   {"inn":"7701234567","status":"ok","report":{
     "business_type":"ООО","name":"ООО «Ромашка»",
     "registration_date":"2018-06-20","business_status":"active",
+    "head":{"full_name":"Ромашкина Ирина Петровна","position":"Генеральный директор","inn":"770112345678"},
     "okved":[{"code":"46.90","name":"Торговля оптовая неспециализированная"}]
   }},
   {"inn":"7709876543","status":"ok","report":{
@@ -74,6 +75,7 @@ func TestIntegrationPublicReportContract(t *testing.T) {
           "inn":"7701234567","status":"ok","report":{
             "business_type":"ООО","name":"ООО «Ромашка»",
             "registration_date":"2018-06-20","business_status":"active",
+            "head":{"full_name":"Ромашкина Ирина Петровна","position":"Генеральный директор","inn":"770112345678"},
             "okved":[{"code":"46.90","name":"Торговля оптовая неспециализированная"}]
           }
         }`},

@@ -126,6 +126,482 @@
                 }
             }
         },
+        "/companies": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Мои компании",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/companydto.CompanyResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Шаг 2 из 2. Проверяет подпись заявления и сверяет владельца сертификата\nс руководителем по ЕГРЮЛ или с ИНН ИП по ЕГРИП. Пользователь становится\nceo (ЮЛ) или owner (ИП) с правом подписи. Заявление тратится при любом исходе.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Подключение компании",
+                "parameters": [
+                    {
+                        "description": "Подписанное заявление",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/companydto.ConnectRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/companydto.CompanyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "сертификат не руководителя",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "410": {
+                        "description": "заявление истекло или уже использовано",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "422": {
+                        "description": "подпись не прошла проверку",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "503": {
+                        "description": "реестр или УЦ недоступны",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/companies/challenges": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Шаг 1 из 2. Возвращает текст заявления (data), который руководитель\nподписывает КЭП в esign-mock: POST /v1/sign. Заявление одноразовое, живёт 5 минут.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Заявление о подключении компании",
+                "parameters": [
+                    {
+                        "description": "ИНН компании",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/companydto.ChallengeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/companydto.ChallengeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "нет в реестре",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "503": {
+                        "description": "реестр недоступен",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/companies/lookup": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Ищет ЮЛ в ЕГРЮЛ или ИП в ЕГРИП по ИНН. Ничего не сохраняет.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Карточка компании из реестра",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ИНН: 10 цифр ЮЛ или 12 цифр ИП",
+                        "name": "inn",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/companydto.RegistryCardResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "нет в реестре",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "503": {
+                        "description": "реестр недоступен",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/companies/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Компания",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "id компании",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/companydto.CompanyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "нет компании или пользователь не её участник",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/companies/{id}/members": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Представители компании",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "id компании",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/companydto.MemberResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Руководитель добавляет зарегистрированного клиента по email, без права подписи.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Приглашение сотрудника",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "id компании",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Email и должность",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/companydto.AddMemberRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/companydto.MemberResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "не руководитель",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "нет компании или клиента",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "409": {
+                        "description": "уже представитель",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/companies/{id}/members/{user_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Руководитель удаляет сотрудника, сотрудник может удалить себя сам. Руководителя удалить нельзя.",
+                "tags": [
+                    "companies"
+                ],
+                "summary": "Удаление представителя",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "id компании",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "id пользователя",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "не руководитель",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "409": {
+                        "description": "руководителя удалить нельзя",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/users": {
             "post": {
                 "description": "Заводит пользователя с ролью client и статусом active, сессию не открывает.",
@@ -357,6 +833,281 @@
         }
     },
     "definitions": {
+        "companydto.ActivityResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "25.62"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Обработка металлических изделий механическая"
+                }
+            }
+        },
+        "companydto.AddMemberRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "buh@kedr-demo.ru"
+                },
+                "position": {
+                    "type": "string",
+                    "enum": [
+                        "cfo",
+                        "accountant",
+                        "finance_officer",
+                        "authorized_employee"
+                    ],
+                    "example": "accountant"
+                }
+            }
+        },
+        "companydto.ChallengeRequest": {
+            "type": "object",
+            "properties": {
+                "inn": {
+                    "type": "string",
+                    "example": "7705005410"
+                }
+            }
+        },
+        "companydto.ChallengeResponse": {
+            "type": "object",
+            "properties": {
+                "challenge_id": {
+                    "type": "string",
+                    "example": "3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13"
+                },
+                "company": {
+                    "$ref": "#/definitions/companydto.RegistryCardResponse"
+                },
+                "data": {
+                    "type": "string",
+                    "example": "Заявление о подключении компании к кредитному кабинету..."
+                },
+                "expires_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "companydto.CompanyResponse": {
+            "type": "object",
+            "properties": {
+                "additional_okveds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "25.61",
+                        "46.72"
+                    ]
+                },
+                "business_status": {
+                    "type": "string",
+                    "enum": [
+                        "active",
+                        "reorganizing",
+                        "terminated"
+                    ],
+                    "example": "active"
+                },
+                "entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "legal_entity",
+                        "individual_entrepreneur"
+                    ],
+                    "example": "legal_entity"
+                },
+                "head": {
+                    "$ref": "#/definitions/companydto.HeadResponse"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                },
+                "inn": {
+                    "type": "string",
+                    "example": "7705005410"
+                },
+                "membership": {
+                    "$ref": "#/definitions/companydto.MembershipResponse"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "ООО «Кедровый контур Демо»"
+                },
+                "primary_okved": {
+                    "type": "string",
+                    "example": "25.62"
+                },
+                "registration_date": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2012-04-17"
+                },
+                "registry_synced_at": {
+                    "type": "string"
+                },
+                "termination_date": {
+                    "type": "string",
+                    "format": "date"
+                }
+            }
+        },
+        "companydto.ConnectRequest": {
+            "type": "object",
+            "properties": {
+                "challenge_id": {
+                    "type": "string",
+                    "example": "3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13"
+                },
+                "signature": {
+                    "type": "string",
+                    "example": "eyJzZXJpYWwiOiIwQkZEMDE4NDAzN0Y0ODY3IiwuLi59"
+                }
+            }
+        },
+        "companydto.HeadResponse": {
+            "type": "object",
+            "properties": {
+                "full_name": {
+                    "type": "string",
+                    "example": "Кедрова Анна Викторовна"
+                },
+                "position": {
+                    "type": "string",
+                    "example": "Генеральный директор"
+                }
+            }
+        },
+        "companydto.MemberResponse": {
+            "type": "object",
+            "properties": {
+                "can_sign": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "confirmed_by": {
+                    "type": "string",
+                    "enum": [
+                        "esign",
+                        "invite"
+                    ],
+                    "example": "invite"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string",
+                    "example": "buh@kedr-demo.ru"
+                },
+                "first_name": {
+                    "type": "string",
+                    "example": "Мария"
+                },
+                "last_name": {
+                    "type": "string",
+                    "example": "Счётова"
+                },
+                "middle_name": {
+                    "type": "string",
+                    "example": "Ильинична"
+                },
+                "position": {
+                    "type": "string",
+                    "enum": [
+                        "owner",
+                        "ceo",
+                        "cfo",
+                        "accountant",
+                        "finance_officer",
+                        "authorized_employee"
+                    ],
+                    "example": "accountant"
+                },
+                "user_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                }
+            }
+        },
+        "companydto.MembershipResponse": {
+            "type": "object",
+            "properties": {
+                "can_sign": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "position": {
+                    "type": "string",
+                    "enum": [
+                        "owner",
+                        "ceo",
+                        "cfo",
+                        "accountant",
+                        "finance_officer",
+                        "authorized_employee"
+                    ],
+                    "example": "ceo"
+                }
+            }
+        },
+        "companydto.RegistryCardResponse": {
+            "type": "object",
+            "properties": {
+                "business_status": {
+                    "type": "string",
+                    "enum": [
+                        "active",
+                        "reorganizing",
+                        "terminated"
+                    ],
+                    "example": "active"
+                },
+                "entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "legal_entity",
+                        "individual_entrepreneur"
+                    ],
+                    "example": "legal_entity"
+                },
+                "head": {
+                    "$ref": "#/definitions/companydto.HeadResponse"
+                },
+                "inn": {
+                    "type": "string",
+                    "example": "7705005410"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "ООО «Кедровый контур Демо»"
+                },
+                "okved": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/companydto.ActivityResponse"
+                    }
+                },
+                "registration_date": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2012-04-17"
+                },
+                "termination_date": {
+                    "type": "string",
+                    "format": "date"
+                }
+            }
+        },
         "dto.AuthResponse": {
             "type": "object",
             "properties": {

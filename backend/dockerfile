@@ -28,8 +28,8 @@ WORKDIR /app
 FROM runtime AS migrator
 
 COPY --from=builder /out/migrator ./migrator
-# cmd/migrator читает миграции из db/migration относительно рабочей директории
-COPY migrator/*.sql ./db/migration/
+# cmd/migrator читает миграции из migration относительно рабочей директории
+COPY migration/*.sql ./migration/
 
 USER app:app
 
