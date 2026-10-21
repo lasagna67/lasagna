@@ -1,6 +1,7 @@
-// Package httpjson — общий JSON-транспорт для клиентов к мокам внешних систем.
-// У всех моков одинаковый формат ошибок: {"error":{"code":"...","message":"..."}}.
-package httpjson
+// Package companyhttpjson — внешние системы модуля company по HTTP:
+// реестр (registry-mock) и УЦ (esign-mock). Реализует интерфейс
+// companyservice.External и переводит ответы в доменные типы и ошибки.
+package companyhttpjson
 
 import (
 	"bytes"
@@ -16,32 +17,53 @@ import (
 // maxResponseSize — защита от неожиданно большого ответа внешней системы.
 const maxResponseSize = 1 << 20
 
-// APIError — ответ со статусом не 2xx.
-type APIError struct {
+// Endpoint — адрес внешней системы и таймаут запроса к ней.
+type Endpoint struct {
+	URL     string
+	Timeout time.Duration
+}
+
+type Client struct {
+	registry api
+	esign    api
+}
+
+func New(registry, esign Endpoint) *Client {
+	return &Client{
+		registry: newAPI(registry),
+		esign:    newAPI(esign),
+	}
+}
+
+//============================================================================================
+
+// apiError — ответ со статусом не 2xx. Формат ошибок у всех моков общий:
+// {"error":{"code":"...","message":"..."}}.
+type apiError struct {
 	Status  int
 	Code    string
 	Message string
 }
 
-func (e *APIError) Error() string {
+func (e *apiError) Error() string {
 	return fmt.Sprintf("status %d: %s: %s", e.Status, e.Code, e.Message)
 }
 
-type Client struct {
+type api struct {
 	baseURL string
 	http    *http.Client
 }
 
-func New(baseURL string, timeout time.Duration) *Client {
-	return &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		http:    &http.Client{Timeout: timeout},
+func newAPI(endpoint Endpoint) api {
+	return api{
+		baseURL: strings.TrimRight(endpoint.URL, "/"),
+		http:    &http.Client{Timeout: endpoint.Timeout},
 	}
 }
 
-// Do отправляет body (nil — без тела) и декодирует ответ в out (nil — не читать).
-// Статус не 2xx возвращается как *APIError.
-func (c *Client) Do(ctx context.Context, method, path string, body, out any) error {
+// do отправляет body (nil — без тела) и декодирует ответ в out.
+// Статус не 2xx возвращается как *apiError.
+func (a api) do(ctx context.Context, method, path string, body, out any) error {
 	var reader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -51,7 +73,7 @@ func (c *Client) Do(ctx context.Context, method, path string, body, out any) err
 		reader = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reader)
+	req, err := http.NewRequestWithContext(ctx, method, a.baseURL+path, reader)
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
@@ -60,7 +82,7 @@ func (c *Client) Do(ctx context.Context, method, path string, body, out any) err
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := c.http.Do(req)
+	resp, err := a.http.Do(req)
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", method, path, err)
 	}
@@ -72,7 +94,7 @@ func (c *Client) Do(ctx context.Context, method, path string, body, out any) err
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		apiErr := &APIError{Status: resp.StatusCode}
+		apiErr := &apiError{Status: resp.StatusCode}
 		var envelope struct {
 			Error struct {
 				Code    string `json:"code"`
@@ -85,9 +107,6 @@ func (c *Client) Do(ctx context.Context, method, path string, body, out any) err
 		return fmt.Errorf("%s %s: %w", method, path, apiErr)
 	}
 
-	if out == nil {
-		return nil
-	}
 	if err := json.Unmarshal(data, out); err != nil {
 		return fmt.Errorf("%s %s: decode response: %w", method, path, err)
 	}

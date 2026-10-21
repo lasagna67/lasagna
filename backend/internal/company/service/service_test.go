@@ -3,13 +3,12 @@ package companyservice
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	esignclient "github.com/lasagna67/lasagna.git/internal/clients/esign"
-	registryclient "github.com/lasagna67/lasagna.git/internal/clients/registry"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 )
@@ -24,44 +23,42 @@ var now = time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
 
 //============================================================================================
 
-type fakeRegistry struct {
-	companies map[string]registryclient.Company
-	err       error
+// fakeExternal — реестр и УЦ в памяти. Подпись принимается вида "signed:<serial>:<data>".
+type fakeExternal struct {
+	cards        map[string]companydomain.RegistryCard
+	certificates map[string]companydomain.Certificate
+	registryErr  error
 }
 
-func (f *fakeRegistry) GetCompany(_ context.Context, inn string) (registryclient.Company, error) {
-	if f.err != nil {
-		return registryclient.Company{}, f.err
+func (f *fakeExternal) GetCard(_ context.Context, inn string) (companydomain.RegistryCard, error) {
+	if f.registryErr != nil {
+		return companydomain.RegistryCard{}, f.registryErr
 	}
-	c, ok := f.companies[inn]
+	card, ok := f.cards[inn]
 	if !ok {
-		return registryclient.Company{}, registryclient.ErrNotFound
+		return companydomain.RegistryCard{}, companyerrors.ErrNotInRegistry
 	}
-	return c, nil
+	return card, nil
 }
 
-// fakeSigner принимает подпись вида "signed:<serial>:<data>".
-type fakeSigner struct {
-	certificates map[string]esignclient.Certificate
-}
-
-func (f *fakeSigner) sign(serial, data string) string {
+func (f *fakeExternal) sign(serial, data string) string {
 	return "signed:" + serial + ":" + data
 }
 
-func (f *fakeSigner) Verify(_ context.Context, data, signature string) (esignclient.Verification, error) {
-	serial, signed, ok := strings.Cut(strings.TrimPrefix(signature, "signed:"), ":")
-	if !ok || !strings.HasPrefix(signature, "signed:") {
-		return esignclient.Verification{}, esignclient.ErrMalformedSignature
+func (f *fakeExternal) VerifySignature(_ context.Context, data, signature string) (companydomain.Certificate, error) {
+	rest, prefixed := strings.CutPrefix(signature, "signed:")
+	serial, signed, ok := strings.Cut(rest, ":")
+	if !prefixed || !ok {
+		return companydomain.Certificate{}, &companyerrors.SignatureError{Reason: "malformed"}
 	}
 	cert, ok := f.certificates[serial]
 	if !ok {
-		return esignclient.Verification{Reason: "unknown_certificate"}, nil
+		return companydomain.Certificate{}, &companyerrors.SignatureError{Reason: "unknown_certificate"}
 	}
 	if signed != data {
-		return esignclient.Verification{Reason: "signature_mismatch", Certificate: &cert}, nil
+		return companydomain.Certificate{}, &companyerrors.SignatureError{Reason: "signature_mismatch"}
 	}
-	return esignclient.Verification{Valid: true, Certificate: &cert}, nil
+	return cert, nil
 }
 
 type fakeChallenges struct {
@@ -171,39 +168,34 @@ func (f *fakeCompanies) RemoveMember(_ context.Context, companyID, userID uuid.U
 
 type env struct {
 	svc        *CompanyService
-	registry   *fakeRegistry
-	signer     *fakeSigner
+	external   *fakeExternal
 	challenges *fakeChallenges
 	companies  *fakeCompanies
 }
 
 func newEnv() *env {
 	e := &env{
-		registry: &fakeRegistry{companies: map[string]registryclient.Company{
-			llcINN: {
-				INN: llcINN, BusinessType: "ООО", Name: "ООО «Кедровый контур Демо»",
-				RegistrationDate: "2012-04-17", BusinessStatus: "active",
-				Head:  &registryclient.Head{FullName: "Кедрова Анна Викторовна", Position: "Генеральный директор", INN: headINN},
-				OKVED: []registryclient.Activity{{Code: "25.62"}, {Code: "25.61"}, {Code: "46.72"}},
+		external: &fakeExternal{
+			cards: map[string]companydomain.RegistryCard{
+				llcINN: {
+					INN: llcINN, EntityType: companydomain.EntityLegal, Name: "ООО «Кедровый контур Демо»",
+					RegistrationDate: time.Date(2012, 4, 17, 0, 0, 0, 0, time.UTC), Status: companydomain.StatusActive,
+					Head:  &companydomain.Head{FullName: "Кедрова Анна Викторовна", Position: "Генеральный директор", INN: headINN},
+					OKVED: []companydomain.Activity{{Code: "25.62"}, {Code: "25.61"}, {Code: "46.72"}},
+				},
+				ipINN: {
+					INN: ipINN, EntityType: companydomain.EntityIndividualEntrepreneur, Name: "ИП Кедровцев Матвей Олегович",
+					RegistrationDate: time.Date(2011, 5, 17, 0, 0, 0, 0, time.UTC), Status: companydomain.StatusActive,
+					OKVED: []companydomain.Activity{{Code: "95.22"}},
+				},
 			},
-			ipINN: {
-				INN: ipINN, BusinessType: "ИП", Name: "ИП Кедровцев Матвей Олегович",
-				RegistrationDate: "2011-05-17", BusinessStatus: "active",
-				OKVED: []registryclient.Activity{{Code: "95.22"}},
+			certificates: map[string]companydomain.Certificate{
+				"HEAD":     {Serial: "HEAD", Type: companydomain.CertificateLegalEntityHead, OwnerINN: headINN, OrganizationINN: llcINN},
+				"IP":       {Serial: "IP", Type: companydomain.CertificateIndividualEntrepreneur, OwnerINN: ipINN},
+				"EMPLOYEE": {Serial: "EMPLOYEE", Type: companydomain.CertificateIndividual, OwnerINN: "770512345674"},
+				"FORMER":   {Serial: "FORMER", Type: companydomain.CertificateLegalEntityHead, OwnerINN: "781098765432", OrganizationINN: llcINN},
 			},
-		}},
-		signer: &fakeSigner{certificates: map[string]esignclient.Certificate{
-			"HEAD": {Serial: "HEAD", Type: esignclient.TypeLegalEntityHead,
-				Subject:      esignclient.Subject{INN: headINN},
-				Organization: &esignclient.Organization{INN: llcINN}},
-			"IP": {Serial: "IP", Type: esignclient.TypeIndividualEntrepreneur,
-				Subject: esignclient.Subject{INN: ipINN}},
-			"EMPLOYEE": {Serial: "EMPLOYEE", Type: esignclient.TypeIndividual,
-				Subject: esignclient.Subject{INN: "770512345674"}},
-			"FORMER": {Serial: "FORMER", Type: esignclient.TypeLegalEntityHead,
-				Subject:      esignclient.Subject{INN: "781098765432"},
-				Organization: &esignclient.Organization{INN: llcINN}},
-		}},
+		},
 		challenges: &fakeChallenges{byID: map[string]companydomain.Challenge{}},
 		companies: &fakeCompanies{
 			byINN:   map[string]companydomain.Company{},
@@ -211,7 +203,7 @@ func newEnv() *env {
 			clients: map[string]uuid.UUID{},
 		},
 	}
-	e.svc = New(e.companies, e.challenges, e.registry, e.signer)
+	e.svc = New(e.companies, e.challenges, e.external)
 	e.svc.now = func() time.Time { return now }
 	return e
 }
@@ -226,7 +218,7 @@ func (e *env) connect(t *testing.T, userID uuid.UUID, inn, serial string) (compa
 	return e.svc.Connect(context.Background(), companydomain.ConnectCommand{
 		UserID:      userID,
 		ChallengeID: ch.ID,
-		Signature:   e.signer.sign(serial, ch.Data),
+		Signature:   e.external.sign(serial, ch.Data),
 	})
 }
 
@@ -243,9 +235,6 @@ func TestLookup(t *testing.T) {
 	if card.EntityType != companydomain.EntityLegal || card.Head == nil || len(card.OKVED) != 3 {
 		t.Errorf("unexpected card: %+v", card)
 	}
-	if card, _ := e.svc.Lookup(ctx, ipINN); card.EntityType != companydomain.EntityIndividualEntrepreneur {
-		t.Errorf("ИП detected as %q", card.EntityType)
-	}
 
 	var validationErr *companyerrors.ValidationError
 	for _, inn := range []string{"", "123", "77050054101", "77O5005410"} {
@@ -257,7 +246,7 @@ func TestLookup(t *testing.T) {
 		t.Errorf("unknown INN err = %v", err)
 	}
 
-	e.registry.err = errors.New("connection refused")
+	e.external.registryErr = fmt.Errorf("%w: connection refused", companyerrors.ErrRegistryUnavailable)
 	if _, err := e.svc.Lookup(ctx, llcINN); !errors.Is(err, companyerrors.ErrRegistryUnavailable) {
 		t.Errorf("registry down err = %v", err)
 	}
@@ -309,12 +298,12 @@ func TestConnectRejects(t *testing.T) {
 		e := newEnv()
 		userID := uuid.New()
 		ch, _, _ := e.svc.CreateChallenge(ctx, companydomain.CreateChallengeCommand{UserID: userID, INN: llcINN})
-		_, err := e.svc.Connect(ctx, companydomain.ConnectCommand{UserID: userID, ChallengeID: ch.ID, Signature: e.signer.sign("HEAD", "другое")})
+		_, err := e.svc.Connect(ctx, companydomain.ConnectCommand{UserID: userID, ChallengeID: ch.ID, Signature: e.external.sign("HEAD", "другое")})
 		if !errors.As(err, &signatureErr) || signatureErr.Reason != "signature_mismatch" {
 			t.Fatalf("err = %v, want signature_mismatch", err)
 		}
 		// Заявление потрачено: повтор с правильной подписью не пройдёт.
-		_, err = e.svc.Connect(ctx, companydomain.ConnectCommand{UserID: userID, ChallengeID: ch.ID, Signature: e.signer.sign("HEAD", ch.Data)})
+		_, err = e.svc.Connect(ctx, companydomain.ConnectCommand{UserID: userID, ChallengeID: ch.ID, Signature: e.external.sign("HEAD", ch.Data)})
 		if !errors.Is(err, companyerrors.ErrChallengeNotFound) {
 			t.Fatalf("replay err = %v, want ErrChallengeNotFound", err)
 		}
@@ -333,7 +322,7 @@ func TestConnectRejects(t *testing.T) {
 	t.Run("challenge of another user", func(t *testing.T) {
 		e := newEnv()
 		ch, _, _ := e.svc.CreateChallenge(ctx, companydomain.CreateChallengeCommand{UserID: uuid.New(), INN: llcINN})
-		_, err := e.svc.Connect(ctx, companydomain.ConnectCommand{UserID: uuid.New(), ChallengeID: ch.ID, Signature: e.signer.sign("HEAD", ch.Data)})
+		_, err := e.svc.Connect(ctx, companydomain.ConnectCommand{UserID: uuid.New(), ChallengeID: ch.ID, Signature: e.external.sign("HEAD", ch.Data)})
 		if !errors.Is(err, companyerrors.ErrChallengeNotFound) {
 			t.Fatalf("err = %v, want ErrChallengeNotFound", err)
 		}
@@ -344,7 +333,7 @@ func TestConnectRejects(t *testing.T) {
 		userID := uuid.New()
 		ch, _, _ := e.svc.CreateChallenge(ctx, companydomain.CreateChallengeCommand{UserID: userID, INN: llcINN})
 		e.svc.now = func() time.Time { return now.Add(challengeTTL) }
-		_, err := e.svc.Connect(ctx, companydomain.ConnectCommand{UserID: userID, ChallengeID: ch.ID, Signature: e.signer.sign("HEAD", ch.Data)})
+		_, err := e.svc.Connect(ctx, companydomain.ConnectCommand{UserID: userID, ChallengeID: ch.ID, Signature: e.external.sign("HEAD", ch.Data)})
 		if !errors.Is(err, companyerrors.ErrChallengeNotFound) {
 			t.Fatalf("err = %v, want ErrChallengeNotFound", err)
 		}
@@ -354,10 +343,10 @@ func TestConnectRejects(t *testing.T) {
 		e := newEnv()
 		userID := uuid.New()
 		ch, _, _ := e.svc.CreateChallenge(ctx, companydomain.CreateChallengeCommand{UserID: userID, INN: llcINN})
-		changed := e.registry.companies[llcINN]
-		changed.Head = &registryclient.Head{FullName: "Новый Директор", INN: "770500000000"}
-		e.registry.companies[llcINN] = changed
-		_, err := e.svc.Connect(ctx, companydomain.ConnectCommand{UserID: userID, ChallengeID: ch.ID, Signature: e.signer.sign("HEAD", ch.Data)})
+		changed := e.external.cards[llcINN]
+		changed.Head = &companydomain.Head{FullName: "Новый Директор", INN: "770500000000"}
+		e.external.cards[llcINN] = changed
+		_, err := e.svc.Connect(ctx, companydomain.ConnectCommand{UserID: userID, ChallengeID: ch.ID, Signature: e.external.sign("HEAD", ch.Data)})
 		if !errors.Is(err, companyerrors.ErrNotCompanyHead) {
 			t.Fatalf("err = %v, want ErrNotCompanyHead", err)
 		}

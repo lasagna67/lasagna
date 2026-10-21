@@ -114,6 +114,23 @@ type MemberProfile struct {
 	MiddleName *string
 }
 
+// CertificateType — тип сертификата КЭП.
+type CertificateType string
+
+const (
+	CertificateLegalEntityHead        CertificateType = "legal_entity_head"       // руководитель ЮЛ, есть организация
+	CertificateIndividualEntrepreneur CertificateType = "individual_entrepreneur" // ИП
+	CertificateIndividual             CertificateType = "individual"              // физлицо без организации
+)
+
+// Certificate — сертификат КЭП, которым подписано заявление.
+type Certificate struct {
+	Serial          string
+	Type            CertificateType
+	OwnerINN        string
+	OrganizationINN string // пусто, если сертификат не на организацию
+}
+
 // Challenge — заявление о подключении компании, которое руководитель
 // подписывает КЭП. Одноразовое и короткоживущее.
 type Challenge struct {

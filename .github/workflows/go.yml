@@ -1,0 +1,56 @@
+name: go
+
+# Сборка и тесты всех Go-модулей: бекенд и моки внешних систем.
+# Новый модуль — добавить его в paths и matrix.module.
+
+on:
+  push:
+    branches: [main, "backend/**"]
+    paths:
+      - "backend/**"
+      - "registry-mock/**"
+      - "bki-mock/**"
+      - "financials-mock/**"
+      - "esign-mock/**"
+      - ".github/workflows/go.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "registry-mock/**"
+      - "bki-mock/**"
+      - "financials-mock/**"
+      - "esign-mock/**"
+      - ".github/workflows/go.yml"
+
+concurrency:
+  group: go-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: build-test (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Падение одного модуля не отменяет проверку остальных.
+      fail-fast: false
+      matrix:
+        module: [backend, registry-mock, bki-mock, financials-mock, esign-mock]
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v5
+
+      # Версия Go — из go.mod модуля. У моков нет go.sum (только stdlib),
+      # поэтому ключ кеша считается по go.mod и go.sum, какие есть.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache-dependency-path: ${{ matrix.module }}/go.*
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./...

@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	esignclient "github.com/lasagna67/lasagna.git/internal/clients/esign"
-	registryclient "github.com/lasagna67/lasagna.git/internal/clients/registry"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 )
@@ -23,11 +21,14 @@ type CompanyRepo interface {
 	// и связь с пользователем.
 	SaveConnection(ctx context.Context, company companydomain.Company, member companydomain.Member) (companydomain.Membership, error)
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]companydomain.Membership, error)
+
 	// GetMembership возвращает companyerrors.ErrCompanyNotFound, если пользователь не участник.
 	GetMembership(ctx context.Context, companyID, userID uuid.UUID) (companydomain.Membership, error)
 	ListMembers(ctx context.Context, companyID uuid.UUID) ([]companydomain.MemberProfile, error)
+
 	// FindClientByEmail ищет активного клиента, иначе companyerrors.ErrUserNotFound.
 	FindClientByEmail(ctx context.Context, email string) (uuid.UUID, error)
+
 	// AddMember возвращает companyerrors.ErrAlreadyMember, если связь уже есть.
 	AddMember(ctx context.Context, member companydomain.Member) (companydomain.MemberProfile, error)
 	RemoveMember(ctx context.Context, companyID, userID uuid.UUID) error
@@ -35,33 +36,36 @@ type CompanyRepo interface {
 
 type ChallengeRepo interface {
 	Save(ctx context.Context, challenge companydomain.Challenge, ttl time.Duration) error
+
 	// Take возвращает и удаляет заявление: подписанное используется один раз.
 	// Нет или истекло — companyerrors.ErrChallengeNotFound.
 	Take(ctx context.Context, id string) (companydomain.Challenge, error)
 }
 
-type Registry interface {
-	GetCompany(ctx context.Context, inn string) (registryclient.Company, error)
-}
+// External — внешние системы модуля: реестр и УЦ. Реализация — companyhttpjson.
+type External interface {
+	// GetCard — карточка из ЕГРЮЛ/ЕГРИП. Нет в реестре — companyerrors.ErrNotInRegistry,
+	// реестр недоступен — companyerrors.ErrRegistryUnavailable.
+	GetCard(ctx context.Context, inn string) (companydomain.RegistryCard, error)
 
-type SignatureVerifier interface {
-	Verify(ctx context.Context, data, signature string) (esignclient.Verification, error)
+	// VerifySignature проверяет КЭП над data и возвращает сертификат подписанта.
+	// Подпись не принята — *companyerrors.SignatureError,
+	// УЦ недоступен — companyerrors.ErrESignUnavailable.
+	VerifySignature(ctx context.Context, data, signature string) (companydomain.Certificate, error)
 }
 
 type CompanyService struct {
 	companies  CompanyRepo
 	challenges ChallengeRepo
-	registry   Registry
-	signatures SignatureVerifier
+	external   External
 	now        func() time.Time
 }
 
-func New(companies CompanyRepo, challenges ChallengeRepo, registry Registry, signatures SignatureVerifier) *CompanyService {
+func New(companies CompanyRepo, challenges ChallengeRepo, external External) *CompanyService {
 	return &CompanyService{
 		companies:  companies,
 		challenges: challenges,
-		registry:   registry,
-		signatures: signatures,
+		external:   external,
 		now:        time.Now,
 	}
 }
@@ -121,15 +125,9 @@ func (s *CompanyService) Connect(ctx context.Context, cmd companydomain.ConnectC
 		return companydomain.Membership{}, companyerrors.ErrChallengeNotFound
 	}
 
-	verification, err := s.signatures.Verify(ctx, challenge.Data, cmd.Signature)
-	if errors.Is(err, esignclient.ErrMalformedSignature) {
-		return companydomain.Membership{}, &companyerrors.SignatureError{Reason: "malformed"}
-	}
+	cert, err := s.external.VerifySignature(ctx, challenge.Data, cmd.Signature)
 	if err != nil {
-		return companydomain.Membership{}, fmt.Errorf("%w: %w", companyerrors.ErrESignUnavailable, err)
-	}
-	if !verification.Valid {
-		return companydomain.Membership{}, &companyerrors.SignatureError{Reason: verification.Reason}
+		return companydomain.Membership{}, fmt.Errorf("verify signature: %w", err)
 	}
 
 	// Реестр запрашивается заново: руководитель мог смениться, пока подписывали.
@@ -137,12 +135,12 @@ func (s *CompanyService) Connect(ctx context.Context, cmd companydomain.ConnectC
 	if err != nil {
 		return companydomain.Membership{}, err
 	}
-	position, ok := headPosition(card, *verification.Certificate)
+	position, ok := headPosition(card, cert)
 	if !ok {
 		return companydomain.Membership{}, companyerrors.ErrNotCompanyHead
 	}
 
-	serial := verification.Certificate.Serial
+	serial := cert.Serial
 	membership, err := s.companies.SaveConnection(ctx, companyFromCard(card), companydomain.Member{
 		UserID:            cmd.UserID,
 		Position:          position,
@@ -254,16 +252,9 @@ func (s *CompanyService) RemoveMember(ctx context.Context, cmd companydomain.Rem
 //============================================================================================
 
 func (s *CompanyService) lookup(ctx context.Context, inn string) (companydomain.RegistryCard, error) {
-	company, err := s.registry.GetCompany(ctx, inn)
-	if errors.Is(err, registryclient.ErrNotFound) {
-		return companydomain.RegistryCard{}, companyerrors.ErrNotInRegistry
-	}
+	card, err := s.external.GetCard(ctx, inn)
 	if err != nil {
-		return companydomain.RegistryCard{}, fmt.Errorf("%w: %w", companyerrors.ErrRegistryUnavailable, err)
-	}
-	card, err := toCard(company)
-	if err != nil {
-		return companydomain.RegistryCard{}, fmt.Errorf("%w: unexpected registry data: %w", companyerrors.ErrRegistryUnavailable, err)
+		return companydomain.RegistryCard{}, fmt.Errorf("get registry card: %w", err)
 	}
 	return card, nil
 }
@@ -271,15 +262,15 @@ func (s *CompanyService) lookup(ctx context.Context, inn string) (companydomain.
 // headPosition сверяет владельца сертификата с руководителем по реестру.
 // ЮЛ: сертификат выдан на эту организацию, и его владелец — руководитель из ЕГРЮЛ.
 // ИП: ИНН владельца сертификата и есть ИНН ИП.
-func headPosition(card companydomain.RegistryCard, cert esignclient.Certificate) (companydomain.Position, bool) {
+func headPosition(card companydomain.RegistryCard, cert companydomain.Certificate) (companydomain.Position, bool) {
 	switch card.EntityType {
 	case companydomain.EntityLegal:
-		ok := cert.Type == esignclient.TypeLegalEntityHead &&
-			cert.Organization != nil && cert.Organization.INN == card.INN &&
-			card.Head != nil && cert.Subject.INN == card.Head.INN
+		ok := cert.Type == companydomain.CertificateLegalEntityHead &&
+			cert.OrganizationINN == card.INN &&
+			card.Head != nil && cert.OwnerINN == card.Head.INN
 		return companydomain.PositionCEO, ok
 	case companydomain.EntityIndividualEntrepreneur:
-		ok := cert.Type == esignclient.TypeIndividualEntrepreneur && cert.Subject.INN == card.INN
+		ok := cert.Type == companydomain.CertificateIndividualEntrepreneur && cert.OwnerINN == card.INN
 		return companydomain.PositionOwner, ok
 	}
 	return "", false

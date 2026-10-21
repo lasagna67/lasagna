@@ -2,8 +2,7 @@ package app
 
 import (
 	authservice "github.com/lasagna67/lasagna.git/internal/auth/service"
-	esignclient "github.com/lasagna67/lasagna.git/internal/clients/esign"
-	registryclient "github.com/lasagna67/lasagna.git/internal/clients/registry"
+	companyhttpjson "github.com/lasagna67/lasagna.git/internal/company/httpjson"
 	companyservice "github.com/lasagna67/lasagna.git/internal/company/service"
 	"github.com/lasagna67/lasagna.git/internal/config"
 	userservice "github.com/lasagna67/lasagna.git/internal/user/service"
@@ -33,8 +32,10 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 	company := companyservice.New(
 		repo.Companies,
 		repo.CompanyChallenges,
-		registryclient.New(cfg.Registry.URL, cfg.Registry.Timeout),
-		esignclient.New(cfg.ESign.URL, cfg.ESign.Timeout),
+		companyhttpjson.New(
+			companyhttpjson.Endpoint{URL: cfg.Registry.URL, Timeout: cfg.Registry.Timeout},
+			companyhttpjson.Endpoint{URL: cfg.ESign.URL, Timeout: cfg.ESign.Timeout},
+		),
 	)
 
 	return &Service{

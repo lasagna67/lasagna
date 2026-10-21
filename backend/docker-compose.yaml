@@ -57,7 +57,7 @@ services:
     restart: unless-stopped
 
   financials-mock:
-    build: ../finantials-mock
+    build: ../financials-mock
     ports:
       - "8083:8083"
     healthcheck:
