@@ -12,17 +12,22 @@ const sizes = {
   l: "h-14 px-8 text-[18px]",
 } as const;
 
-type Props = Omit<ComponentProps<typeof Link>, "className"> & {
+type Common = {
   variant?: keyof typeof variants;
   size?: keyof typeof sizes;
   className?: string;
 };
 
-export function Button({ variant = "primary", size = "m", className = "", ...props }: Props) {
-  return (
-    <Link
-      className={`inline-flex items-center justify-center rounded-full font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${variants[variant]} ${sizes[size]} ${className}`}
-      {...props}
-    />
+type Props = Common &
+  (
+    | ({ href: string } & Omit<ComponentProps<typeof Link>, "className" | "href">)
+    | ({ href?: undefined } & Omit<ComponentProps<"button">, "className">)
   );
+
+export function Button({ variant = "primary", size = "m", className = "", ...props }: Props) {
+  const cls = `inline-flex items-center justify-center rounded-full font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${variants[variant]} ${sizes[size]} ${className}`;
+  if ("href" in props && props.href !== undefined) {
+    return <Link className={cls} {...props} />;
+  }
+  return <button className={cls} {...props} />;
 }
