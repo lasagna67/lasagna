@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lasagna67/lasagna.git/internal/auth/domain"
 	autherrors "github.com/lasagna67/lasagna.git/internal/auth/errors"
 	"github.com/lasagna67/lasagna.git/pkg/redis"
@@ -19,7 +20,7 @@ type SessionRepo struct {
 }
 
 type sessionRecord struct {
-	UserID string      `json:"user_id"`
+	UserID uuid.UUID   `json:"user_id"`
 	Role   domain.Role `json:"role"`
 }
 

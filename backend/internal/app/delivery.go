@@ -5,8 +5,11 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v5"
+	authdomain "github.com/lasagna67/lasagna.git/internal/auth/domain"
 	authhandler "github.com/lasagna67/lasagna.git/internal/auth/handler"
+	companyhandler "github.com/lasagna67/lasagna.git/internal/company/handler"
 	"github.com/lasagna67/lasagna.git/internal/config"
+	userhandler "github.com/lasagna67/lasagna.git/internal/user/handler"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 	"github.com/lasagna67/lasagna.git/pkg/server"
 )
@@ -19,10 +22,17 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 	srv := server.NewServer(cfg, logger.Named("http"))
 
 	e := srv.Echo()
+	e.GET("/health", healthCheck)
 	api := e.Group("/api/v0")
 
 	auth := authhandler.New(services.Auth, logger.Named("auth"))
 	auth.RegisterRoutes(api)
+
+	users := userhandler.New(services.User, logger.Named("user"))
+	users.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleAdmin))
+
+	companies := companyhandler.New(services.Company, logger.Named("company"))
+	companies.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 	// Защищённые маршруты других модулей:
 	// api.Group("/applications", auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 

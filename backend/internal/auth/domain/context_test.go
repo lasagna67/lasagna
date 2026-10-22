@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestGetClaims(t *testing.T) {
@@ -10,7 +12,7 @@ func TestGetClaims(t *testing.T) {
 		t.Error("claims found in empty context")
 	}
 
-	want := Claims{UserID: "u1", Role: RoleUnderwriter}
+	want := Claims{UserID: uuid.New(), Role: RoleUnderwriter}
 	got, ok := GetClaims(WithClaims(context.Background(), want))
 	if !ok || got != want {
 		t.Errorf("GetClaims = %+v, %v; want %+v, true", got, ok, want)

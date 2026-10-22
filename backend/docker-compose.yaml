@@ -1,0 +1,144 @@
+name: lasagna
+
+# Переменные окружения: cp ../.env.example ../.env.docker
+x-backend-build: &backend-build
+  context: .
+  dockerfile: dockerfile
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    env_file: ../.env.docker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      # -h localhost: временный сервер initdb слушает только сокет, так что TCP-проверка не даст ложного ready
+      test: ["CMD-SHELL", "pg_isready -h localhost -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ---- Моки внешних систем (каталоги в корне репозитория) ----
+  registry-mock:
+    build: ../registry-mock
+    ports:
+      - "8081:8081"
+    healthcheck: &mock-healthcheck
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  bki-mock:
+    build: ../bki-mock
+    ports:
+      - "8082:8082"
+    healthcheck:
+      <<: *mock-healthcheck
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8082/health"]
+    restart: unless-stopped
+
+  financials-mock:
+    build: ../financials-mock
+    ports:
+      - "8083:8083"
+    healthcheck:
+      <<: *mock-healthcheck
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8083/health"]
+    restart: unless-stopped
+
+  # Порт открыт наружу: фронт подписывает из браузера напрямую, PIN не идёт через бекенд.
+  esign-mock:
+    build: ../esign-mock
+    environment:
+      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3001
+    ports:
+      - "8084:8084"
+    healthcheck:
+      <<: *mock-healthcheck
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8084/health"]
+    restart: unless-stopped
+
+  migrator:
+    build:
+      <<: *backend-build
+      target: migrator
+    env_file: ../.env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      <<: *backend-build
+      target: server
+    env_file: ../.env.docker
+    ports:
+      - "8080:8080"
+    healthcheck:
+      # 127.0.0.1, а не localhost: сервер слушает только IPv4, а localhost может резолвиться в ::1
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+      registry-mock:
+        condition: service_healthy
+      esign-mock:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Hackathon fixtures: registration and company connection through the API.
+  # Exit code 0 means all 12 accounts and company connections are ready.
+  demo-seed:
+    build:
+      <<: *backend-build
+      target: demo-seed
+    environment:
+      DEMO_BACKEND_URL: http://backend:8080
+      DEMO_REGISTRY_URL: http://registry-mock:8081
+      DEMO_ESIGN_URL: http://esign-mock:8084
+      DEMO_PUBLIC_URL: ${DEMO_PUBLIC_URL:-http://localhost:8080}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-DemoCabinet2026!}
+      DEMO_SIGN_PIN: ${DEMO_SIGN_PIN:-12345678}
+    volumes:
+      - demo-data:/data
+    depends_on:
+      backend:
+        condition: service_healthy
+      registry-mock:
+        condition: service_healthy
+      esign-mock:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  postgres-data:
+  redis-data:
+  demo-data:

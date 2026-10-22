@@ -3,28 +3,9 @@ package dto
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lasagna67/lasagna.git/internal/auth/domain"
 )
-
-type RegisterRequest struct {
-	Email      string  `json:"email" example:"owner@kedr-demo.ru"`
-	Password   string  `json:"password" example:"Secret123"`
-	Phone      *string `json:"phone,omitempty" example:"+79991234567"`
-	FirstName  string  `json:"first_name" example:"Иван"`
-	LastName   string  `json:"last_name" example:"Петров"`
-	MiddleName *string `json:"middle_name,omitempty" example:"Сергеевич"`
-}
-
-func (r RegisterRequest) ToDomain() domain.RegisterInput {
-	return domain.RegisterInput{
-		Email:      r.Email,
-		Password:   r.Password,
-		Phone:      r.Phone,
-		FirstName:  r.FirstName,
-		LastName:   r.LastName,
-		MiddleName: r.MiddleName,
-	}
-}
 
 type LoginRequest struct {
 	Email    string `json:"email" example:"owner@kedr-demo.ru"`
@@ -42,8 +23,8 @@ type AuthResponse struct {
 
 // UserResponse — результат авторизации: id и роль текущего пользователя.
 type UserResponse struct {
-	ID   string `json:"id" example:"7c9e6679-7425-40de-944b-e07fc1f90ae7"`
-	Role string `json:"role" enums:"client,underwriter,admin" example:"client"`
+	ID   uuid.UUID `json:"id" swaggertype:"string" format:"uuid" example:"7c9e6679-7425-40de-944b-e07fc1f90ae7"`
+	Role string    `json:"role" enums:"client,underwriter,admin" example:"client"`
 }
 
 func NewAuthResponse(session domain.Session) AuthResponse {

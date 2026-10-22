@@ -1,0 +1,387 @@
+[
+  {
+    "serial": "0BFD0184037F4867",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Кедрова Анна Викторовна",
+      "inn": "770586906621",
+      "position": "Генеральный директор"
+    },
+    "organization": {
+      "name": "ООО «Кедровый контур Демо»",
+      "inn": "7705005410"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "62B6B06F3299A7A9",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Хлебников Пётр Андреевич",
+      "inn": "781053766023",
+      "position": "Генеральный директор"
+    },
+    "organization": {
+      "name": "ООО «Ладожский хлеб Демо»",
+      "inn": "7810969607"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "0D2979DB83EC40D5",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Листвин Тимур Ринатович",
+      "inn": "165530099010",
+      "position": "Генеральный директор"
+    },
+    "organization": {
+      "name": "ООО «Листок данных Демо»",
+      "inn": "1655501828"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-06-02",
+    "valid_to": "2027-06-02",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "E5CF051630872835",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Искрина Дарья Олеговна",
+      "inn": "667117611464",
+      "position": "Генеральный директор"
+    },
+    "organization": {
+      "name": "ООО «Искра макетов Демо»",
+      "inn": "6671986865"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-09-08",
+    "valid_to": "2027-09-08",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "9BE6A4ABE14CAE4D",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Волгин Сергей Николаевич",
+      "inn": "526042221070",
+      "position": "Генеральный директор"
+    },
+    "organization": {
+      "name": "ООО «Волжский ассортимент Демо»",
+      "inn": "5260947681"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "AC41A1AAA41CBCB0",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Таёжная Ольга Петровна",
+      "inn": "540610425042",
+      "position": "Генеральный директор"
+    },
+    "organization": {
+      "name": "ООО «Таёжный оттиск Демо»",
+      "inn": "5406020303"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "72D433F7F3AD3930",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Маршев Константин Игоревич",
+      "inn": "770998548171",
+      "position": "Генеральный директор"
+    },
+    "organization": {
+      "name": "ООО «Маршрут кедра Демо»",
+      "inn": "7709094259"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "1CF0513F5579DFB3",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Невская Екатерина Дмитриевна",
+      "inn": "781321471116",
+      "position": "Генеральный директор"
+    },
+    "organization": {
+      "name": "ООО «Невский модуль Демо»",
+      "inn": "7813099373"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "5C7C40739A13AA5B",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Каркасов Руслан Ашотович",
+      "inn": "231093961650",
+      "position": "Генеральный директор"
+    },
+    "organization": {
+      "name": "ООО «Южный каркас Демо»",
+      "inn": "2310569351"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "1D7598C07F22CF5C",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Мебельщиков Виктор Семёнович",
+      "inn": "631563025860",
+      "position": "Директор"
+    },
+    "organization": {
+      "name": "ООО «Волжский мебельный контур Демо»",
+      "inn": "6315819669"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "630A9BBCC39C8358",
+    "type": "individual_entrepreneur",
+    "subject": {
+      "full_name": "Кедровцев Матвей Олегович",
+      "inn": "770761836401"
+    },
+    "organization": null,
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "8198C3C3BDFD70FF",
+    "type": "individual_entrepreneur",
+    "subject": {
+      "full_name": "Ладогина Вероника Ильинична",
+      "inn": "781497718575"
+    },
+    "organization": null,
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "E2D03810DF340EB5",
+    "type": "individual_entrepreneur",
+    "subject": {
+      "full_name": "Яснолесов Даниил Романович",
+      "inn": "165979491871"
+    },
+    "organization": null,
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-05-19",
+    "valid_to": "2027-05-19",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "57A549E6CEBF5376",
+    "type": "individual_entrepreneur",
+    "subject": {
+      "full_name": "Берестина Алиса Тимуровна",
+      "inn": "667036260874"
+    },
+    "organization": null,
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-09-22",
+    "valid_to": "2027-09-22",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "3F792917D6FD2D33",
+    "type": "individual_entrepreneur",
+    "subject": {
+      "full_name": "Ручейников Глеб Павлович",
+      "inn": "526200583660"
+    },
+    "organization": null,
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "7FDCC374946C6F24",
+    "type": "individual_entrepreneur",
+    "subject": {
+      "full_name": "Таёжников Илья Андреевич",
+      "inn": "540742918750"
+    },
+    "organization": null,
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "B3BF1FD8914CBBEF",
+    "type": "individual_entrepreneur",
+    "subject": {
+      "full_name": "Листопадова Марина Денисовна",
+      "inn": "770815348700"
+    },
+    "organization": null,
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "D083AEDC7E758BB7",
+    "type": "individual_entrepreneur",
+    "subject": {
+      "full_name": "Искролесов Никита Сергеевич",
+      "inn": "781663101333"
+    },
+    "organization": null,
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "3961D07FA432451B",
+    "type": "individual_entrepreneur",
+    "subject": {
+      "full_name": "Светоключев Артём Михайлович",
+      "inn": "231101208844"
+    },
+    "organization": null,
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "AA1DCF02BED44888",
+    "type": "individual_entrepreneur",
+    "subject": {
+      "full_name": "Ветрокрылов Егор Вадимович",
+      "inn": "631652222490"
+    },
+    "organization": null,
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-15",
+    "valid_to": "2027-01-15",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "A40CA170F2DFCDEA",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Кедрова Анна Викторовна",
+      "inn": "770586906621",
+      "position": "Генеральный директор"
+    },
+    "organization": {
+      "name": "ООО «Кедровый контур Демо»",
+      "inn": "7705005410"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2024-03-01",
+    "valid_to": "2025-03-01",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "8FA21A1265577561",
+    "type": "individual_entrepreneur",
+    "subject": {
+      "full_name": "Ладогина Вероника Ильинична",
+      "inn": "781497718575"
+    },
+    "organization": null,
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2025-12-01",
+    "valid_to": "2026-12-01",
+    "status": "revoked",
+    "pin": "12345678"
+  },
+  {
+    "serial": "EFE118DE46040000",
+    "type": "individual",
+    "subject": {
+      "full_name": "Счётова Мария Ильинична",
+      "inn": "770512345674",
+      "position": "Главный бухгалтер"
+    },
+    "organization": null,
+    "issuer": "УЦ «Демо-Сертум» (демо)",
+    "valid_from": "2026-02-10",
+    "valid_to": "2027-02-10",
+    "status": "valid",
+    "pin": "12345678"
+  },
+  {
+    "serial": "4F04A3A6C9FA540D",
+    "type": "legal_entity_head",
+    "subject": {
+      "full_name": "Прежнев Олег Юрьевич",
+      "inn": "781098765432",
+      "position": "Генеральный директор"
+    },
+    "organization": {
+      "name": "ООО «Ладожский хлеб Демо»",
+      "inn": "7810969607"
+    },
+    "issuer": "УЦ ФНС России (демо)",
+    "valid_from": "2026-01-20",
+    "valid_to": "2027-01-20",
+    "status": "valid",
+    "pin": "12345678"
+  }
+]

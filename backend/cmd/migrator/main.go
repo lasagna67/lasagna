@@ -13,9 +13,9 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-const migrationsDir = "db/migration"
+const migrationsDir = "migration"
 
-// migrator applies goose migrations from db/migration against the configured
+// migrator applies goose migrations from migration against the configured
 // postgres instance. Usage: migrator [up|down|status|version] [args...].
 // Defaults to "up".
 func main() {

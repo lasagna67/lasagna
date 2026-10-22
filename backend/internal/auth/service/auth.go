@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/lasagna67/lasagna.git/internal/auth/domain"
@@ -19,7 +20,6 @@ import (
 const tokenBytes = 32
 
 type UserRepository interface {
-	Create(ctx context.Context, user domain.User) (domain.User, error)
 	GetByEmail(ctx context.Context, email string) (domain.User, error)
 }
 
@@ -63,35 +63,6 @@ func New(users UserRepository, sessions SessionRepository, hasher PasswordHasher
 		ttl:       ttl,
 		dummyHash: dummyHash,
 	}, nil
-}
-
-// Register регистрирует клиента и сразу открывает для него сессию.
-// Сотрудники банка создаются не через регистрацию.
-func (s *Service) Register(ctx context.Context, in domain.RegisterInput) (domain.Session, error) {
-	in, err := normalizeRegistration(in)
-	if err != nil {
-		return domain.Session{}, err
-	}
-
-	hash, err := s.hasher.Hash(in.Password)
-	if err != nil {
-		return domain.Session{}, fmt.Errorf("hash password: %w", err)
-	}
-
-	user, err := s.users.Create(ctx, domain.User{
-		Role:         domain.RoleClient,
-		Email:        in.Email,
-		Phone:        in.Phone,
-		PasswordHash: hash,
-		FirstName:    &in.FirstName,
-		LastName:     &in.LastName,
-		MiddleName:   in.MiddleName,
-	})
-	if err != nil {
-		return domain.Session{}, fmt.Errorf("create user: %w", err)
-	}
-
-	return s.openSession(ctx, user.Claims())
 }
 
 // Login — аутентификация по email и паролю.
@@ -177,4 +148,8 @@ func (s *Service) openSession(ctx context.Context, claims domain.Claims) (domain
 func sessionID(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }

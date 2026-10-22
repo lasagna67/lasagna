@@ -1,10 +1,14 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Claims — результат аутентификации: кто выполняет запрос.
 type Claims struct {
-	UserID string
+	UserID uuid.UUID
 	Role   Role
 }
 

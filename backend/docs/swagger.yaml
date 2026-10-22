@@ -1,5 +1,355 @@
 basePath: /api/v0
 definitions:
+  companydomain.CreditHistory:
+    properties:
+      has_credit_history:
+        type: boolean
+      history_months:
+        type: integer
+      loans:
+        items:
+          $ref: '#/definitions/companydomain.Loan'
+        type: array
+    type: object
+  companydomain.CreditReport:
+    properties:
+      business_id:
+        type: string
+      inn:
+        type: string
+      report:
+        $ref: '#/definitions/companydomain.CreditHistory'
+      report_date:
+        type: string
+      status:
+        type: string
+    type: object
+  companydomain.FinancialReport:
+    properties:
+      business_id:
+        type: string
+      currency:
+        type: string
+      error_code:
+        type: string
+      inn:
+        type: string
+      message:
+        type: string
+      monthly_data:
+        items:
+          $ref: '#/definitions/companydomain.MonthlyData'
+        type: array
+      period:
+        $ref: '#/definitions/companydomain.Period'
+      status:
+        type: string
+    type: object
+  companydomain.Loan:
+    properties:
+      amount:
+        format: int64
+        type: integer
+      closed_date:
+        type: string
+      currency:
+        type: string
+      last_payment_date:
+        type: string
+      loan_id:
+        type: string
+      loan_type:
+        type: string
+      monthly_payment:
+        format: int64
+        type: integer
+      opened_date:
+        type: string
+      outstanding_amount:
+        format: int64
+        type: integer
+      overdue_amount:
+        format: int64
+        type: integer
+      overdue_days:
+        type: integer
+      overdue_since:
+        type: string
+      status:
+        type: string
+    type: object
+  companydomain.MonthlyData:
+    properties:
+      expenses:
+        format: int64
+        type: integer
+      free_cash:
+        format: int64
+        type: integer
+      income:
+        format: int64
+        type: integer
+      month:
+        type: string
+      owner_withdrawals:
+        format: int64
+        type: integer
+      taxes:
+        format: int64
+        type: integer
+    type: object
+  companydomain.Period:
+    properties:
+      from:
+        type: string
+      to:
+        type: string
+    type: object
+  companydto.ActivityResponse:
+    properties:
+      code:
+        example: "25.62"
+        type: string
+      name:
+        example: Обработка металлических изделий механическая
+        type: string
+    type: object
+  companydto.AddMemberRequest:
+    properties:
+      email:
+        example: buh@kedr-demo.ru
+        type: string
+      position:
+        enum:
+        - cfo
+        - accountant
+        - finance_officer
+        - authorized_employee
+        example: accountant
+        type: string
+    type: object
+  companydto.ChallengeRequest:
+    properties:
+      inn:
+        example: "7705005410"
+        type: string
+    type: object
+  companydto.ChallengeResponse:
+    properties:
+      challenge_id:
+        example: 3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13
+        type: string
+      company:
+        $ref: '#/definitions/companydto.RegistryCardResponse'
+      data:
+        example: Заявление о подключении компании к кредитному кабинету...
+        type: string
+      expires_at:
+        type: string
+    type: object
+  companydto.CompanyResponse:
+    properties:
+      additional_okveds:
+        example:
+        - "25.61"
+        - "46.72"
+        items:
+          type: string
+        type: array
+      business_status:
+        enum:
+        - active
+        - reorganizing
+        - terminated
+        example: active
+        type: string
+      entity_type:
+        enum:
+        - legal_entity
+        - individual_entrepreneur
+        example: legal_entity
+        type: string
+      head:
+        $ref: '#/definitions/companydto.HeadResponse'
+      id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+      inn:
+        example: "7705005410"
+        type: string
+      membership:
+        $ref: '#/definitions/companydto.MembershipResponse'
+      name:
+        example: ООО «Кедровый контур Демо»
+        type: string
+      primary_okved:
+        example: "25.62"
+        type: string
+      registration_date:
+        example: "2012-04-17"
+        format: date
+        type: string
+      registry_synced_at:
+        type: string
+      termination_date:
+        format: date
+        type: string
+    type: object
+  companydto.ConnectRequest:
+    properties:
+      challenge_id:
+        example: 3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13
+        type: string
+      signature:
+        example: eyJzZXJpYWwiOiIwQkZEMDE4NDAzN0Y0ODY3IiwuLi59
+        type: string
+    type: object
+  companydto.CreditHistorySource:
+    properties:
+      data:
+        $ref: '#/definitions/companydomain.CreditReport'
+      status:
+        enum:
+        - ok
+        - not_found
+        - unavailable
+        type: string
+    type: object
+  companydto.FinancialsSource:
+    properties:
+      data:
+        $ref: '#/definitions/companydomain.FinancialReport'
+      status:
+        enum:
+        - ok
+        - not_found
+        - unavailable
+        type: string
+    type: object
+  companydto.HeadResponse:
+    properties:
+      full_name:
+        example: Кедрова Анна Викторовна
+        type: string
+      position:
+        example: Генеральный директор
+        type: string
+    type: object
+  companydto.MemberResponse:
+    properties:
+      can_sign:
+        example: false
+        type: boolean
+      confirmed_by:
+        enum:
+        - esign
+        - invite
+        example: invite
+        type: string
+      created_at:
+        type: string
+      email:
+        example: buh@kedr-demo.ru
+        type: string
+      first_name:
+        example: Мария
+        type: string
+      last_name:
+        example: Счётова
+        type: string
+      middle_name:
+        example: Ильинична
+        type: string
+      position:
+        enum:
+        - owner
+        - ceo
+        - cfo
+        - accountant
+        - finance_officer
+        - authorized_employee
+        example: accountant
+        type: string
+      user_id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+    type: object
+  companydto.MembershipResponse:
+    properties:
+      can_sign:
+        example: true
+        type: boolean
+      position:
+        enum:
+        - owner
+        - ceo
+        - cfo
+        - accountant
+        - finance_officer
+        - authorized_employee
+        example: ceo
+        type: string
+    type: object
+  companydto.OverviewResponse:
+    properties:
+      company_id:
+        format: uuid
+        type: string
+      credit_history:
+        $ref: '#/definitions/companydto.CreditHistorySource'
+      financials:
+        $ref: '#/definitions/companydto.FinancialsSource'
+      registry:
+        $ref: '#/definitions/companydto.RegistrySource'
+    type: object
+  companydto.RegistryCardResponse:
+    properties:
+      business_status:
+        enum:
+        - active
+        - reorganizing
+        - terminated
+        example: active
+        type: string
+      entity_type:
+        enum:
+        - legal_entity
+        - individual_entrepreneur
+        example: legal_entity
+        type: string
+      head:
+        $ref: '#/definitions/companydto.HeadResponse'
+      inn:
+        example: "7705005410"
+        type: string
+      name:
+        example: ООО «Кедровый контур Демо»
+        type: string
+      okved:
+        items:
+          $ref: '#/definitions/companydto.ActivityResponse'
+        type: array
+      registration_date:
+        example: "2012-04-17"
+        format: date
+        type: string
+      termination_date:
+        format: date
+        type: string
+    type: object
+  companydto.RegistrySource:
+    properties:
+      data:
+        $ref: '#/definitions/companydto.RegistryCardResponse'
+      status:
+        enum:
+        - ok
+        - not_found
+        - unavailable
+        type: string
+    type: object
   dto.AuthResponse:
     properties:
       access_token:
@@ -22,7 +372,27 @@ definitions:
         example: Secret123
         type: string
     type: object
-  dto.RegisterRequest:
+  dto.UserResponse:
+    properties:
+      id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+      role:
+        enum:
+        - client
+        - underwriter
+        - admin
+        example: client
+        type: string
+    type: object
+  swagger.HTTPError:
+    properties:
+      message:
+        example: Неверный email или пароль
+        type: string
+    type: object
+  userdto.CreateClientRequest:
     properties:
       email:
         example: owner@kedr-demo.ru
@@ -43,23 +413,44 @@ definitions:
         example: "+79991234567"
         type: string
     type: object
-  dto.UserResponse:
+  userdto.UserResponse:
     properties:
+      created_at:
+        type: string
+      email:
+        example: a.smirnova@lasagna-bank.ru
+        type: string
+      first_name:
+        example: Анна
+        type: string
       id:
         example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+      last_name:
+        example: Смирнова
+        type: string
+      middle_name:
+        example: Олеговна
+        type: string
+      phone:
+        example: "+79991234567"
         type: string
       role:
         enum:
         - client
         - underwriter
         - admin
-        example: client
+        example: underwriter
         type: string
-    type: object
-  swagger.HTTPError:
-    properties:
-      message:
-        example: Неверный email или пароль
+      status:
+        enum:
+        - active
+        - banned
+        - deleted
+        example: active
+        type: string
+      updated_at:
         type: string
     type: object
 info:
@@ -142,25 +533,384 @@ paths:
       summary: Текущий пользователь
       tags:
       - auth
-  /auth/register:
+  /companies:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/companydto.CompanyResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Мои компании
+      tags:
+      - companies
     post:
       consumes:
       - application/json
-      description: Создаёт пользователя с ролью client и сразу открывает сессию.
+      description: |-
+        Шаг 2 из 2. Проверяет подпись заявления и сверяет владельца сертификата
+        с руководителем по ЕГРЮЛ или с ИНН ИП по ЕГРИП. Пользователь становится
+        ceo (ЮЛ) или owner (ИП) с правом подписи. Заявление тратится при любом исходе.
       parameters:
-      - description: Данные регистрации
+      - description: Подписанное заявление
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/dto.RegisterRequest'
+          $ref: '#/definitions/companydto.ConnectRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/dto.AuthResponse'
+            $ref: '#/definitions/companydto.CompanyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: сертификат не руководителя
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "410":
+          description: заявление истекло или уже использовано
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "422":
+          description: подпись не прошла проверку
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "503":
+          description: реестр или УЦ недоступны
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Подключение компании
+      tags:
+      - companies
+  /companies/{id}:
+    get:
+      parameters:
+      - description: id компании
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/companydto.CompanyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: нет компании или пользователь не её участник
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Компания
+      tags:
+      - companies
+  /companies/{id}/members:
+    get:
+      parameters:
+      - description: id компании
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/companydto.MemberResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Представители компании
+      tags:
+      - companies
+    post:
+      consumes:
+      - application/json
+      description: Руководитель добавляет зарегистрированного клиента по email, без
+        права подписи.
+      parameters:
+      - description: id компании
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Email и должность
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/companydto.AddMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/companydto.MemberResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: не руководитель
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: нет компании или клиента
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "409":
+          description: уже представитель
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Приглашение сотрудника
+      tags:
+      - companies
+  /companies/{id}/members/{user_id}:
+    delete:
+      description: Руководитель удаляет сотрудника, сотрудник может удалить себя сам.
+        Руководителя удалить нельзя.
+      parameters:
+      - description: id компании
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: id пользователя
+        format: uuid
+        in: path
+        name: user_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: не руководитель
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "409":
+          description: руководителя удалить нельзя
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Удаление представителя
+      tags:
+      - companies
+  /companies/{id}/overview:
+    get:
+      description: 'Только для client, состоящего в компании. Источники запрашиваются
+        параллельно по ИНН из БД. Ошибка источника не скрывает остальные: status=ok,
+        not_found или unavailable; при ошибке data=null. Даже если все источники недоступны,
+        возвращается 200 с их статусами. Отчёты не сохраняются. Суммы БКИ и финансового
+        мока передаются в исходных единицах (рубли), без пересчёта в копейки.'
+      parameters:
+      - description: ID компании
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/companydto.OverviewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: Компания не найдена или пользователь не участник
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Сводка по бизнесу из реестра, БКИ и финансовой отчётности
+      tags:
+      - companies
+  /companies/challenges:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Шаг 1 из 2. Возвращает текст заявления (data), который руководитель
+        подписывает КЭП в esign-mock: POST /v1/sign. Заявление одноразовое, живёт 5 минут.
+      parameters:
+      - description: ИНН компании
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/companydto.ChallengeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/companydto.ChallengeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: нет в реестре
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "503":
+          description: реестр недоступен
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Заявление о подключении компании
+      tags:
+      - companies
+  /companies/lookup:
+    get:
+      description: Ищет ЮЛ в ЕГРЮЛ или ИП в ЕГРИП по ИНН. Ничего не сохраняет.
+      parameters:
+      - description: 'ИНН: 10 цифр ЮЛ или 12 цифр ИП'
+        in: query
+        name: inn
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/companydto.RegistryCardResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: нет в реестре
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "503":
+          description: реестр недоступен
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Карточка компании из реестра
+      tags:
+      - companies
+  /users:
+    post:
+      consumes:
+      - application/json
+      description: Заводит пользователя с ролью client и статусом active, сессию не
+        открывает.
+      parameters:
+      - description: Данные клиента
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/userdto.CreateClientRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/userdto.UserResponse'
         "400":
           description: Bad Request
           schema:
@@ -173,9 +923,123 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/swagger.HTTPError'
-      summary: Регистрация клиента
+      summary: Создание клиента
       tags:
-      - auth
+      - users
+  /users/{id}:
+    delete:
+      description: Ставит статус deleted, запись остаётся в БД. Только для admin.
+      parameters:
+      - description: id пользователя
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Удаление пользователя
+      tags:
+      - users
+  /users/{id}/ban:
+    post:
+      description: Ставит статус banned. Только для admin.
+      parameters:
+      - description: id пользователя
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Бан пользователя
+      tags:
+      - users
+  /users/{id}/reset:
+    post:
+      description: Возвращает статус active после бана или удаления. Только для admin.
+      parameters:
+      - description: id пользователя
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Восстановление пользователя
+      tags:
+      - users
 securityDefinitions:
   BearerAuth:
     description: Токен из /auth/login в формате "Bearer <access_token>".

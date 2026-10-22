@@ -7,6 +7,11 @@
                        "name":  "ООО «Кедровый контур Демо»",
                        "registration_date":  "2012-04-17",
                        "business_status":  "active",
+                       "head":  {
+                                     "full_name":  "Кедрова Анна Викторовна",
+                                     "position":  "Генеральный директор",
+                                     "inn":  "770586906621"
+                                   },
                        "okved":  [
                                      {
                                          "code":  "25.62",
@@ -31,6 +36,11 @@
                        "name":  "ООО «Ладожский хлеб Демо»",
                        "registration_date":  "2019-06-18",
                        "business_status":  "active",
+                       "head":  {
+                                     "full_name":  "Хлебников Пётр Андреевич",
+                                     "position":  "Генеральный директор",
+                                     "inn":  "781053766023"
+                                   },
                        "okved":  [
                                      {
                                          "code":  "10.71",
@@ -55,6 +65,11 @@
                        "name":  "ООО «Листок данных Демо»",
                        "registration_date":  "2026-06-02",
                        "business_status":  "active",
+                       "head":  {
+                                     "full_name":  "Листвин Тимур Ринатович",
+                                     "position":  "Генеральный директор",
+                                     "inn":  "165530099010"
+                                   },
                        "okved":  [
                                      {
                                          "code":  "62.01",
@@ -79,6 +94,11 @@
                        "name":  "ООО «Искра макетов Демо»",
                        "registration_date":  "2026-09-08",
                        "business_status":  "active",
+                       "head":  {
+                                     "full_name":  "Искрина Дарья Олеговна",
+                                     "position":  "Генеральный директор",
+                                     "inn":  "667117611464"
+                                   },
                        "okved":  [
                                      {
                                          "code":  "73.11",
@@ -100,6 +120,11 @@
                        "registration_date":  "2016-02-16",
                        "business_status":  "terminated",
                        "termination_date":  "2025-11-14",
+                       "head":  {
+                                     "full_name":  "Волгин Сергей Николаевич",
+                                     "position":  "Генеральный директор",
+                                     "inn":  "526042221070"
+                                   },
                        "okved":  [
                                      {
                                          "code":  "46.90",
@@ -121,6 +146,11 @@
                        "registration_date":  "2013-08-22",
                        "business_status":  "terminated",
                        "termination_date":  "2024-12-16",
+                       "head":  {
+                                     "full_name":  "Таёжная Ольга Петровна",
+                                     "position":  "Генеральный директор",
+                                     "inn":  "540610425042"
+                                   },
                        "okved":  [
                                      {
                                          "code":  "18.12",
@@ -141,6 +171,11 @@
                        "name":  "ООО «Маршрут кедра Демо»",
                        "registration_date":  "2015-03-24",
                        "business_status":  "reorganizing",
+                       "head":  {
+                                     "full_name":  "Маршев Константин Игоревич",
+                                     "position":  "Генеральный директор",
+                                     "inn":  "770998548171"
+                                   },
                        "okved":  [
                                      {
                                          "code":  "49.41",
@@ -165,6 +200,11 @@
                        "name":  "ООО «Невский модуль Демо»",
                        "registration_date":  "2018-11-13",
                        "business_status":  "reorganizing",
+                       "head":  {
+                                     "full_name":  "Невская Екатерина Дмитриевна",
+                                     "position":  "Генеральный директор",
+                                     "inn":  "781321471116"
+                                   },
                        "okved":  [
                                      {
                                          "code":  "46.69",
@@ -185,6 +225,11 @@
                        "name":  "ООО «Южный каркас Демо»",
                        "registration_date":  "2020-10-06",
                        "business_status":  "active",
+                       "head":  {
+                                     "full_name":  "Каркасов Руслан Ашотович",
+                                     "position":  "Генеральный директор",
+                                     "inn":  "231093961650"
+                                   },
                        "okved":  [
                                      {
                                          "code":  "41.20",
@@ -209,6 +254,11 @@
                        "name":  "ООО «Волжский мебельный контур Демо»",
                        "registration_date":  "2009-09-15",
                        "business_status":  "active",
+                       "head":  {
+                                     "full_name":  "Мебельщиков Виктор Семёнович",
+                                     "position":  "Директор",
+                                     "inn":  "631563025860"
+                                   },
                        "okved":  [
                                      {
                                          "code":  "31.01",

@@ -3,11 +3,11 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lasagna67/lasagna.git/internal/auth/domain"
 	autherrors "github.com/lasagna67/lasagna.git/internal/auth/errors"
 	"golang.org/x/crypto/bcrypt"
@@ -15,16 +15,6 @@ import (
 
 type fakeUsers struct {
 	byEmail map[string]domain.User
-}
-
-func (f *fakeUsers) Create(_ context.Context, user domain.User) (domain.User, error) {
-	if _, ok := f.byEmail[user.Email]; ok {
-		return domain.User{}, autherrors.ErrEmailTaken
-	}
-	user.ID = fmt.Sprintf("user-%d", len(f.byEmail)+1)
-	user.Status = domain.StatusActive
-	f.byEmail[user.Email] = user
-	return user, nil
 }
 
 func (f *fakeUsers) GetByEmail(_ context.Context, email string) (domain.User, error) {
@@ -68,36 +58,31 @@ func newTestService(t *testing.T) (*Service, *fakeUsers, *fakeSessions) {
 	return svc, users, sessions
 }
 
-func validInput() domain.RegisterInput {
-	return domain.RegisterInput{
-		Email:     "  Owner@Demo.ru ",
-		Password:  "Secret123",
-		FirstName: " Иван ",
-		LastName:  "Петров",
+const password = "Secret123"
+
+// addUser кладёт в хранилище пользователя с паролем password.
+func addUser(t *testing.T, svc *Service, users *fakeUsers, email string, status domain.Status) domain.User {
+	t.Helper()
+	hash, err := svc.hasher.Hash(password)
+	if err != nil {
+		t.Fatalf("Hash: %v", err)
 	}
+	user := domain.User{ID: uuid.New(), Role: domain.RoleClient, Status: status, Email: email, PasswordHash: hash}
+	users.byEmail[email] = user
+	return user
 }
 
-func TestRegisterOpensSession(t *testing.T) {
+func TestLoginOpensSession(t *testing.T) {
 	svc, users, sessions := newTestService(t)
 	ctx := context.Background()
+	user := addUser(t, svc, users, "owner@demo.ru", domain.StatusActive)
 
-	session, err := svc.Register(ctx, validInput())
+	session, err := svc.Login(ctx, "owner@demo.ru", password)
 	if err != nil {
-		t.Fatalf("Register: %v", err)
+		t.Fatalf("Login: %v", err)
 	}
-	if session.Claims.Role != domain.RoleClient {
-		t.Errorf("role = %q, want client", session.Claims.Role)
-	}
-
-	stored, ok := users.byEmail["owner@demo.ru"]
-	if !ok {
-		t.Fatal("user not stored under normalized email")
-	}
-	if stored.PasswordHash == "Secret123" || stored.PasswordHash == "" {
-		t.Errorf("password stored unhashed: %q", stored.PasswordHash)
-	}
-	if *stored.FirstName != "Иван" {
-		t.Errorf("first name = %q, want trimmed", *stored.FirstName)
+	if session.Claims != user.Claims() {
+		t.Errorf("claims = %+v, want %+v", session.Claims, user.Claims())
 	}
 	if _, ok := sessions.byID[session.Token]; ok {
 		t.Error("raw token used as session key")
@@ -112,62 +97,12 @@ func TestRegisterOpensSession(t *testing.T) {
 	}
 }
 
-func TestRegisterValidation(t *testing.T) {
-	ptr := func(s string) *string { return &s }
-	tests := []struct {
-		name   string
-		modify func(*domain.RegisterInput)
-		field  string
-	}{
-		{"bad email", func(in *domain.RegisterInput) { in.Email = "not-an-email" }, "email"},
-		{"email with display name", func(in *domain.RegisterInput) { in.Email = "Иван <a@b.ru>" }, "email"},
-		{"short password", func(in *domain.RegisterInput) { in.Password = "short" }, "password"},
-		{"long password", func(in *domain.RegisterInput) { in.Password = strings.Repeat("a", 73) }, "password"},
-		{"blank first name", func(in *domain.RegisterInput) { in.FirstName = "   " }, "first_name"},
-		{"long last name", func(in *domain.RegisterInput) { in.LastName = strings.Repeat("я", 101) }, "last_name"},
-		{"bad phone", func(in *domain.RegisterInput) { in.Phone = ptr("89991234567") }, "phone"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc, _, _ := newTestService(t)
-			in := validInput()
-			tt.modify(&in)
-
-			_, err := svc.Register(context.Background(), in)
-			var validationErr *autherrors.ValidationError
-			if !errors.As(err, &validationErr) {
-				t.Fatalf("err = %v, want ValidationError", err)
-			}
-			if validationErr.Field != tt.field {
-				t.Errorf("field = %q, want %q", validationErr.Field, tt.field)
-			}
-		})
-	}
-}
-
-func TestRegisterDuplicateEmail(t *testing.T) {
-	svc, _, _ := newTestService(t)
-	ctx := context.Background()
-
-	if _, err := svc.Register(ctx, validInput()); err != nil {
-		t.Fatalf("first Register: %v", err)
-	}
-	_, err := svc.Register(ctx, validInput())
-	if !errors.Is(err, autherrors.ErrEmailTaken) {
-		t.Fatalf("err = %v, want ErrEmailTaken", err)
-	}
-}
-
 func TestLogin(t *testing.T) {
 	svc, users, _ := newTestService(t)
 	ctx := context.Background()
-	if _, err := svc.Register(ctx, validInput()); err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-
-	hash := users.byEmail["owner@demo.ru"].PasswordHash
-	users.byEmail["banned@demo.ru"] = domain.User{ID: "b", Role: domain.RoleClient, Status: domain.StatusBanned, PasswordHash: hash}
-	users.byEmail["deleted@demo.ru"] = domain.User{ID: "d", Role: domain.RoleClient, Status: domain.StatusDeleted, PasswordHash: hash}
+	addUser(t, svc, users, "owner@demo.ru", domain.StatusActive)
+	addUser(t, svc, users, "banned@demo.ru", domain.StatusBanned)
+	addUser(t, svc, users, "deleted@demo.ru", domain.StatusDeleted)
 
 	tests := []struct {
 		name     string
@@ -196,12 +131,13 @@ func TestLogin(t *testing.T) {
 }
 
 func TestLogoutRevokesSession(t *testing.T) {
-	svc, _, _ := newTestService(t)
+	svc, users, _ := newTestService(t)
 	ctx := context.Background()
+	addUser(t, svc, users, "owner@demo.ru", domain.StatusActive)
 
-	session, err := svc.Register(ctx, validInput())
+	session, err := svc.Login(ctx, "owner@demo.ru", password)
 	if err != nil {
-		t.Fatalf("Register: %v", err)
+		t.Fatalf("Login: %v", err)
 	}
 	if err := svc.Logout(ctx, session.Token); err != nil {
 		t.Fatalf("Logout: %v", err)
@@ -222,7 +158,7 @@ func TestAuthenticateRejectsUnknownToken(t *testing.T) {
 
 func TestAuthorize(t *testing.T) {
 	svc, _, _ := newTestService(t)
-	client := domain.Claims{UserID: "u1", Role: domain.RoleClient}
+	client := domain.Claims{UserID: uuid.New(), Role: domain.RoleClient}
 
 	if err := svc.Authorize(client, domain.RoleClient, domain.RoleAdmin); err != nil {
 		t.Errorf("allowed role: err = %v", err)

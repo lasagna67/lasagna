@@ -2,7 +2,7 @@
 # Project: Alfa Hack Registry Mock
 
 ## Stack
-- Go 1.22+
+- Go 1.26
 - Standard library net/http
 - JSON-based synthetic data
 - REST API
