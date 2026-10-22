@@ -83,15 +83,17 @@ type (
 	}
 
 	Config struct {
-		Environment AppEnv         `default:"development"`
-		AppName     string         `default:"Lasagna"`
-		Postgres    PostgresConfig `prefix:"POSTGRES_"`
-		HTTP        HTTPConfig     `prefix:"HTTP_"`
-		Redis       RedisConfig    `prefix:"REDIS_"`
-		Logging     LoggingConfig  `prefix:"LOGGING_"`
-		Auth        AuthConfig     `prefix:"AUTH_"`
-		Registry    RegistryConfig `prefix:"REGISTRY_"`
-		ESign       ESignConfig    `prefix:"ESIGN_"`
+		Environment AppEnv           `default:"development"`
+		AppName     string           `default:"Lasagna"`
+		Postgres    PostgresConfig   `prefix:"POSTGRES_"`
+		HTTP        HTTPConfig       `prefix:"HTTP_"`
+		Redis       RedisConfig      `prefix:"REDIS_"`
+		Logging     LoggingConfig    `prefix:"LOGGING_"`
+		Auth        AuthConfig       `prefix:"AUTH_"`
+		Registry    RegistryConfig   `prefix:"REGISTRY_"`
+		ESign       ESignConfig      `prefix:"ESIGN_"`
+		BKI         ReportsConfig    `prefix:"BKI_"`
+		Financials  FinancialsConfig `prefix:"FINANCIALS_"`
 	}
 )
 

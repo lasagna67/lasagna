@@ -24,8 +24,10 @@ type Endpoint struct {
 }
 
 type Client struct {
-	registry api
-	esign    api
+	registry   api
+	esign      api
+	bki        api
+	financials api
 }
 
 func New(registry, esign Endpoint) *Client {

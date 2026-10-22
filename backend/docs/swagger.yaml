@@ -1,5 +1,110 @@
 basePath: /api/v0
 definitions:
+  companydomain.CreditHistory:
+    properties:
+      has_credit_history:
+        type: boolean
+      history_months:
+        type: integer
+      loans:
+        items:
+          $ref: '#/definitions/companydomain.Loan'
+        type: array
+    type: object
+  companydomain.CreditReport:
+    properties:
+      business_id:
+        type: string
+      inn:
+        type: string
+      report:
+        $ref: '#/definitions/companydomain.CreditHistory'
+      report_date:
+        type: string
+      status:
+        type: string
+    type: object
+  companydomain.FinancialReport:
+    properties:
+      business_id:
+        type: string
+      currency:
+        type: string
+      error_code:
+        type: string
+      inn:
+        type: string
+      message:
+        type: string
+      monthly_data:
+        items:
+          $ref: '#/definitions/companydomain.MonthlyData'
+        type: array
+      period:
+        $ref: '#/definitions/companydomain.Period'
+      status:
+        type: string
+    type: object
+  companydomain.Loan:
+    properties:
+      amount:
+        format: int64
+        type: integer
+      closed_date:
+        type: string
+      currency:
+        type: string
+      last_payment_date:
+        type: string
+      loan_id:
+        type: string
+      loan_type:
+        type: string
+      monthly_payment:
+        format: int64
+        type: integer
+      opened_date:
+        type: string
+      outstanding_amount:
+        format: int64
+        type: integer
+      overdue_amount:
+        format: int64
+        type: integer
+      overdue_days:
+        type: integer
+      overdue_since:
+        type: string
+      status:
+        type: string
+    type: object
+  companydomain.MonthlyData:
+    properties:
+      expenses:
+        format: int64
+        type: integer
+      free_cash:
+        format: int64
+        type: integer
+      income:
+        format: int64
+        type: integer
+      month:
+        type: string
+      owner_withdrawals:
+        format: int64
+        type: integer
+      taxes:
+        format: int64
+        type: integer
+    type: object
+  companydomain.Period:
+    properties:
+      from:
+        type: string
+      to:
+        type: string
+    type: object
   companydto.ActivityResponse:
     properties:
       code:
@@ -100,6 +205,28 @@ definitions:
         example: eyJzZXJpYWwiOiIwQkZEMDE4NDAzN0Y0ODY3IiwuLi59
         type: string
     type: object
+  companydto.CreditHistorySource:
+    properties:
+      data:
+        $ref: '#/definitions/companydomain.CreditReport'
+      status:
+        enum:
+        - ok
+        - not_found
+        - unavailable
+        type: string
+    type: object
+  companydto.FinancialsSource:
+    properties:
+      data:
+        $ref: '#/definitions/companydomain.FinancialReport'
+      status:
+        enum:
+        - ok
+        - not_found
+        - unavailable
+        type: string
+    type: object
   companydto.HeadResponse:
     properties:
       full_name:
@@ -165,6 +292,18 @@ definitions:
         example: ceo
         type: string
     type: object
+  companydto.OverviewResponse:
+    properties:
+      company_id:
+        format: uuid
+        type: string
+      credit_history:
+        $ref: '#/definitions/companydto.CreditHistorySource'
+      financials:
+        $ref: '#/definitions/companydto.FinancialsSource'
+      registry:
+        $ref: '#/definitions/companydto.RegistrySource'
+    type: object
   companydto.RegistryCardResponse:
     properties:
       business_status:
@@ -198,6 +337,17 @@ definitions:
         type: string
       termination_date:
         format: date
+        type: string
+    type: object
+  companydto.RegistrySource:
+    properties:
+      data:
+        $ref: '#/definitions/companydto.RegistryCardResponse'
+      status:
+        enum:
+        - ok
+        - not_found
+        - unavailable
         type: string
     type: object
   dto.AuthResponse:
@@ -614,6 +764,52 @@ paths:
       security:
       - BearerAuth: []
       summary: Удаление представителя
+      tags:
+      - companies
+  /companies/{id}/overview:
+    get:
+      description: 'Только для client, состоящего в компании. Источники запрашиваются
+        параллельно по ИНН из БД. Ошибка источника не скрывает остальные: status=ok,
+        not_found или unavailable; при ошибке data=null. Даже если все источники недоступны,
+        возвращается 200 с их статусами. Отчёты не сохраняются. Суммы БКИ и финансового
+        мока передаются в исходных единицах (рубли), без пересчёта в копейки.'
+      parameters:
+      - description: ID компании
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/companydto.OverviewResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: Компания не найдена или пользователь не участник
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Сводка по бизнесу из реестра, БКИ и финансовой отчётности
       tags:
       - companies
   /companies/challenges:

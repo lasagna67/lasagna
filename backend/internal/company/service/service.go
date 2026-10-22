@@ -44,6 +44,8 @@ type ChallengeRepo interface {
 
 // External — внешние системы модуля: реестр и УЦ. Реализация — companyhttpjson.
 type External interface {
+	GetCreditReport(ctx context.Context, inn string) (companydomain.CreditReport, error)
+	GetFinancialReport(ctx context.Context, inn string) (companydomain.FinancialReport, error)
 	// GetCard — карточка из ЕГРЮЛ/ЕГРИП. Нет в реестре — companyerrors.ErrNotInRegistry,
 	// реестр недоступен — companyerrors.ErrRegistryUnavailable.
 	GetCard(ctx context.Context, inn string) (companydomain.RegistryCard, error)

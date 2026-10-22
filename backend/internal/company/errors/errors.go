@@ -17,6 +17,7 @@ var (
 
 	ErrRegistryUnavailable = errors.New("registry unavailable")
 	ErrESignUnavailable    = errors.New("esign unavailable")
+	ErrReportNotFound      = errors.New("report not found")
 )
 
 // ValidationError — некорректное значение поля во входных данных.

@@ -32,9 +32,11 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 	company := companyservice.New(
 		repo.Companies,
 		repo.CompanyChallenges,
-		companyhttpjson.New(
+		companyhttpjson.NewWithReports(
 			companyhttpjson.Endpoint{URL: cfg.Registry.URL, Timeout: cfg.Registry.Timeout},
 			companyhttpjson.Endpoint{URL: cfg.ESign.URL, Timeout: cfg.ESign.Timeout},
+			companyhttpjson.Endpoint{URL: cfg.BKI.URL, Timeout: cfg.BKI.Timeout},
+			companyhttpjson.Endpoint{URL: cfg.Financials.URL, Timeout: cfg.Financials.Timeout},
 		),
 	)
 

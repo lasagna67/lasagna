@@ -15,6 +15,7 @@ import (
 )
 
 type Service interface {
+	Overview(ctx context.Context, companyID, userID uuid.UUID) (companydomain.Overview, error)
 	Lookup(ctx context.Context, inn string) (companydomain.RegistryCard, error)
 	CreateChallenge(ctx context.Context, cmd companydomain.CreateChallengeCommand) (companydomain.Challenge, companydomain.RegistryCard, error)
 	Connect(ctx context.Context, cmd companydomain.ConnectCommand) (companydomain.Membership, error)
@@ -46,6 +47,7 @@ func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, clientOnly echo.
 	g.GET("/lookup", h.lookup)
 	g.POST("/challenges", h.createChallenge)
 	g.GET("/:id", h.get)
+	g.GET("/:id/overview", h.overview)
 	g.GET("/:id/members", h.members)
 	g.POST("/:id/members", h.addMember)
 	g.DELETE("/:id/members/:user_id", h.removeMember)

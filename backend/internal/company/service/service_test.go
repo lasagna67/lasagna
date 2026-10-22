@@ -30,6 +30,13 @@ type fakeExternal struct {
 	registryErr  error
 }
 
+func (f *fakeExternal) GetCreditReport(context.Context, string) (companydomain.CreditReport, error) {
+	return companydomain.CreditReport{}, nil
+}
+func (f *fakeExternal) GetFinancialReport(context.Context, string) (companydomain.FinancialReport, error) {
+	return companydomain.FinancialReport{}, nil
+}
+
 func (f *fakeExternal) GetCard(_ context.Context, inn string) (companydomain.RegistryCard, error) {
 	if f.registryErr != nil {
 		return companydomain.RegistryCard{}, f.registryErr
