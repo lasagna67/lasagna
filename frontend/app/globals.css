@@ -1,1 +1,68 @@
 @import "tailwindcss";
+
+/* Токены в духе Alfa Design System (core-ds): красный бренд, пастельные плитки, лёгкая типографика */
+@theme inline {
+  --font-sans: var(--font-onest), "Helvetica Neue", Arial, sans-serif;
+
+  --color-brand: #ef3124;
+  --color-brand-hover: #e02d21;
+  --color-brand-press: #d02a1e;
+  --color-ink: #2a2c2f;
+  --color-ink-soft: #737373;
+
+  --color-plate-tomato: #ffcac7;
+  --color-plate-menthol: #bff0a8;
+  --color-plate-lagoon: #9df2f5;
+  --color-plate-chardonnay: #ffcf99;
+  --color-plate-sonata: #9edfff;
+  --color-plate-pearl: #eaeeee;
+
+  --radius-card: 24px;
+  --radius-card-lg: 32px;
+}
+
+@utility text-promo-xl {
+  font-size: 34px;
+  line-height: 40px;
+  font-weight: 400;
+  @media (width >= 48rem) {
+    font-size: 48px;
+    line-height: 64px;
+  }
+}
+
+@utility text-promo-l {
+  font-size: 26px;
+  line-height: 32px;
+  font-weight: 400;
+  @media (width >= 48rem) {
+    font-size: 40px;
+    line-height: 48px;
+  }
+}
+
+@utility text-promo-m {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 400;
+  @media (width >= 48rem) {
+    font-size: 32px;
+    line-height: 40px;
+  }
+}
+
+@utility text-promo-s {
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 500;
+  @media (width >= 48rem) {
+    font-size: 24px;
+    line-height: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
