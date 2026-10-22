@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Onest } from "next/font/google";
+import { SITE_URL } from "@/lib/seo";
 import "./globals.css";
 
 const onest = Onest({
@@ -10,7 +11,11 @@ const onest = Onest({
 });
 
 export const metadata: Metadata = {
-  title: "Lasagna — кредит для бизнеса онлайн",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Lasagna — кредит для бизнеса онлайн",
+    template: "%s — Lasagna Бизнес",
+  },
   description:
     "Заявка за 10 минут, решение по данным из ЕГРЮЛ и кредитной истории, подписание документов в кабинете. Для ИП и ООО.",
 };

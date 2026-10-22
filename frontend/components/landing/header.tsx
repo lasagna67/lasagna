@@ -8,6 +8,7 @@ const nav = [
   { href: "#how", label: "Как получить" },
   { href: "#calculator", label: "Калькулятор" },
   { href: "#faq", label: "Вопросы" },
+  { href: "/blog", label: "Блог" },
 ];
 
 export function Header() {
