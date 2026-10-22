@@ -24,7 +24,7 @@ export function Faq() {
     <section id="faq" className="scroll-mt-24">
       <Container>
         <h2 className="text-promo-m">Вопросы</h2>
-        <div className="mt-8 max-w-[800px] border-t border-black/8">
+        <div className="mt-8 border-t border-black/8">
           {questions.map(({ q, a }) => (
             <details key={q} className="group border-b border-black/8">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-[18px] font-medium [&::-webkit-details-marker]:hidden">
