@@ -11,7 +11,7 @@ import (
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 )
 
-// NewWithReports includes sources used by the company overview.
+// NewWithReports создаёт клиент реестра, электронной подписи, БКИ и финансового мока.
 func NewWithReports(registry, esign, bki, financials Endpoint) *Client {
 	c := New(registry, esign)
 	c.bki = newAPI(bki)

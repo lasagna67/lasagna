@@ -11,7 +11,8 @@ COPY internal ./internal
 COPY pkg ./pkg
 
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server \
- && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrator ./cmd/migrator
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrator ./cmd/migrator \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/demo-seed ./cmd/demo-seed
 
 
 
@@ -37,6 +38,14 @@ ENTRYPOINT ["/app/migrator"]
 CMD ["up"]
 
 
+
+# Demo accounts: one-shot API client, no direct database access.
+FROM runtime AS demo-seed
+
+RUN mkdir -p /data && chown app:app /data
+COPY --from=builder /out/demo-seed ./demo-seed
+USER app:app
+ENTRYPOINT ["/app/demo-seed"]
 
 # Server (стадия по умолчанию)
 FROM runtime AS server

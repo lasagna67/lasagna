@@ -2,7 +2,8 @@ package companydomain
 
 import "github.com/google/uuid"
 
-// SourceResult distinguishes missing data from a temporarily unavailable source.
+// SourceResult содержит данные источника и статус их получения:
+// ok — данные получены, not_found — данных нет, unavailable — источник недоступен.
 type SourceResult[T any] struct {
 	Status string `json:"status" enums:"ok,not_found,unavailable"`
 	Data   *T     `json:"data"`

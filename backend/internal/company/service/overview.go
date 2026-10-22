@@ -10,8 +10,9 @@ import (
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 )
 
-// Overview checks membership before contacting any external source.
-// Source failures are independent: healthy sources remain visible.
+// Overview проверяет участие пользователя в компании, затем параллельно
+// запрашивает реестр, БКИ и финансовые данные по ИНН компании из БД.
+// Ошибка одного источника не мешает вернуть данные остальных.
 func (s *CompanyService) Overview(ctx context.Context, companyID, userID uuid.UUID) (companydomain.Overview, error) {
 	membership, err := s.Membership(ctx, companyID, userID)
 	if err != nil {

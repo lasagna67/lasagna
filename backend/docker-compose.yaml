@@ -114,6 +114,31 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Hackathon fixtures: registration and company connection through the API.
+  # Exit code 0 means all 12 accounts and company connections are ready.
+  demo-seed:
+    build:
+      <<: *backend-build
+      target: demo-seed
+    environment:
+      DEMO_BACKEND_URL: http://backend:8080
+      DEMO_REGISTRY_URL: http://registry-mock:8081
+      DEMO_ESIGN_URL: http://esign-mock:8084
+      DEMO_PUBLIC_URL: ${DEMO_PUBLIC_URL:-http://localhost:8080}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-DemoCabinet2026!}
+      DEMO_SIGN_PIN: ${DEMO_SIGN_PIN:-12345678}
+    volumes:
+      - demo-data:/data
+    depends_on:
+      backend:
+        condition: service_healthy
+      registry-mock:
+        condition: service_healthy
+      esign-mock:
+        condition: service_healthy
+    restart: "no"
+
 volumes:
   postgres-data:
   redis-data:
+  demo-data:

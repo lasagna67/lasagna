@@ -88,16 +88,43 @@ Authorization: Bearer <access_token>
 | ip-no-data | active | False | not_found |  | 0 | 0 |
 | ip-terminated | terminated | True | not_found |  | 0 | 0 |
 
-## Передача другому разработчику
+## Запуск на чистом компьютере
 
-`localhost` в URL — компьютер, на котором запущен backend. Для общего стенда заменить адрес API. Аккаунты созданы в текущей локальной БД; на другой БД сначала выполнить seed, затем брать ID из нового JSON или GET /companies. UUID при пересоздании БД изменятся.
-
-Машиночитаемые аккаунты и URL: `docs/demo-businesses.json`.
-
-Повторное создание на поднятом окружении (из корня репозитория lasagna):
+Перед первым запуском подготовить `lasagna/.env.docker` из `.env.example` (если файла ещё нет). Затем из каталога backend:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\seed-demo-businesses.ps1
+docker compose up -d --build
 ```
 
-Для другого окружения скрипт принимает BaseUrl, RegistryUrl, BkiUrl, FinancialsUrl, ESignUrl. Использовать URL моков соответствующего backend. Повторный запуск переиспользует аккаунты и компании, проверяет сводки и обновляет памятку. Он не сбрасывает БД и не меняет существующие пароли. Конфликт email с другим паролем завершит запуск ошибкой.
+Compose запускает PostgreSQL, Redis и моки, применяет миграции, ждёт готовности backend и запускает одноразовый контейнер `demo-seed`. Он создаёт все 12 аккаунтов и подключает компании через API. PowerShell-скрипты не требуются.
+
+Проверка завершения:
+
+```powershell
+docker compose ps -a demo-seed
+docker compose logs demo-seed
+```
+
+`Exited (0)` и `demo seed completed accounts=12` означают успех. Ненулевой exit code означает ошибку — её причина будет в логах. `docker compose up -d` может вернуть управление до окончания заполнения.
+
+Повторное заполнение уже работающего окружения:
+
+```powershell
+docker compose run --rm --no-deps demo-seed
+```
+
+Существующие аккаунты и компании переиспользуются. Пароли не сбрасываются; если демо-email занят аккаунтом с другим паролем, запуск завершается ошибкой. Нет прямой записи SQL и очистки БД.
+
+## ID компаний в другом окружении
+
+Таблицы выше и `docs/demo-businesses.json` описывают исходную локальную БД. На чистой БД UUID будут другими. После login получайте актуальные ID через `GET /api/v0/companies`.
+
+Контейнер также сохраняет актуальный `demo-businesses.json` в `/data`, в отдельном volume `demo-data`. Скопировать manifest из завершившегося контейнера (из backend):
+
+```powershell
+docker compose cp demo-seed:/data/demo-businesses.json ../docs/demo-businesses.json
+```
+
+`localhost` в URL означает компьютер с backend. Для стенда задайте `DEMO_PUBLIC_URL` как адрес, доступный фронтенду, перед запуском Compose. Логины сценариев остаются одинаковыми на разных БД.
+
+Настройки сервиса `demo-seed` в Compose: `DEMO_PASSWORD` (по умолчанию `DemoCabinet2026!`), `DEMO_SIGN_PIN` (`12345678`), `DEMO_PUBLIC_URL` (`http://localhost:8080`). Переопределения передаются через окружение Compose или его `--env-file`; `env_file` backend не задаёт значения подстановок Compose. Не менять пароль после первого заполнения без обновления самих демо-аккаунтов.
