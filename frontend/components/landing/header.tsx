@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
+import { Logo } from "@/components/ui/logo";
 
 const nav = [
   { href: "#conditions", label: "Условия" },
@@ -13,8 +14,8 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-black/4 bg-white/90 backdrop-blur-md">
       <Container className="flex h-16 items-center gap-8 md:h-20">
-        <Link href="/" className="flex items-baseline gap-2 text-[20px] font-bold">
-          Lasagna
+        <Link href="/" className="flex items-center gap-2.5">
+          <Logo />
           <span className="rounded-full bg-plate-tomato px-2 py-0.5 text-[12px] font-medium">
             Бизнес
           </span>

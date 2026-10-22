@@ -20,20 +20,31 @@ export function Hero() {
             </Button>
           </div>
         </div>
-        <div className="rounded-card-lg bg-plate-chardonnay p-8 md:p-10">
-          <p className="text-[16px] font-medium">Кредит для бизнеса</p>
-          <p className="mt-4 text-promo-l">от 15,9%</p>
-          <p className="text-[16px]">годовых</p>
-          <dl className="mt-8 grid grid-cols-2 gap-6 border-t border-black/8 pt-6">
-            <div>
-              <dt className="text-[14px] text-ink-soft">Сумма</dt>
-              <dd className="mt-1 text-[24px] font-medium">до 30 млн ₽</dd>
+        <div className="relative overflow-hidden rounded-card-lg bg-plate-chardonnay p-8 md:p-10">
+          <svg aria-hidden viewBox="0 0 64 64" className="absolute -right-4 -top-4 size-24 opacity-60">
+            <circle cx="32" cy="32" r="32" fill="#ef3124" />
+          </svg>
+          <p className="relative text-[16px] font-medium">Кредит для бизнеса</p>
+          <div className="relative mt-5 max-w-[340px] rounded-card bg-white p-6 shadow-[0_4px_16px_rgba(0,0,0,0.06)]">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-plate-menthol px-3 py-1 text-[14px] font-medium">
+              <span aria-hidden>✓</span> Одобрено
+            </span>
+            <p className="mt-4 text-[32px] font-medium leading-9">3 000 000 ₽</p>
+            <p className="mt-1 text-[14px] text-ink-soft">24 месяца · 15,9% годовых</p>
+            <div className="mt-4 flex items-baseline justify-between border-t border-black/8 pt-4">
+              <span className="text-[14px] text-ink-soft">Платёж</span>
+              <span className="text-[18px] font-semibold">146 746 ₽/мес</span>
             </div>
-            <div>
-              <dt className="text-[14px] text-ink-soft">Срок</dt>
-              <dd className="mt-1 text-[24px] font-medium">до 5 лет</dd>
-            </div>
-          </dl>
+            <span
+              aria-hidden
+              className="mt-5 inline-flex h-10 w-full items-center justify-center rounded-full bg-brand px-5 text-[16px] font-medium text-white"
+            >
+              Принять оффер
+            </span>
+          </div>
+          <p className="relative mt-5 max-w-[36ch] text-[14px] leading-5 text-ink-soft">
+            Пример оффера в кабинете. Точные условия — после проверки данных.
+          </p>
         </div>
       </Container>
     </section>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Container } from "@/components/ui/container";
+import { Logo } from "@/components/ui/logo";
 
 const links = [
   { href: "#conditions", label: "Условия" },
@@ -13,7 +14,12 @@ export function Footer() {
     <footer className="border-t border-black/8">
       <Container className="flex flex-col gap-8 py-12 md:flex-row md:justify-between">
         <div>
-          <p className="text-[20px] font-bold">Lasagna Бизнес</p>
+          <span className="flex items-center gap-2.5">
+            <Logo />
+            <span className="rounded-full bg-plate-tomato px-2 py-0.5 text-[12px] font-medium">
+              Бизнес
+            </span>
+          </span>
           <p className="mt-2 max-w-[36ch] text-[14px] text-ink-soft">
             Кредитный кабинет для предпринимателей: заявка, решение и подписание онлайн.
           </p>
