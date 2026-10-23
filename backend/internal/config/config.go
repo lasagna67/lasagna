@@ -61,6 +61,11 @@ type (
 		Prefix string `default:"server"`
 	}
 
+	KafkaConfig struct {
+		Brokers  []string `default:"kafka:9092"`
+		ClientID string   `default:"lasagna"`
+	}
+
 	LoggingConfig struct {
 		Level    string      `default:"info"`
 		Encoding LogEncoding `default:"json"`
@@ -88,6 +93,7 @@ type (
 		Postgres    PostgresConfig   `prefix:"POSTGRES_"`
 		HTTP        HTTPConfig       `prefix:"HTTP_"`
 		Redis       RedisConfig      `prefix:"REDIS_"`
+		Kafka       KafkaConfig      `prefix:"KAFKA_"`
 		Logging     LoggingConfig    `prefix:"LOGGING_"`
 		Auth        AuthConfig       `prefix:"AUTH_"`
 		Registry    RegistryConfig   `prefix:"REGISTRY_"`
