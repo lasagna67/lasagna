@@ -5,15 +5,17 @@ import (
 	companyhttpjson "github.com/lasagna67/lasagna.git/internal/company/httpjson"
 	companyservice "github.com/lasagna67/lasagna.git/internal/company/service"
 	"github.com/lasagna67/lasagna.git/internal/config"
+	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
 	userservice "github.com/lasagna67/lasagna.git/internal/user/service"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
 
 // Services holds the application services, wired from their repository ports.
 type Service struct {
-	Auth    *authservice.Service
-	User    *userservice.UserService
-	Company *companyservice.CompanyService
+	Auth           *authservice.Service
+	User           *userservice.UserService
+	Company        *companyservice.CompanyService
+	CreditProducts *creditproducts.Service
 }
 
 func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service, error) {
@@ -40,9 +42,15 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		),
 	)
 
+	products, err := creditproducts.New(repo.CreditProducts)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Service{
-		Auth:    auth,
-		User:    userservice.New(repo.Users, hasher),
-		Company: company,
+		Auth:           auth,
+		User:           userservice.New(repo.Users, hasher),
+		Company:        company,
+		CreditProducts: products,
 	}, nil
 }

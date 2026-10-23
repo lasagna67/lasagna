@@ -9,6 +9,7 @@ import (
 	authhandler "github.com/lasagna67/lasagna.git/internal/auth/handler"
 	companyhandler "github.com/lasagna67/lasagna.git/internal/company/handler"
 	"github.com/lasagna67/lasagna.git/internal/config"
+	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
 	userhandler "github.com/lasagna67/lasagna.git/internal/user/handler"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 	"github.com/lasagna67/lasagna.git/pkg/server"
@@ -33,6 +34,9 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 
 	companies := companyhandler.New(services.Company, logger.Named("company"))
 	companies.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
+
+	products := creditproducts.NewHandler(services.CreditProducts, logger.Named("credit-products"))
+	products.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 	// Защищённые маршруты других модулей:
 	// api.Group("/applications", auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 
