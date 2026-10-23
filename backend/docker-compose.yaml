@@ -66,6 +66,23 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  # S3-совместимое хранилище. Консоль: http://localhost:9001 (MINIO_ROOT_USER / MINIO_ROOT_PASSWORD).
+  # Сборка bitnamilegacy: MinIO больше не публикует образы ни в Docker Hub, ни в Quay.
+  minio:
+    image: bitnamilegacy/minio:2025.7.23-debian-12-r5
+    env_file: ../.env.docker
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/bitnami/minio/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   # ---- Моки внешних систем (каталоги в корне репозитория) ----
   registry-mock:
     build: ../registry-mock
@@ -175,4 +192,5 @@ volumes:
   postgres-data:
   redis-data:
   kafka-data:
+  minio-data:
   demo-data:
