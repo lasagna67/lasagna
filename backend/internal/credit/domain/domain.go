@@ -46,12 +46,132 @@ type Transition struct {
 	To   Status
 }
 
+// Purprose - Намерение на кредит
+type Purpose string
+
+const (
+	PurposeWorkingCapital    Purpose = "working_capital"
+	PurposeCashGap           Purpose = "cash_gap"
+	PurposeEquipment         Purpose = "equipment"
+	PurposeBusinessStart     Purpose = "business_start"
+	PurposeBusinessExpansion Purpose = "business_expansion"
+	PurposeOther             Purpose = "other" // требует purpose_description
+)
+
+type NeedPeriodUnit string
+
+const (
+	NeedPeriodMonths  NeedPeriodUnit = "months" // разовый кредит
+	NeedPeriodDays    NeedPeriodUnit = "days"   // овердрафт
+	NeedPeriodUnknown NeedPeriodUnit = "unknown"
+)
+
+// CollateralMode — выбранный клиентом вариант обеспечения. В БД — has_collateral.
+type CollateralMode string
+
+const (
+	CollateralNone    CollateralMode = "none"
+	CollateralPledged CollateralMode = "pledged"
+)
+
+// NeedPeriod — на сколько нужны деньги. Не подменяет срок договора TermMonths.
+type NeedPeriod struct {
+	Unit  NeedPeriodUnit
+	Value *int // nil при Unknown или пока не заполнено
+}
+
+// Request — параметры запроса клиента
+// 
+// В черновике любое поле может быть пустым, обязательность проверяется при отправке.
+type Request struct {
+	Purpose            *Purpose
+	PurposeDescription *string
+	AmountKopecks      *int64 // для овердрафта — лимит
+	NeedPeriod         NeedPeriod
+	ProductCode        *string
+	TermMonths         *int // срок разового кредита; у овердрафта nil
+	CollateralMode     CollateralMode
+}
+
+// Application — заявка на кредит 
+//
+// CompanyID и ApplicantID не меняются после создания; Revision растёт с каждым изменением.
 type Application struct {
-	ID     uuid.UUID
-	Status Status
+	ID          uuid.UUID
+	Number      int64 // присваивает БД
+	Revision    int
+	CompanyID   uuid.UUID
+	ApplicantID uuid.UUID
+	Status      Status
+	Request     Request
+
+	SubmittedAt *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// CompanyCard — краткая карточка компании-заёмщика.
+type CompanyCard struct {
+	ID   uuid.UUID
+	Name string
+	INN  string
+}
+
+// ApplicantCard — заявитель; имя для показа собирает dto.
+type ApplicantCard struct {
+	ID         uuid.UUID
+	Email      string
+	FirstName  *string
+	LastName   *string
+	MiddleName *string
+}
+
+// ApplicationDetails — заявка с карточками компании и заявителя, как её отдаёт API.
+type ApplicationDetails struct {
+	Application
+	Company   CompanyCard
+	Applicant ApplicantCard
+}
+
+// Action — ключ available_actions из контракта. Сервер проверяет действие повторно при вызове.
+type Action string
+
+const (
+	ActionEdit             Action = "edit"
+	ActionFetchFinancials  Action = "fetch_financials"
+	ActionUploadCSV        Action = "upload_csv"
+	ActionDeclareNoHistory Action = "declare_no_history"
+	ActionSubmit           Action = "submit"
+	ActionAnswerInfo       Action = "answer_info"
+	ActionResubmit         Action = "resubmit"
+	ActionSign             Action = "sign"
+	ActionDecline          Action = "decline"
+	ActionTake             Action = "take"
+	ActionRequestInfo      Action = "request_info"
+	ActionReviewCollateral Action = "review_collateral"
+	ActionDecide           Action = "decide"
+	ActionRetryChecks      Action = "retry_checks"
+	ActionRetryIssue       Action = "retry_issue"
+)
+
+// Operation — операция с Idempotency-Key.
+type Operation string
+
+const OperationCreate Operation = "create_application"
+
+// IdempotencyKey — область повтора: пользователь, операция, ресурс и ключ клиента.
+//
+// RequestHash отличает повтор от другого запроса с тем же ключом.
+type IdempotencyKey struct {
+	UserID      uuid.UUID
+	Operation   Operation
+	ResourceID  *uuid.UUID // nil — операция создаёт ресурс
+	Key         string
+	RequestHash string
 }
 
 //=================================================================================================
+// ПЕРЕХОДЫ СТАТУСА:
 
 // Terminal — дальше заявка не движется: PATCH и подпись запрещены.
 func (s Status) Terminal() bool {
@@ -60,6 +180,23 @@ func (s Status) Terminal() bool {
 		return true
 	}
 	return false
+}
+
+// NewDraft — новая заявка: черновик с пустым запросом. Переход без исходного
+// статуса — первая запись истории.
+func NewDraft(id, companyID, applicantID uuid.UUID) (Application, Transition) {
+	a := Application{
+		ID:          id,
+		Revision:    1,
+		CompanyID:   companyID,
+		ApplicantID: applicantID,
+		Status:      StatusDraft,
+		Request: Request{
+			NeedPeriod:     NeedPeriod{Unit: NeedPeriodUnknown},
+			CollateralMode: CollateralNone,
+		},
+	}
+	return a, Transition{To: StatusDraft}
 }
 
 // transit переводит заявку в to, если текущий статус входит в from.
@@ -159,4 +296,41 @@ func (a *Application) Expire(validUntil *time.Time, now time.Time) (Transition, 
 		return Transition{}, fmt.Errorf("%w: offer is not expired", crediterrors.ErrInvalidState)
 	}
 	return a.transit(StatusExpired, StatusApproved, StatusCounterOffer)
+}
+
+// Что доступно клиенту:
+
+// draftFields — пути полей, которые клиент заполняет в черновике.
+// product_details и collateral — целиком: состав зависит от продукта.
+var draftFields = []string{
+	"request.purpose", "request.purpose_description", "request.amount_kopecks",
+	"request.need_period", "request.product_code", "request.term_months",
+	"request.collateral_mode", "product_details", "collateral",
+}
+
+// EditableFields — поля, которые клиент может менять сейчас.
+// TODO: info_requested — поля из открытых запросов банка.
+func (a *Application) EditableFields() []string {
+	if a.Status == StatusDraft {
+		return slices.Clone(draftFields)
+	}
+	return []string{}
+}
+
+// ClientActions — действия клиента в текущем статусе.
+// TODO: остальные статусы и зависимость от финансового шага — вместе с их операциями.
+func (a *Application) ClientActions() []Action {
+	if a.Status == StatusDraft {
+		return []Action{ActionEdit, ActionFetchFinancials, ActionSubmit}
+	}
+	return []Action{}
+}
+
+//=================================================================================================
+
+// CreateCommand — новая заявка от имени компании. ApplicantID берётся из токена.
+type CreateCommand struct {
+	CompanyID      uuid.UUID
+	ApplicantID    uuid.UUID
+	IdempotencyKey string
 }

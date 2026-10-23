@@ -3,6 +3,7 @@ package app
 import (
 	authrepo "github.com/lasagna67/lasagna.git/internal/auth/repo"
 	companyrepo "github.com/lasagna67/lasagna.git/internal/company/repo"
+	creditrepo "github.com/lasagna67/lasagna.git/internal/credit/repo"
 	userrepo "github.com/lasagna67/lasagna.git/internal/user/repo"
 )
 
@@ -15,6 +16,8 @@ type Repo struct {
 
 	Companies         *companyrepo.CompanyRepo
 	CompanyChallenges *companyrepo.ChallengeRepo
+
+	Applications *creditrepo.ApplicationRepo
 }
 
 func NewRepo(infra *Infra) *Repo {
@@ -25,5 +28,7 @@ func NewRepo(infra *Infra) *Repo {
 
 		Companies:         companyrepo.NewCompanyRepo(infra.Postgres().Pool()),
 		CompanyChallenges: companyrepo.NewChallengeRepo(infra.Redis()),
+
+		Applications: creditrepo.NewApplicationRepo(infra.Postgres().Pool()),
 	}
 }

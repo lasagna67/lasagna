@@ -5,6 +5,7 @@ import (
 	companyhttpjson "github.com/lasagna67/lasagna.git/internal/company/httpjson"
 	companyservice "github.com/lasagna67/lasagna.git/internal/company/service"
 	"github.com/lasagna67/lasagna.git/internal/config"
+	creditservice "github.com/lasagna67/lasagna.git/internal/credit/service"
 	userservice "github.com/lasagna67/lasagna.git/internal/user/service"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
@@ -14,6 +15,7 @@ type Service struct {
 	Auth    *authservice.Service
 	User    *userservice.UserService
 	Company *companyservice.CompanyService
+	Credit  *creditservice.ApplicationService
 }
 
 func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service, error) {
@@ -44,5 +46,6 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Auth:    auth,
 		User:    userservice.New(repo.Users, hasher),
 		Company: company,
+		Credit:  creditservice.New(repo.Applications, company),
 	}, nil
 }
