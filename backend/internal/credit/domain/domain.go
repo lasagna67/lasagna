@@ -10,8 +10,9 @@ import (
 	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 )
 
-// Status совпадает с enum application_status в БД.
+// Статус заявки на кредит — state машина
 type Status string
+
 const (
 	StatusDraft         Status = "draft"          // клиент заполняет, данные сохраняются по шагам
 	StatusSubmitted     Status = "submitted"      // версия зафиксирована, ждёт конвейера
@@ -39,15 +40,13 @@ func (s Status) Valid() bool {
 	return slices.Contains(statuses, s)
 }
 
-
 // Transition — совершённый переход; сервис пишет его в application_status_history.
 type Transition struct {
 	From Status
 	To   Status
 }
 
-// TODO:
-type Credit struct {
+type Application struct {
 	ID     uuid.UUID
 	Status Status
 }
@@ -65,12 +64,12 @@ func (s Status) Terminal() bool {
 
 // transit переводит заявку в to, если текущий статус входит в from.
 // При ошибке статус не меняется.
-func (c *Credit) transit(to Status, from ...Status) (Transition, error) {
-	if !slices.Contains(from, c.Status) {
-		return Transition{}, fmt.Errorf("%w: %s -> %s", crediterrors.ErrInvalidState, c.Status, to)
+func (a *Application) transit(to Status, from ...Status) (Transition, error) {
+	if !slices.Contains(from, a.Status) {
+		return Transition{}, fmt.Errorf("%w: %s -> %s", crediterrors.ErrInvalidState, a.Status, to)
 	}
-	tr := Transition{From: c.Status, To: to}
-	c.Status = to
+	tr := Transition{From: a.Status, To: to}
+	a.Status = to
 	return tr, nil
 }
 
@@ -78,70 +77,70 @@ func (c *Credit) transit(to Status, from ...Status) (Transition, error) {
 
 // Submit — отправка черновика. Полноту данных сервис проверяет до вызова:
 // синхронная ошибка возвращает 422 и оставляет draft.
-func (c *Credit) Submit() (Transition, error) {
-	return c.transit(StatusSubmitted, StatusDraft)
+func (a *Application) Submit() (Transition, error) {
+	return a.transit(StatusSubmitted, StatusDraft)
 }
 
 // Resubmit — повторная отправка после ответа на все открытые запросы банка.
 // Заявка та же, конвейер повторяет затронутые проверки.
-func (c *Credit) Resubmit() (Transition, error) {
-	return c.transit(StatusSubmitted, StatusInfoRequested)
+func (a *Application) Resubmit() (Transition, error) {
+	return a.transit(StatusSubmitted, StatusInfoRequested)
 }
 
 // Sign — клиент подписал актуальный договор. Актуальность предложения,
 // can_sign и PNG проверяет сервис; выдача ещё не завершена.
-func (c *Credit) Sign() (Transition, error) {
-	return c.transit(StatusSigning, StatusApproved, StatusCounterOffer)
+func (a *Application) Sign() (Transition, error) {
+	return a.transit(StatusSigning, StatusApproved, StatusCounterOffer)
 }
 
 // Decline — клиент отказался от предложения до подписания.
-func (c *Credit) Decline() (Transition, error) {
-	return c.transit(StatusCancelled, StatusApproved, StatusCounterOffer)
+func (a *Application) Decline() (Transition, error) {
+	return a.transit(StatusCancelled, StatusApproved, StatusCounterOffer)
 }
 
 // Конвейер: submitted -> validation -> enrichment -> scoring -> manual_review
 
-func (c *Credit) StartValidation() (Transition, error) {
-	return c.transit(StatusValidation, StatusSubmitted)
+func (a *Application) StartValidation() (Transition, error) {
+	return a.transit(StatusValidation, StatusSubmitted)
 }
 
-func (c *Credit) StartEnrichment() (Transition, error) {
-	return c.transit(StatusEnrichment, StatusValidation)
+func (a *Application) StartEnrichment() (Transition, error) {
+	return a.transit(StatusEnrichment, StatusValidation)
 }
 
-func (c *Credit) StartScoring() (Transition, error) {
-	return c.transit(StatusScoring, StatusEnrichment)
+func (a *Application) StartScoring() (Transition, error) {
+	return a.transit(StatusScoring, StatusEnrichment)
 }
 
 // SendToManualReview — штатный финал конвейера. С любого этапа: ошибка
 // внешнего источника или not_configured у скоринга ведут сюда, а не в отказ.
-func (c *Credit) SendToManualReview() (Transition, error) {
-	return c.transit(StatusManualReview, StatusValidation, StatusEnrichment, StatusScoring)
+func (a *Application) SendToManualReview() (Transition, error) {
+	return a.transit(StatusManualReview, StatusValidation, StatusEnrichment, StatusScoring)
 }
 
 // Сотрудник:
 
 // RequestInfo — запрос уточнений; клиент отвечает в той же заявке.
-func (c *Credit) RequestInfo() (Transition, error) {
-	return c.transit(StatusInfoRequested, StatusManualReview)
+func (a *Application) RequestInfo() (Transition, error) {
+	return a.transit(StatusInfoRequested, StatusManualReview)
 }
 
 // Approve — предложение на запрошенных продукте, сумме, сроке и обеспечении.
 // Из approved/counter_offer — новая версия предложения до подписания.
 // Готовность проверок и принятый залог проверяет сервис.
-func (c *Credit) Approve() (Transition, error) {
-	return c.transit(StatusApproved, StatusManualReview, StatusApproved, StatusCounterOffer)
+func (a *Application) Approve() (Transition, error) {
+	return a.transit(StatusApproved, StatusManualReview, StatusApproved, StatusCounterOffer)
 }
 
 // CounterOffer — предложение, где изменён хотя бы один из параметров запроса.
-func (c *Credit) CounterOffer() (Transition, error) {
-	return c.transit(StatusCounterOffer, StatusManualReview, StatusApproved, StatusCounterOffer)
+func (a *Application) CounterOffer() (Transition, error) {
+	return a.transit(StatusCounterOffer, StatusManualReview, StatusApproved, StatusCounterOffer)
 }
 
 // Reject — решение сотрудника или stop-правило конвейера (например,
 // BUSINESS_TERMINATED). Код причины обязателен и хранится в решении.
-func (c *Credit) Reject() (Transition, error) {
-	return c.transit(StatusRejected,
+func (a *Application) Reject() (Transition, error) {
+	return a.transit(StatusRejected,
 		StatusValidation, StatusEnrichment, StatusScoring, StatusManualReview)
 }
 
@@ -149,15 +148,15 @@ func (c *Credit) Reject() (Transition, error) {
 
 // Issue — задача выдачи завершилась completed. При failed статус остаётся
 // signing, подпись сохраняется, доступен retry-issue.
-func (c *Credit) Issue() (Transition, error) {
-	return c.transit(StatusIssued, StatusSigning)
+func (a *Application) Issue() (Transition, error) {
+	return a.transit(StatusIssued, StatusSigning)
 }
 
 // Expire — неподписанное предложение просрочено. Без valid_until
 // предложение бессрочно и не истекает.
-func (c *Credit) Expire(validUntil *time.Time, now time.Time) (Transition, error) {
+func (a *Application) Expire(validUntil *time.Time, now time.Time) (Transition, error) {
 	if validUntil == nil || now.Before(*validUntil) {
 		return Transition{}, fmt.Errorf("%w: offer is not expired", crediterrors.ErrInvalidState)
 	}
-	return c.transit(StatusExpired, StatusApproved, StatusCounterOffer)
+	return a.transit(StatusExpired, StatusApproved, StatusCounterOffer)
 }
