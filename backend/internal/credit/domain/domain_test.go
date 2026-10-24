@@ -2,9 +2,13 @@ package creditdomain
 
 import (
 	"errors"
+	"os"
+	"regexp"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 )
@@ -100,5 +104,71 @@ func TestStatusValid(t *testing.T) {
 		if s.Valid() {
 			t.Errorf("%q is valid; want invalid", s)
 		}
+	}
+}
+
+// Домен — источник истины: enum application_status в миграции должен
+// совпадать со statuses по значениям и порядку.
+func TestStatusesMatchMigration(t *testing.T) {
+	sql, err := os.ReadFile("../../../migration/000004_application.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	enum := regexp.MustCompile(`(?s)CREATE TYPE application_status AS ENUM \((.*?)\);`).FindSubmatch(sql)
+	if enum == nil {
+		t.Fatal("application_status enum not found in migration")
+	}
+
+	var got []Status
+	for _, m := range regexp.MustCompile(`'([a-z_]+)'`).FindAllSubmatch(enum[1], -1) {
+		got = append(got, Status(m[1]))
+	}
+	if !slices.Equal(got, statuses) {
+		t.Errorf("migration enum = %v\nwant domain statuses %v", got, statuses)
+	}
+}
+
+func TestNewDraft(t *testing.T) {
+	id, companyID, applicantID := uuid.New(), uuid.New(), uuid.New()
+	a, tr := NewDraft(id, companyID, applicantID)
+
+	if a.ID != id || a.CompanyID != companyID || a.ApplicantID != applicantID {
+		t.Errorf("ids = %v %v %v; want %v %v %v", a.ID, a.CompanyID, a.ApplicantID, id, companyID, applicantID)
+	}
+	if a.Status != StatusDraft || a.Revision != 1 {
+		t.Errorf("status %s, revision %d; want draft, 1", a.Status, a.Revision)
+	}
+	if tr != (Transition{To: StatusDraft}) {
+		t.Errorf("transition = %+v; want {\"\" -> draft}", tr)
+	}
+
+	req := a.Request
+	if req.Purpose != nil || req.AmountKopecks != nil || req.ProductCode != nil || req.TermMonths != nil {
+		t.Errorf("request = %+v; want empty", req)
+	}
+	if req.NeedPeriod != (NeedPeriod{Unit: NeedPeriodUnknown}) || req.CollateralMode != CollateralNone {
+		t.Errorf("need_period %+v, collateral %s; want unknown/nil, none", req.NeedPeriod, req.CollateralMode)
+	}
+}
+
+func TestDraftIsEditable(t *testing.T) {
+	a, _ := NewDraft(uuid.New(), uuid.New(), uuid.New())
+
+	if fields := a.EditableFields(); !slices.Contains(fields, "request.amount_kopecks") || !slices.Contains(fields, "collateral") {
+		t.Errorf("draft editable fields = %v", fields)
+	}
+	if actions := a.ClientActions(); !slices.Equal(actions, []Action{ActionEdit, ActionFetchFinancials, ActionSubmit}) {
+		t.Errorf("draft actions = %v", actions)
+	}
+
+	// Список не должен утекать: правка копии не меняет следующий ответ.
+	a.EditableFields()[0] = "status"
+	if a.EditableFields()[0] == "status" {
+		t.Error("EditableFields returned shared slice")
+	}
+
+	a.Status = StatusSubmitted
+	if fields, actions := a.EditableFields(), a.ClientActions(); len(fields) != 0 || len(actions) != 0 {
+		t.Errorf("submitted: fields %v, actions %v; want none", fields, actions)
 	}
 }

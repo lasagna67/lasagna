@@ -11,6 +11,8 @@ import (
 	companyhandler "github.com/lasagna67/lasagna.git/internal/company/handler"
 	"github.com/lasagna67/lasagna.git/internal/config"
 	financialscsvhandler "github.com/lasagna67/lasagna.git/internal/financials-csv/handler"
+	credithandler "github.com/lasagna67/lasagna.git/internal/credit/handler"
+	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
 	userhandler "github.com/lasagna67/lasagna.git/internal/user/handler"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 	"github.com/lasagna67/lasagna.git/pkg/server"
@@ -40,6 +42,11 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 	uploads.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 	collateral := collateralhandler.New(services.Applications, logger.Named("collateral"))
 	collateral.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient), auth.RequireRole(authdomain.RoleUnderwriter, authdomain.RoleAdmin))
+	applications := credithandler.New(services.Credit, logger.Named("credit"))
+	applications.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
+
+	products := creditproducts.NewHandler(services.CreditProducts, logger.Named("credit-products"))
+	products.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 
 	return &Delivery{
 		server: srv,

@@ -8,6 +8,8 @@ import (
 	"github.com/lasagna67/lasagna.git/internal/config"
 	financialscsvservice "github.com/lasagna67/lasagna.git/internal/financials-csv/service"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
+	creditservice "github.com/lasagna67/lasagna.git/internal/credit/service"
+	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
 	userservice "github.com/lasagna67/lasagna.git/internal/user/service"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
@@ -20,6 +22,11 @@ type Service struct {
 	Financials   *financialscsvservice.Service
 	Applications *collateralrepo.Repo
 	Scoring      *scoring.Scorer
+	Auth           *authservice.Service
+	User           *userservice.UserService
+	Company        *companyservice.CompanyService
+	Credit         *creditservice.ApplicationService
+	CreditProducts *creditproducts.Service
 }
 
 func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service, error) {
@@ -46,6 +53,11 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		),
 	)
 
+	products, err := creditproducts.New(repo.CreditProducts)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Service{
 		Auth:         auth,
 		User:         userservice.New(repo.Users, hasher),
@@ -53,5 +65,10 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Financials:   financialscsvservice.New(repo.Companies),
 		Applications: repo.Applications,
 		Scoring:      repo.Scoring,
+		Auth:           auth,
+		User:           userservice.New(repo.Users, hasher),
+		Company:        company,
+		Credit:         creditservice.New(repo.Applications, company),
+		CreditProducts: products,
 	}, nil
 }

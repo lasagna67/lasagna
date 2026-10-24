@@ -528,6 +528,398 @@ definitions:
     - StatusRejected
     - StatusCancelled
     - StatusExpired
+  creditdto.ApplicantResponse:
+    properties:
+      display_name:
+        example: Кедрова Анна Викторовна
+        type: string
+      id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+    type: object
+  creditdto.ApplicationResponse:
+    properties:
+      applicant:
+        $ref: '#/definitions/creditdto.ApplicantResponse'
+      applicant_id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+      available_actions:
+        example:
+        - edit
+        - fetch_financials
+        - submit
+        items:
+          type: string
+        type: array
+      checks:
+        type: object
+      collateral:
+        type: object
+      company:
+        $ref: '#/definitions/creditdto.CompanyCardResponse'
+      company_id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+      contract:
+        type: object
+      created_at:
+        type: string
+      editable_fields:
+        example:
+        - request.amount_kopecks
+        - request.product_code
+        items:
+          type: string
+        type: array
+      financials:
+        $ref: '#/definitions/creditdto.FinancialStateResponse'
+      id:
+        example: 3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13
+        format: uuid
+        type: string
+      issue:
+        type: object
+      number:
+        example: 1000
+        type: integer
+      offer:
+        type: object
+      product_details:
+        type: object
+      request:
+        $ref: '#/definitions/creditdto.RequestResponse'
+      revision:
+        example: 1
+        type: integer
+      scoring:
+        type: object
+      status:
+        enum:
+        - draft
+        - submitted
+        - validation
+        - enrichment
+        - scoring
+        - manual_review
+        - info_requested
+        - approved
+        - counter_offer
+        - signing
+        - issued
+        - rejected
+        - cancelled
+        - expired
+        example: draft
+        type: string
+      submitted_at:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  creditdto.CompanyCardResponse:
+    properties:
+      id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+      inn:
+        example: "7705005410"
+        type: string
+      name:
+        example: ООО «Кедровый контур Демо»
+        type: string
+    type: object
+  creditdto.CreateApplicationRequest:
+    properties:
+      company_id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+    type: object
+  creditdto.ErrorBody:
+    properties:
+      code:
+        enum:
+        - INVALID_REQUEST
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - NOT_FOUND
+        - REVISION_CONFLICT
+        - INVALID_STATE
+        - CSV_NOT_ALLOWED
+        - OFFER_CHANGED
+        - IDEMPOTENCY_CONFLICT
+        - VALIDATION_FAILED
+        - INVALID_CSV
+        - SERVICE_UNAVAILABLE
+        - INTERNAL_ERROR
+        example: VALIDATION_FAILED
+        type: string
+      field_errors:
+        items:
+          $ref: '#/definitions/creditdto.FieldErrorResponse'
+        type: array
+      message:
+        example: Исправьте поля
+        type: string
+    type: object
+  creditdto.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/creditdto.ErrorBody'
+      request_id:
+        type: string
+    type: object
+  creditdto.FieldErrorResponse:
+    properties:
+      code:
+        example: REQUIRED
+        type: string
+      field:
+        example: company_id
+        type: string
+      message:
+        example: Выберите компанию
+        type: string
+    type: object
+  creditdto.FinancialStateResponse:
+    properties:
+      allow_csv_upload:
+        example: false
+        type: boolean
+      data_status:
+        enum:
+        - missing
+        - ready
+        - no_history
+        example: missing
+        type: string
+      issues:
+        items:
+          $ref: '#/definitions/creditdto.IssueResponse'
+        type: array
+      revision:
+        example: 1
+        type: integer
+      snapshot:
+        type: object
+      source_status:
+        enum:
+        - not_requested
+        - ok
+        - not_found
+        - unavailable
+        - invalid
+        example: not_requested
+        type: string
+      source_type:
+        enum:
+        - automatic
+        - csv
+        type: string
+    type: object
+  creditdto.IssueResponse:
+    properties:
+      code:
+        type: string
+      field:
+        type: string
+      message:
+        type: string
+    type: object
+  creditdto.NeedPeriodResponse:
+    properties:
+      unit:
+        enum:
+        - months
+        - days
+        - unknown
+        example: unknown
+        type: string
+      value:
+        type: integer
+    type: object
+  creditdto.RequestResponse:
+    properties:
+      amount_kopecks:
+        type: integer
+      collateral_mode:
+        enum:
+        - none
+        - pledged
+        example: none
+        type: string
+      need_period:
+        $ref: '#/definitions/creditdto.NeedPeriodResponse'
+      product_code:
+        enum:
+        - express
+        - overdraft
+        - working_capital
+        - equipment
+        - start
+        type: string
+      purpose:
+        enum:
+        - working_capital
+        - cash_gap
+        - equipment
+        - business_start
+        - business_expansion
+        - other
+        type: string
+      purpose_description:
+        type: string
+      term_months:
+        type: integer
+    type: object
+  creditproducts.CollateralMode:
+    enum:
+    - not_supported
+    - optional
+    - required
+    type: string
+    x-enum-varnames:
+    - CollateralNotSupported
+    - CollateralOptional
+    - CollateralRequired
+  creditproducts.CreditProduct:
+    properties:
+      base_rate:
+        description: nil — ставка не задана; её нельзя подменять нулём при расчёте
+          платежа.
+        example: 24
+        type: number
+      code:
+        example: start
+        type: string
+      collateral_mode:
+        allOf:
+        - $ref: '#/definitions/creditproducts.CollateralMode'
+        enum:
+        - not_supported
+        - optional
+        - required
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        format: uuid
+        type: string
+      is_active:
+        type: boolean
+      max_amount_kopecks:
+        example: 300000000
+        format: int64
+        type: integer
+      max_drawdown_days:
+        description: Для овердрафта — 60 дней на отдельный транш, для остальных продуктов
+          — nil.
+        example: 60
+        type: integer
+      max_term_months:
+        example: 36
+        type: integer
+      min_amount_kopecks:
+        example: 10000000
+        format: int64
+        type: integer
+      min_business_age_months:
+        example: 0
+        type: integer
+      min_term_months:
+        example: 12
+        type: integer
+      name:
+        example: Инвестиционный кредит «Старт»
+        type: string
+      purposes:
+        items:
+          $ref: '#/definitions/creditproducts.CreditPurpose'
+        type: array
+      repayment_type:
+        allOf:
+        - $ref: '#/definitions/creditproducts.RepaymentType'
+        enum:
+        - annuity
+        - overdraft
+      updated_at:
+        type: string
+    type: object
+  creditproducts.CreditPurpose:
+    enum:
+    - working_capital
+    - cash_gap
+    - equipment
+    - business_start
+    - business_launch
+    - business_expansion
+    - refinancing
+    - other
+    type: string
+    x-enum-comments:
+      PurposeBusinessLaunch: Старая цель для обратной совместимости.
+    x-enum-descriptions:
+    - ""
+    - ""
+    - ""
+    - ""
+    - Старая цель для обратной совместимости.
+    - ""
+    - ""
+    - ""
+    x-enum-varnames:
+    - PurposeWorkingCapital
+    - PurposeCashGap
+    - PurposeEquipment
+    - PurposeBusinessStart
+    - PurposeBusinessLaunch
+    - PurposeBusinessExpansion
+    - PurposeRefinancing
+    - PurposeOther
+  creditproducts.Eligibility:
+    enum:
+    - eligible
+    - needs_details
+    - ineligible
+    type: string
+    x-enum-varnames:
+    - Eligible
+    - NeedsDetails
+    - Ineligible
+  creditproducts.ProductSuggestion:
+    properties:
+      eligibility:
+        $ref: '#/definitions/creditproducts.Eligibility'
+      product:
+        $ref: '#/definitions/creditproducts.CreditProduct'
+      product_code:
+        type: string
+      reasons:
+        items:
+          $ref: '#/definitions/creditproducts.Reason'
+        type: array
+    type: object
+  creditproducts.Reason:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  creditproducts.RepaymentType:
+    enum:
+    - annuity
+    - overdraft
+    type: string
+    x-enum-varnames:
+    - RepaymentAnnuity
+    - RepaymentOverdraft
   dto.AuthResponse:
     properties:
       access_token:
@@ -653,6 +1045,21 @@ paths:
         required: true
         type: string
       - description: Изменения
+  /applications:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Черновик от имени компании, в которой пользователь — представитель.
+        Повтор с тем же Idempotency-Key и телом возвращает ту же заявку,
+        с другим телом — 409 IDEMPOTENCY_CONFLICT.
+      parameters:
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Компания-заёмщик
         in: body
         name: request
         required: true
@@ -669,6 +1076,18 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/swagger.HTTPError'
+          $ref: '#/definitions/creditdto.CreateApplicationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/creditdto.ApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
@@ -692,6 +1111,24 @@ paths:
       security:
       - BearerAuth: []
       summary: Изменить сумму и залог своей заявки
+          description: не клиент
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: 'NOT_FOUND: нет компании или пользователь не её участник'
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "409":
+          description: IDEMPOTENCY_CONFLICT
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "422":
+          description: VALIDATION_FAILED
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Новая заявка
       tags:
       - applications
   /auth/login:
@@ -1216,6 +1653,61 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/collateraldomain.ReviewCollateral'
+  /credit-products:
+    get:
+      description: 'Возвращает активные продукты, для которых не выявлено нарушений
+        формальных условий. Все query-параметры необязательны: при неполных данных
+        eligibility=needs_details, при полной проверке — eligible. Неподходящие продукты
+        исключаются. Без параметров возвращается активный каталог с причинами недостающих
+        данных; при отсутствии вариантов — []. Это предварительная проверка, а не
+        кредитное решение.'
+      parameters:
+      - description: Цель кредитования
+        enum:
+        - working_capital
+        - cash_gap
+        - equipment
+        - business_start
+        - business_launch
+        - business_expansion
+        - refinancing
+        - other
+        in: query
+        name: purpose
+        type: string
+      - description: Пояснение для цели other
+        in: query
+        name: purpose_description
+        type: string
+      - description: Сумма в копейках
+        format: int64
+        in: query
+        name: amount_kopecks
+        type: integer
+      - description: Срок аннуитетного кредита в месяцах; для овердрафта не используется
+        in: query
+        name: term_months
+        type: integer
+      - description: Период отдельного транша овердрафта в днях; для аннуитетного
+          кредита не используется
+        in: query
+        name: need_period_days
+        type: integer
+      - description: 'Дата регистрации бизнеса: YYYY-MM-DD; возраст рассчитывается
+          по дате Europe/Moscow'
+        format: date
+        in: query
+        name: registration_date
+        type: string
+      - description: required — с залогом, not_supported — без залога, optional —
+          выбор ещё не сделан
+        enum:
+        - not_supported
+        - optional
+        - required
+        in: query
+        name: collateral_mode
+        type: string
       produces:
       - application/json
       responses:
@@ -1225,6 +1717,11 @@ paths:
             $ref: '#/definitions/collateraldomain.CollateralApplication'
         "400":
           description: Bad Request
+            items:
+              $ref: '#/definitions/creditproducts.ProductSuggestion'
+            type: array
+        "400":
+          description: Некорректный формат параметров или неизвестное значение перечисления
           schema:
             $ref: '#/definitions/swagger.HTTPError'
         "401":
@@ -1252,6 +1749,9 @@ paths:
       summary: Записать банковскую проверку залога
       tags:
       - applications
+      summary: Подбор кредитных продуктов
+      tags:
+      - credit-products
   /users:
     post:
       consumes:

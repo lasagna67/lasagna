@@ -5,6 +5,8 @@ import (
 	collateralrepo "github.com/lasagna67/lasagna.git/internal/collateral/repo"
 	companyrepo "github.com/lasagna67/lasagna.git/internal/company/repo"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
+	creditrepo "github.com/lasagna67/lasagna.git/internal/credit/repo"
+	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
 	userrepo "github.com/lasagna67/lasagna.git/internal/user/repo"
 )
 
@@ -19,6 +21,9 @@ type Repo struct {
 	CompanyChallenges *companyrepo.ChallengeRepo
 	Applications      *collateralrepo.Repo
 	Scoring           *scoring.Scorer
+
+	Applications   *creditrepo.ApplicationRepo
+	CreditProducts *creditproducts.ProductRepo
 }
 
 func NewRepo(infra *Infra) *Repo {
@@ -31,5 +36,8 @@ func NewRepo(infra *Infra) *Repo {
 		CompanyChallenges: companyrepo.NewChallengeRepo(infra.Redis()),
 		Applications:      collateralrepo.New(infra.Postgres().Pool()),
 		Scoring:           scoring.NewScorer(infra.Postgres().Pool()),
+
+		Applications:   creditrepo.NewApplicationRepo(infra.Postgres().Pool()),
+		CreditProducts: creditproducts.NewProductRepo(infra.Postgres().Pool()),
 	}
 }

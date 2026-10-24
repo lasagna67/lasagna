@@ -10,12 +10,15 @@
     "paths": {
         "/applications/{id}": {
             "patch": {
+        "/applications": {
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
                 "description": "Доступно клиенту компании в draft, info_requested, manual_review. Обязателен expected_revision. collateral заменяется целиком; его revision задаёт сервер. Оценки, заключения и хеши банка клиент менять не может. Конфликт версии — 409. Внутренние комментарии банка в ответ не включаются.",
+                "description": "Черновик от имени компании, в которой пользователь — представитель.\nПовтор с тем же Idempotency-Key и телом возвращает ту же заявку,\nс другим телом — 409 IDEMPOTENCY_CONFLICT.",
                 "consumes": [
                     "application/json"
                 ],
@@ -37,11 +40,23 @@
                     },
                     {
                         "description": "Изменения",
+                "summary": "Новая заявка",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Ключ повтора, до 255 символов",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Компания-заёмщик",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/collateraldomain.PatchApplication"
+                            "$ref": "#/definitions/creditdto.CreateApplicationRequest"
                         }
                     }
                 ],
@@ -56,6 +71,16 @@
                         "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/swagger.HTTPError"
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
                         }
                     },
                     "401": {
@@ -66,6 +91,7 @@
                     },
                     "403": {
                         "description": "Forbidden",
+                        "description": "не клиент",
                         "schema": {
                             "$ref": "#/definitions/swagger.HTTPError"
                         }
@@ -86,6 +112,21 @@
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/swagger.HTTPError"
+                        "description": "NOT_FOUND: нет компании или пользователь не её участник",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "IDEMPOTENCY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
                         }
                     }
                 }
@@ -839,6 +880,8 @@
         },
         "/underwriter/applications/{id}/collateral-review": {
             "post": {
+        "/credit-products": {
+            "get": {
                 "security": [
                     {
                         "BearerAuth": []
@@ -848,6 +891,7 @@
                 "consumes": [
                     "application/json"
                 ],
+                "description": "Возвращает активные продукты, для которых не выявлено нарушений формальных условий. Все query-параметры необязательны: при неполных данных eligibility=needs_details, при полной проверке — eligible. Неподходящие продукты исключаются. Без параметров возвращается активный каталог с причинами недостающих данных; при отсутствии вариантов — []. Это предварительная проверка, а не кредитное решение.",
                 "produces": [
                     "application/json"
                 ],
@@ -872,6 +916,68 @@
                         "schema": {
                             "$ref": "#/definitions/collateraldomain.ReviewCollateral"
                         }
+                    "credit-products"
+                ],
+                "summary": "Подбор кредитных продуктов",
+                "parameters": [
+                    {
+                        "enum": [
+                            "working_capital",
+                            "cash_gap",
+                            "equipment",
+                            "business_start",
+                            "business_launch",
+                            "business_expansion",
+                            "refinancing",
+                            "other"
+                        ],
+                        "type": "string",
+                        "description": "Цель кредитования",
+                        "name": "purpose",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Пояснение для цели other",
+                        "name": "purpose_description",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Сумма в копейках",
+                        "name": "amount_kopecks",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Срок аннуитетного кредита в месяцах; для овердрафта не используется",
+                        "name": "term_months",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Период отдельного транша овердрафта в днях; для аннуитетного кредита не используется",
+                        "name": "need_period_days",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "format": "date",
+                        "description": "Дата регистрации бизнеса: YYYY-MM-DD; возраст рассчитывается по дате Europe/Moscow",
+                        "name": "registration_date",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "not_supported",
+                            "optional",
+                            "required"
+                        ],
+                        "type": "string",
+                        "description": "required — с залогом, not_supported — без залога, optional — выбор ещё не сделан",
+                        "name": "collateral_mode",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -883,6 +989,14 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/creditproducts.ProductSuggestion"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный формат параметров или неизвестное значение перечисления",
                         "schema": {
                             "$ref": "#/definitions/swagger.HTTPError"
                         }
@@ -1882,6 +1996,539 @@
                 "StatusRejected",
                 "StatusCancelled",
                 "StatusExpired"
+        "creditdto.ApplicantResponse": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string",
+                    "example": "Кедрова Анна Викторовна"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                }
+            }
+        },
+        "creditdto.ApplicationResponse": {
+            "type": "object",
+            "properties": {
+                "applicant": {
+                    "$ref": "#/definitions/creditdto.ApplicantResponse"
+                },
+                "applicant_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                },
+                "available_actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "edit",
+                        "fetch_financials",
+                        "submit"
+                    ]
+                },
+                "checks": {
+                    "type": "object"
+                },
+                "collateral": {
+                    "type": "object"
+                },
+                "company": {
+                    "$ref": "#/definitions/creditdto.CompanyCardResponse"
+                },
+                "company_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                },
+                "contract": {
+                    "type": "object"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "editable_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "request.amount_kopecks",
+                        "request.product_code"
+                    ]
+                },
+                "financials": {
+                    "$ref": "#/definitions/creditdto.FinancialStateResponse"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13"
+                },
+                "issue": {
+                    "type": "object"
+                },
+                "number": {
+                    "type": "integer",
+                    "example": 1000
+                },
+                "offer": {
+                    "type": "object"
+                },
+                "product_details": {
+                    "type": "object"
+                },
+                "request": {
+                    "$ref": "#/definitions/creditdto.RequestResponse"
+                },
+                "revision": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "scoring": {
+                    "type": "object"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "draft",
+                        "submitted",
+                        "validation",
+                        "enrichment",
+                        "scoring",
+                        "manual_review",
+                        "info_requested",
+                        "approved",
+                        "counter_offer",
+                        "signing",
+                        "issued",
+                        "rejected",
+                        "cancelled",
+                        "expired"
+                    ],
+                    "example": "draft"
+                },
+                "submitted_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "creditdto.CompanyCardResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                },
+                "inn": {
+                    "type": "string",
+                    "example": "7705005410"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "ООО «Кедровый контур Демо»"
+                }
+            }
+        },
+        "creditdto.CreateApplicationRequest": {
+            "type": "object",
+            "properties": {
+                "company_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                }
+            }
+        },
+        "creditdto.ErrorBody": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "enum": [
+                        "INVALID_REQUEST",
+                        "UNAUTHENTICATED",
+                        "FORBIDDEN",
+                        "NOT_FOUND",
+                        "REVISION_CONFLICT",
+                        "INVALID_STATE",
+                        "CSV_NOT_ALLOWED",
+                        "OFFER_CHANGED",
+                        "IDEMPOTENCY_CONFLICT",
+                        "VALIDATION_FAILED",
+                        "INVALID_CSV",
+                        "SERVICE_UNAVAILABLE",
+                        "INTERNAL_ERROR"
+                    ],
+                    "example": "VALIDATION_FAILED"
+                },
+                "field_errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/creditdto.FieldErrorResponse"
+                    }
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Исправьте поля"
+                }
+            }
+        },
+        "creditdto.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "$ref": "#/definitions/creditdto.ErrorBody"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "creditdto.FieldErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "REQUIRED"
+                },
+                "field": {
+                    "type": "string",
+                    "example": "company_id"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Выберите компанию"
+                }
+            }
+        },
+        "creditdto.FinancialStateResponse": {
+            "type": "object",
+            "properties": {
+                "allow_csv_upload": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "data_status": {
+                    "type": "string",
+                    "enum": [
+                        "missing",
+                        "ready",
+                        "no_history"
+                    ],
+                    "example": "missing"
+                },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/creditdto.IssueResponse"
+                    }
+                },
+                "revision": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "snapshot": {
+                    "type": "object"
+                },
+                "source_status": {
+                    "type": "string",
+                    "enum": [
+                        "not_requested",
+                        "ok",
+                        "not_found",
+                        "unavailable",
+                        "invalid"
+                    ],
+                    "example": "not_requested"
+                },
+                "source_type": {
+                    "type": "string",
+                    "enum": [
+                        "automatic",
+                        "csv"
+                    ]
+                }
+            }
+        },
+        "creditdto.IssueResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "field": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "creditdto.NeedPeriodResponse": {
+            "type": "object",
+            "properties": {
+                "unit": {
+                    "type": "string",
+                    "enum": [
+                        "months",
+                        "days",
+                        "unknown"
+                    ],
+                    "example": "unknown"
+                },
+                "value": {
+                    "type": "integer"
+                }
+            }
+        },
+        "creditdto.RequestResponse": {
+            "type": "object",
+            "properties": {
+                "amount_kopecks": {
+                    "type": "integer"
+                },
+                "collateral_mode": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "pledged"
+                    ],
+                    "example": "none"
+                },
+                "need_period": {
+                    "$ref": "#/definitions/creditdto.NeedPeriodResponse"
+                },
+                "product_code": {
+                    "type": "string",
+                    "enum": [
+                        "express",
+                        "overdraft",
+                        "working_capital",
+                        "equipment",
+                        "start"
+                    ]
+                },
+                "purpose": {
+                    "type": "string",
+                    "enum": [
+                        "working_capital",
+                        "cash_gap",
+                        "equipment",
+                        "business_start",
+                        "business_expansion",
+                        "other"
+                    ]
+                },
+                "purpose_description": {
+                    "type": "string"
+                },
+                "term_months": {
+                    "type": "integer"
+                }
+            }
+        },
+        "creditproducts.CollateralMode": {
+            "type": "string",
+            "enum": [
+                "not_supported",
+                "optional",
+                "required"
+            ],
+            "x-enum-varnames": [
+                "CollateralNotSupported",
+                "CollateralOptional",
+                "CollateralRequired"
+            ]
+        },
+        "creditproducts.CreditProduct": {
+            "type": "object",
+            "properties": {
+                "base_rate": {
+                    "description": "nil — ставка не задана; её нельзя подменять нулём при расчёте платежа.",
+                    "type": "number",
+                    "example": 24
+                },
+                "code": {
+                    "type": "string",
+                    "example": "start"
+                },
+                "collateral_mode": {
+                    "enum": [
+                        "not_supported",
+                        "optional",
+                        "required"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/creditproducts.CollateralMode"
+                        }
+                    ]
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "max_amount_kopecks": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 300000000
+                },
+                "max_drawdown_days": {
+                    "description": "Для овердрафта — 60 дней на отдельный транш, для остальных продуктов — nil.",
+                    "type": "integer",
+                    "example": 60
+                },
+                "max_term_months": {
+                    "type": "integer",
+                    "example": 36
+                },
+                "min_amount_kopecks": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 10000000
+                },
+                "min_business_age_months": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "min_term_months": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Инвестиционный кредит «Старт»"
+                },
+                "purposes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/creditproducts.CreditPurpose"
+                    }
+                },
+                "repayment_type": {
+                    "enum": [
+                        "annuity",
+                        "overdraft"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/creditproducts.RepaymentType"
+                        }
+                    ]
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "creditproducts.CreditPurpose": {
+            "type": "string",
+            "enum": [
+                "working_capital",
+                "cash_gap",
+                "equipment",
+                "business_start",
+                "business_launch",
+                "business_expansion",
+                "refinancing",
+                "other"
+            ],
+            "x-enum-comments": {
+                "PurposeBusinessLaunch": "Старая цель для обратной совместимости."
+            },
+            "x-enum-descriptions": [
+                "",
+                "",
+                "",
+                "",
+                "Старая цель для обратной совместимости.",
+                "",
+                "",
+                ""
+            ],
+            "x-enum-varnames": [
+                "PurposeWorkingCapital",
+                "PurposeCashGap",
+                "PurposeEquipment",
+                "PurposeBusinessStart",
+                "PurposeBusinessLaunch",
+                "PurposeBusinessExpansion",
+                "PurposeRefinancing",
+                "PurposeOther"
+            ]
+        },
+        "creditproducts.Eligibility": {
+            "type": "string",
+            "enum": [
+                "eligible",
+                "needs_details",
+                "ineligible"
+            ],
+            "x-enum-varnames": [
+                "Eligible",
+                "NeedsDetails",
+                "Ineligible"
+            ]
+        },
+        "creditproducts.ProductSuggestion": {
+            "type": "object",
+            "properties": {
+                "eligibility": {
+                    "$ref": "#/definitions/creditproducts.Eligibility"
+                },
+                "product": {
+                    "$ref": "#/definitions/creditproducts.CreditProduct"
+                },
+                "product_code": {
+                    "type": "string"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/creditproducts.Reason"
+                    }
+                }
+            }
+        },
+        "creditproducts.Reason": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "creditproducts.RepaymentType": {
+            "type": "string",
+            "enum": [
+                "annuity",
+                "overdraft"
+            ],
+            "x-enum-varnames": [
+                "RepaymentAnnuity",
+                "RepaymentOverdraft"
             ]
         },
         "dto.AuthResponse": {
