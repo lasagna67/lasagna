@@ -1,6 +1,9 @@
 package crediterrors
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	// ErrInvalidState — переход из текущего статуса запрещён (409 INVALID_STATE).
@@ -14,7 +17,27 @@ var (
 	ErrCompanyNotFound = errors.New("company not found")
 	// ErrIdempotencyConflict — ключ уже использован с другим телом запроса (409 IDEMPOTENCY_CONFLICT).
 	ErrIdempotencyConflict = errors.New("idempotency key reused with another request")
+
+	// ErrInfoRequestsOpen — resubmit до ответа на все запросы банка (409 INVALID_STATE).
+	ErrInfoRequestsOpen = errors.New("info requests are not answered")
+	// ErrServiceUnavailable — недоступна инфраструктура: хранилище файлов, конвейер (503).
+	ErrServiceUnavailable = errors.New("service unavailable")
 )
+
+// RevisionConflictError — заявку уже изменили: expected_revision устарел
+// (409 REVISION_CONFLICT с current_revision).
+type RevisionConflictError struct {
+	Current int
+}
+
+func (e *RevisionConflictError) Error() string {
+	return fmt.Sprintf("revision conflict: current revision %d", e.Current)
+}
+
+// Is — errors.Is(err, ErrRevisionConflict) срабатывает и на ошибку с revision.
+func (e *RevisionConflictError) Is(target error) bool {
+	return target == ErrRevisionConflict
+}
 
 // RequestError — запрос некорректен по форме (400 INVALID_REQUEST).
 // Message предназначен для показа пользователю.

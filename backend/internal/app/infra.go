@@ -10,6 +10,7 @@ import (
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 	"github.com/lasagna67/lasagna.git/pkg/postgres"
 	"github.com/lasagna67/lasagna.git/pkg/redis"
+	"github.com/lasagna67/lasagna.git/pkg/s3"
 )
 
 type Infra struct {
@@ -17,6 +18,7 @@ type Infra struct {
 	postgres 	*postgres.Postgres
 	redis 	 	*redis.RedisClient
 	kafkaProducer	*kafka.Producer
+	s3            *s3.S3Client
 }
 
 func NewInfra(cfg config.Config, logger *logger.Logger) (*Infra, error) {
@@ -37,6 +39,11 @@ func NewInfra(cfg config.Config, logger *logger.Logger) (*Infra, error) {
 		errs = append(errs, err)
 	}
 
+	s3Client, err := s3.NewS3Client(cfg)
+	if err != nil {
+		errs = append(errs, err)
+	}
+
 	if errs != nil {
 		return nil, errors.Join(errs...)
 	}
@@ -45,6 +52,7 @@ func NewInfra(cfg config.Config, logger *logger.Logger) (*Infra, error) {
 		postgres: postgres,
 		redis:    redisClient,
 		kafkaProducer: kafkaProducer,
+		s3:            s3Client,
 	}, nil
 }
 
@@ -58,6 +66,10 @@ func (infra *Infra) Redis() *redis.RedisClient {
 
 func (infra *Infra) KafkaProducer() *kafka.Producer {
 	return infra.kafkaProducer
+}
+
+func (infra *Infra) S3() *s3.S3Client {
+	return infra.s3
 }
 
 func (infra *Infra) Close() error {
@@ -86,6 +98,9 @@ func (infra *Infra) Healthy(ctx context.Context) error {
 		errs = append(errs, err)
 	}
 	if err := infra.kafkaProducer.Healthy(ctx); err != nil {
+		errs = append(errs, err)
+	}
+	if err := infra.s3.Healthy(ctx); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)

@@ -98,10 +98,7 @@ func NewApplicationResponse(d creditdomain.ApplicationDetails) ApplicationRespon
 			Name: d.Company.Name,
 			INN:  d.Company.INN,
 		},
-		Applicant: ApplicantResponse{
-			ID:          d.Applicant.ID,
-			DisplayName: displayName(d.Applicant),
-		},
+		Applicant:        NewApplicantResponse(d.Applicant),
 		Number:           a.Number,
 		Revision:         a.Revision,
 		Status:           string(a.Status),
@@ -150,6 +147,11 @@ func newFinancialState(a creditdomain.Application) FinancialStateResponse {
 	}
 }
 
+// NewApplicantResponse — карточка человека: заявителя или сотрудника банка.
+func NewApplicantResponse(a creditdomain.ApplicantCard) ApplicantResponse {
+	return ApplicantResponse{ID: a.ID, DisplayName: displayName(a)}
+}
+
 // displayName — «Фамилия Имя Отчество»; без имени — email.
 func displayName(a creditdomain.ApplicantCard) string {
 	var parts []string
@@ -184,6 +186,8 @@ type ErrorBody struct {
 	Code        string               `json:"code" enums:"INVALID_REQUEST,UNAUTHENTICATED,FORBIDDEN,NOT_FOUND,REVISION_CONFLICT,INVALID_STATE,CSV_NOT_ALLOWED,OFFER_CHANGED,IDEMPOTENCY_CONFLICT,VALIDATION_FAILED,INVALID_CSV,SERVICE_UNAVAILABLE,INTERNAL_ERROR" example:"VALIDATION_FAILED"`
 	Message     string               `json:"message" example:"Исправьте поля"`
 	FieldErrors []FieldErrorResponse `json:"field_errors,omitempty"`
+	// Только при REVISION_CONFLICT: revision, с которой заявка сейчас.
+	CurrentRevision *int `json:"current_revision,omitempty"`
 }
 
 type FieldErrorResponse struct {

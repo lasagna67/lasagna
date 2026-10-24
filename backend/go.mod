@@ -41,11 +41,15 @@ require (
 	github.com/jackc/puddle/v2 v2.2.3 // indirect
 	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
+	github.com/phpdave11/gofpdi v1.0.14-0.20211212211723-1f10f9844311 // indirect
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
+	github.com/pkg/errors v0.8.1 // indirect
 	github.com/sethvargo/go-retry v0.5.0 // indirect
+	github.com/signintech/gopdf v0.38.1 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.15.0 // indirect
 	go.uber.org/atomic v1.12.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )

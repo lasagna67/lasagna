@@ -34,3 +34,13 @@ docker compose run --rm --no-deps demo-seed
 ```sh
 docker compose cp demo-seed:/data/demo-businesses.json ../docs/demo-businesses.json
 ```
+
+### Сотрудник банка
+
+Одноразовый сервис `staff-seed` создаёт демо-сотрудника с ролью `underwriter` напрямую в БД: публичная регистрация роль сотрудника не даёт. Логин `underwriter@lasagna.demo`, пароль `DemoUnderwriter2026!`; переопределяются через `STAFF_EMAIL` и `STAFF_PASSWORD`. Повторный запуск дублей не создаёт и пароль не меняет.
+
+```sh
+docker compose run --rm --no-deps staff-seed
+```
+
+Сотрудник работает с очередью `/api/v0/underwriter/applications`, договоры к предложениям лежат в бакете MinIO `documents`. Подробнее — [backend/internal/review/.md](backend/internal/review/.md).

@@ -4,8 +4,10 @@ import (
 	authrepo "github.com/lasagna67/lasagna.git/internal/auth/repo"
 	collateralrepo "github.com/lasagna67/lasagna.git/internal/collateral/repo"
 	companyrepo "github.com/lasagna67/lasagna.git/internal/company/repo"
+	"github.com/lasagna67/lasagna.git/internal/config"
 	creditrepo "github.com/lasagna67/lasagna.git/internal/credit/repo"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
+	reviewrepo "github.com/lasagna67/lasagna.git/internal/review/repo"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
 	userrepo "github.com/lasagna67/lasagna.git/internal/user/repo"
 )
@@ -24,9 +26,13 @@ type Repo struct {
 
 	Applications   *creditrepo.ApplicationRepo
 	CreditProducts *creditproducts.ProductRepo
+
+	Review       *reviewrepo.Repo
+	ReviewChecks *reviewrepo.ChecksRepo
+	Documents    *reviewrepo.Storage
 }
 
-func NewRepo(infra *Infra) *Repo {
+func NewRepo(cfg config.Config, infra *Infra) *Repo {
 	return &Repo{
 		AuthUsers:    authrepo.NewUserRepo(infra.Postgres().Pool()),
 		AuthSessions: authrepo.NewSessionRepo(infra.Redis()),
@@ -39,5 +45,9 @@ func NewRepo(infra *Infra) *Repo {
 
 		Applications:   creditrepo.NewApplicationRepo(infra.Postgres().Pool()),
 		CreditProducts: creditproducts.NewProductRepo(infra.Postgres().Pool()),
+
+		Review:       reviewrepo.New(infra.Postgres().Pool()),
+		ReviewChecks: reviewrepo.NewChecksRepo(infra.Postgres().Pool()),
+		Documents:    reviewrepo.NewStorage(infra.S3(), cfg.S3.DocumentsBucket),
 	}
 }
