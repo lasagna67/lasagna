@@ -1,11 +1,11 @@
 package app
 
 import (
+	applicationrepo "github.com/lasagna67/lasagna.git/internal/application/repo"
 	authrepo "github.com/lasagna67/lasagna.git/internal/auth/repo"
 	collateralrepo "github.com/lasagna67/lasagna.git/internal/collateral/repo"
 	companyrepo "github.com/lasagna67/lasagna.git/internal/company/repo"
 	"github.com/lasagna67/lasagna.git/internal/config"
-	creditrepo "github.com/lasagna67/lasagna.git/internal/credit/repo"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
 	reviewrepo "github.com/lasagna67/lasagna.git/internal/review/repo"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
@@ -24,7 +24,7 @@ type Repo struct {
 	Collateral        *collateralrepo.Repo
 	Scoring           *scoring.Scorer
 
-	Applications   *creditrepo.ApplicationRepo
+	Applications   *applicationrepo.ApplicationRepo
 	CreditProducts *creditproducts.ProductRepo
 
 	Review       *reviewrepo.Repo
@@ -43,7 +43,7 @@ func NewRepo(cfg config.Config, infra *Infra) *Repo {
 		Collateral:        collateralrepo.New(infra.Postgres().Pool()),
 		Scoring:           scoring.NewScorer(infra.Postgres().Pool()),
 
-		Applications:   creditrepo.NewApplicationRepo(infra.Postgres().Pool()),
+		Applications:   applicationrepo.NewApplicationRepo(infra.Postgres().Pool()),
 		CreditProducts: creditproducts.NewProductRepo(infra.Postgres().Pool()),
 
 		Review:       reviewrepo.New(infra.Postgres().Pool()),

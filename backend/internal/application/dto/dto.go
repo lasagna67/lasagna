@@ -1,12 +1,12 @@
-package creditdto
+package applicationdto
 
 import (
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 )
 
 type CreateApplicationRequest struct {
@@ -86,7 +86,7 @@ type ApplicationResponse struct {
 	SubmittedAt      *time.Time             `json:"submitted_at"`
 }
 
-func NewApplicationResponse(d creditdomain.ApplicationDetails) ApplicationResponse {
+func NewApplicationResponse(d applicationdomain.ApplicationDetails) ApplicationResponse {
 	a := d.Application
 	actions := a.ClientActions()
 	resp := ApplicationResponse{
@@ -116,7 +116,7 @@ func NewApplicationResponse(d creditdomain.ApplicationDetails) ApplicationRespon
 	return resp
 }
 
-func newRequestResponse(r creditdomain.Request) RequestResponse {
+func newRequestResponse(r applicationdomain.Request) RequestResponse {
 	var purpose *string
 	if r.Purpose != nil {
 		p := string(*r.Purpose)
@@ -138,7 +138,7 @@ func newRequestResponse(r creditdomain.Request) RequestResponse {
 
 // newFinancialState — состояние до финансового шага: источник не запрашивался,
 // принятого снимка нет. TODO: читать из заявки вместе с шагом financials.
-func newFinancialState(a creditdomain.Application) FinancialStateResponse {
+func newFinancialState(a applicationdomain.Application) FinancialStateResponse {
 	return FinancialStateResponse{
 		Revision:     a.Revision,
 		SourceStatus: "not_requested",
@@ -148,12 +148,12 @@ func newFinancialState(a creditdomain.Application) FinancialStateResponse {
 }
 
 // NewApplicantResponse — карточка человека: заявителя или сотрудника банка.
-func NewApplicantResponse(a creditdomain.ApplicantCard) ApplicantResponse {
+func NewApplicantResponse(a applicationdomain.ApplicantCard) ApplicantResponse {
 	return ApplicantResponse{ID: a.ID, DisplayName: displayName(a)}
 }
 
 // displayName — «Фамилия Имя Отчество»; без имени — email.
-func displayName(a creditdomain.ApplicantCard) string {
+func displayName(a applicationdomain.ApplicantCard) string {
 	var parts []string
 	for _, p := range []*string{a.LastName, a.FirstName, a.MiddleName} {
 		if p != nil && strings.TrimSpace(*p) != "" {
@@ -196,7 +196,7 @@ type FieldErrorResponse struct {
 	Message string `json:"message" example:"Выберите компанию"`
 }
 
-func NewErrorResponse(code, message, requestID string, fields []crediterrors.FieldError) ErrorResponse {
+func NewErrorResponse(code, message, requestID string, fields []applicationerrors.FieldError) ErrorResponse {
 	resp := ErrorResponse{
 		Error:     ErrorBody{Code: code, Message: message},
 		RequestID: requestID,

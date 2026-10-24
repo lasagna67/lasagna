@@ -1,4 +1,4 @@
-package creditservice
+package intakeservice
 
 import (
 	"context"
@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 )
 
 // maxIdempotencyKeyLen — длина колонки idempotency_keys.idempotency_key.
@@ -20,8 +20,8 @@ const maxIdempotencyKeyLen = 255
 
 type ApplicationRepo interface {
 	// Create в одной транзакции занимает ключ идемпотентности, сохраняет черновик и первую запись истории. 
-	// Ключ уже занят тем же запросом — возвращает заявку, созданную тогда; другим — crediterrors.ErrIdempotencyConflict.
-	Create(ctx context.Context, app creditdomain.Application, tr creditdomain.Transition, key creditdomain.IdempotencyKey) (creditdomain.ApplicationDetails, error)
+	// Ключ уже занят тем же запросом — возвращает заявку, созданную тогда; другим — applicationerrors.ErrIdempotencyConflict.
+	Create(ctx context.Context, app applicationdomain.Application, tr applicationdomain.Transition, key applicationdomain.IdempotencyKey) (applicationdomain.ApplicationDetails, error)
 }
 
 // Companies — участие пользователя в компании. Реализация — companyservice.
@@ -44,27 +44,27 @@ func New(applications ApplicationRepo, companies Companies) *ApplicationService 
 
 // Create — новая заявка в статусе draft от имени компании пользователя.
 // Повтор с тем же Idempotency-Key и телом возвращает ту же заявку.
-func (s *ApplicationService) Create(ctx context.Context, cmd creditdomain.CreateCommand) (creditdomain.ApplicationDetails, error) {
+func (s *ApplicationService) Create(ctx context.Context, cmd applicationdomain.CreateCommand) (applicationdomain.ApplicationDetails, error) {
 	// Повтор с тем же Idempotency-Key и телом возвращает ту же заявку.
 	if err := validateIdempotencyKey(cmd.IdempotencyKey); err != nil {
-		return creditdomain.ApplicationDetails{}, err
+		return applicationdomain.ApplicationDetails{}, err
 	}
 	if cmd.CompanyID == uuid.Nil {
-		return creditdomain.ApplicationDetails{}, invalid("company_id", "REQUIRED", "Выберите компанию")
+		return applicationdomain.ApplicationDetails{}, invalid("company_id", "REQUIRED", "Выберите компанию")
 	}
 	if err := s.checkMember(ctx, cmd.CompanyID, cmd.ApplicantID); err != nil {
-		return creditdomain.ApplicationDetails{}, err
+		return applicationdomain.ApplicationDetails{}, err
 	}
 
-	app, tr := creditdomain.NewDraft(uuid.New(), cmd.CompanyID, cmd.ApplicantID)
-	details, err := s.applications.Create(ctx, app, tr, creditdomain.IdempotencyKey{
+	app, tr := applicationdomain.NewDraft(uuid.New(), cmd.CompanyID, cmd.ApplicantID)
+	details, err := s.applications.Create(ctx, app, tr, applicationdomain.IdempotencyKey{
 		UserID:      cmd.ApplicantID,
-		Operation:   creditdomain.OperationCreate,
+		Operation:   applicationdomain.OperationCreate,
 		Key:         cmd.IdempotencyKey,
 		RequestHash: requestHash(cmd.CompanyID.String()),
 	})
 	if err != nil {
-		return creditdomain.ApplicationDetails{}, fmt.Errorf("create application: %w", err)
+		return applicationdomain.ApplicationDetails{}, fmt.Errorf("create application: %w", err)
 	}
 	return details, nil
 }
@@ -75,7 +75,7 @@ func (s *ApplicationService) Create(ctx context.Context, cmd creditdomain.Create
 func (s *ApplicationService) checkMember(ctx context.Context, companyID, userID uuid.UUID) error {
 	_, err := s.companies.Membership(ctx, companyID, userID)
 	if errors.Is(err, companyerrors.ErrCompanyNotFound) {
-		return crediterrors.ErrCompanyNotFound
+		return applicationerrors.ErrCompanyNotFound
 	}
 	if err != nil {
 		return fmt.Errorf("check membership: %w", err)
@@ -85,10 +85,10 @@ func (s *ApplicationService) checkMember(ctx context.Context, companyID, userID 
 
 func validateIdempotencyKey(key string) error {
 	if strings.TrimSpace(key) == "" {
-		return &crediterrors.RequestError{Message: "Передайте заголовок Idempotency-Key"}
+		return &applicationerrors.RequestError{Message: "Передайте заголовок Idempotency-Key"}
 	}
 	if len(key) > maxIdempotencyKeyLen {
-		return &crediterrors.RequestError{Message: "Idempotency-Key длиннее 255 символов"}
+		return &applicationerrors.RequestError{Message: "Idempotency-Key длиннее 255 символов"}
 	}
 	return nil
 }
@@ -104,7 +104,7 @@ func requestHash(parts ...string) string {
 }
 
 func invalid(field, code, message string) error {
-	return &crediterrors.ValidationError{Fields: []crediterrors.FieldError{
+	return &applicationerrors.ValidationError{Fields: []applicationerrors.FieldError{
 		{Field: field, Code: code, Message: message},
 	}}
 }

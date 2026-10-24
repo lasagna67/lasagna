@@ -1,5 +1,319 @@
 basePath: /api/v0
 definitions:
+  applicationdomain.Status:
+    enum:
+    - draft
+    - submitted
+    - validation
+    - enrichment
+    - scoring
+    - manual_review
+    - info_requested
+    - approved
+    - counter_offer
+    - signing
+    - issued
+    - rejected
+    - cancelled
+    - expired
+    type: string
+    x-enum-comments:
+      StatusApproved: предложение на запрошенных условиях
+      StatusCancelled: клиент отказался от предложения
+      StatusCounterOffer: предложение на иных условиях
+      StatusDraft: клиент заполняет, данные сохраняются по шагам
+      StatusEnrichment: реестр и БКИ для версии заявки
+      StatusExpired: предложение не подписано до valid_until
+      StatusInfoRequested: клиент отвечает в той же заявке
+      StatusIssued: выдача или активация лимита завершена
+      StatusManualReview: 'у сотрудника: материалы, залог, решение'
+      StatusRejected: отказ сотрудника или stop-правила
+      StatusScoring: вызов модели; без правил — ручной маршрут
+      StatusSigning: договор подписан, ожидается выдача
+      StatusSubmitted: версия зафиксирована, ждёт конвейера
+      StatusValidation: проверка состава данных и условий продукта
+    x-enum-descriptions:
+    - клиент заполняет, данные сохраняются по шагам
+    - версия зафиксирована, ждёт конвейера
+    - проверка состава данных и условий продукта
+    - реестр и БКИ для версии заявки
+    - вызов модели; без правил — ручной маршрут
+    - 'у сотрудника: материалы, залог, решение'
+    - клиент отвечает в той же заявке
+    - предложение на запрошенных условиях
+    - предложение на иных условиях
+    - договор подписан, ожидается выдача
+    - выдача или активация лимита завершена
+    - отказ сотрудника или stop-правила
+    - клиент отказался от предложения
+    - предложение не подписано до valid_until
+    x-enum-varnames:
+    - StatusDraft
+    - StatusSubmitted
+    - StatusValidation
+    - StatusEnrichment
+    - StatusScoring
+    - StatusManualReview
+    - StatusInfoRequested
+    - StatusApproved
+    - StatusCounterOffer
+    - StatusSigning
+    - StatusIssued
+    - StatusRejected
+    - StatusCancelled
+    - StatusExpired
+  applicationdto.ApplicantResponse:
+    properties:
+      display_name:
+        example: Кедрова Анна Викторовна
+        type: string
+      id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+    type: object
+  applicationdto.ApplicationResponse:
+    properties:
+      applicant:
+        $ref: '#/definitions/applicationdto.ApplicantResponse'
+      applicant_id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+      available_actions:
+        example:
+        - edit
+        - fetch_financials
+        - submit
+        items:
+          type: string
+        type: array
+      checks:
+        type: object
+      collateral:
+        type: object
+      company:
+        $ref: '#/definitions/applicationdto.CompanyCardResponse'
+      company_id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+      contract:
+        type: object
+      created_at:
+        type: string
+      editable_fields:
+        example:
+        - request.amount_kopecks
+        - request.product_code
+        items:
+          type: string
+        type: array
+      financials:
+        $ref: '#/definitions/applicationdto.FinancialStateResponse'
+      id:
+        example: 3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13
+        format: uuid
+        type: string
+      issue:
+        type: object
+      number:
+        example: 1000
+        type: integer
+      offer:
+        type: object
+      product_details:
+        type: object
+      request:
+        $ref: '#/definitions/applicationdto.RequestResponse'
+      revision:
+        example: 1
+        type: integer
+      scoring:
+        type: object
+      status:
+        enum:
+        - draft
+        - submitted
+        - validation
+        - enrichment
+        - scoring
+        - manual_review
+        - info_requested
+        - approved
+        - counter_offer
+        - signing
+        - issued
+        - rejected
+        - cancelled
+        - expired
+        example: draft
+        type: string
+      submitted_at:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  applicationdto.CompanyCardResponse:
+    properties:
+      id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+      inn:
+        example: "7705005410"
+        type: string
+      name:
+        example: ООО «Кедровый контур Демо»
+        type: string
+    type: object
+  applicationdto.CreateApplicationRequest:
+    properties:
+      company_id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+    type: object
+  applicationdto.ErrorBody:
+    properties:
+      code:
+        enum:
+        - INVALID_REQUEST
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - NOT_FOUND
+        - REVISION_CONFLICT
+        - INVALID_STATE
+        - CSV_NOT_ALLOWED
+        - OFFER_CHANGED
+        - IDEMPOTENCY_CONFLICT
+        - VALIDATION_FAILED
+        - INVALID_CSV
+        - SERVICE_UNAVAILABLE
+        - INTERNAL_ERROR
+        example: VALIDATION_FAILED
+        type: string
+      current_revision:
+        description: 'Только при REVISION_CONFLICT: revision, с которой заявка сейчас.'
+        type: integer
+      field_errors:
+        items:
+          $ref: '#/definitions/applicationdto.FieldErrorResponse'
+        type: array
+      message:
+        example: Исправьте поля
+        type: string
+    type: object
+  applicationdto.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/applicationdto.ErrorBody'
+      request_id:
+        type: string
+    type: object
+  applicationdto.FieldErrorResponse:
+    properties:
+      code:
+        example: REQUIRED
+        type: string
+      field:
+        example: company_id
+        type: string
+      message:
+        example: Выберите компанию
+        type: string
+    type: object
+  applicationdto.FinancialStateResponse:
+    properties:
+      allow_csv_upload:
+        example: false
+        type: boolean
+      data_status:
+        enum:
+        - missing
+        - ready
+        - no_history
+        example: missing
+        type: string
+      issues:
+        items:
+          $ref: '#/definitions/applicationdto.IssueResponse'
+        type: array
+      revision:
+        example: 1
+        type: integer
+      snapshot:
+        type: object
+      source_status:
+        enum:
+        - not_requested
+        - ok
+        - not_found
+        - unavailable
+        - invalid
+        example: not_requested
+        type: string
+      source_type:
+        enum:
+        - automatic
+        - csv
+        type: string
+    type: object
+  applicationdto.IssueResponse:
+    properties:
+      code:
+        type: string
+      field:
+        type: string
+      message:
+        type: string
+    type: object
+  applicationdto.NeedPeriodResponse:
+    properties:
+      unit:
+        enum:
+        - months
+        - days
+        - unknown
+        example: unknown
+        type: string
+      value:
+        type: integer
+    type: object
+  applicationdto.RequestResponse:
+    properties:
+      amount_kopecks:
+        type: integer
+      collateral_mode:
+        enum:
+        - none
+        - pledged
+        example: none
+        type: string
+      need_period:
+        $ref: '#/definitions/applicationdto.NeedPeriodResponse'
+      product_code:
+        enum:
+        - express
+        - overdraft
+        - working_capital
+        - equipment
+        - start
+        type: string
+      purpose:
+        enum:
+        - working_capital
+        - cash_gap
+        - equipment
+        - business_start
+        - business_expansion
+        - other
+        type: string
+      purpose_description:
+        type: string
+      term_months:
+        type: integer
+    type: object
   collateraldomain.Collateral:
     properties:
       declared_value_kopecks:
@@ -51,7 +365,7 @@ definitions:
       revision:
         type: integer
       status:
-        $ref: '#/definitions/creditdomain.Status'
+        $ref: '#/definitions/applicationdomain.Status'
     type: object
   collateraldomain.CollateralReview:
     properties:
@@ -465,320 +779,6 @@ definitions:
         - not_found
         - unavailable
         type: string
-    type: object
-  creditdomain.Status:
-    enum:
-    - draft
-    - submitted
-    - validation
-    - enrichment
-    - scoring
-    - manual_review
-    - info_requested
-    - approved
-    - counter_offer
-    - signing
-    - issued
-    - rejected
-    - cancelled
-    - expired
-    type: string
-    x-enum-comments:
-      StatusApproved: предложение на запрошенных условиях
-      StatusCancelled: клиент отказался от предложения
-      StatusCounterOffer: предложение на иных условиях
-      StatusDraft: клиент заполняет, данные сохраняются по шагам
-      StatusEnrichment: реестр и БКИ для версии заявки
-      StatusExpired: предложение не подписано до valid_until
-      StatusInfoRequested: клиент отвечает в той же заявке
-      StatusIssued: выдача или активация лимита завершена
-      StatusManualReview: 'у сотрудника: материалы, залог, решение'
-      StatusRejected: отказ сотрудника или stop-правила
-      StatusScoring: вызов модели; без правил — ручной маршрут
-      StatusSigning: договор подписан, ожидается выдача
-      StatusSubmitted: версия зафиксирована, ждёт конвейера
-      StatusValidation: проверка состава данных и условий продукта
-    x-enum-descriptions:
-    - клиент заполняет, данные сохраняются по шагам
-    - версия зафиксирована, ждёт конвейера
-    - проверка состава данных и условий продукта
-    - реестр и БКИ для версии заявки
-    - вызов модели; без правил — ручной маршрут
-    - 'у сотрудника: материалы, залог, решение'
-    - клиент отвечает в той же заявке
-    - предложение на запрошенных условиях
-    - предложение на иных условиях
-    - договор подписан, ожидается выдача
-    - выдача или активация лимита завершена
-    - отказ сотрудника или stop-правила
-    - клиент отказался от предложения
-    - предложение не подписано до valid_until
-    x-enum-varnames:
-    - StatusDraft
-    - StatusSubmitted
-    - StatusValidation
-    - StatusEnrichment
-    - StatusScoring
-    - StatusManualReview
-    - StatusInfoRequested
-    - StatusApproved
-    - StatusCounterOffer
-    - StatusSigning
-    - StatusIssued
-    - StatusRejected
-    - StatusCancelled
-    - StatusExpired
-  creditdto.ApplicantResponse:
-    properties:
-      display_name:
-        example: Кедрова Анна Викторовна
-        type: string
-      id:
-        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
-        format: uuid
-        type: string
-    type: object
-  creditdto.ApplicationResponse:
-    properties:
-      applicant:
-        $ref: '#/definitions/creditdto.ApplicantResponse'
-      applicant_id:
-        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
-        format: uuid
-        type: string
-      available_actions:
-        example:
-        - edit
-        - fetch_financials
-        - submit
-        items:
-          type: string
-        type: array
-      checks:
-        type: object
-      collateral:
-        type: object
-      company:
-        $ref: '#/definitions/creditdto.CompanyCardResponse'
-      company_id:
-        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
-        format: uuid
-        type: string
-      contract:
-        type: object
-      created_at:
-        type: string
-      editable_fields:
-        example:
-        - request.amount_kopecks
-        - request.product_code
-        items:
-          type: string
-        type: array
-      financials:
-        $ref: '#/definitions/creditdto.FinancialStateResponse'
-      id:
-        example: 3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13
-        format: uuid
-        type: string
-      issue:
-        type: object
-      number:
-        example: 1000
-        type: integer
-      offer:
-        type: object
-      product_details:
-        type: object
-      request:
-        $ref: '#/definitions/creditdto.RequestResponse'
-      revision:
-        example: 1
-        type: integer
-      scoring:
-        type: object
-      status:
-        enum:
-        - draft
-        - submitted
-        - validation
-        - enrichment
-        - scoring
-        - manual_review
-        - info_requested
-        - approved
-        - counter_offer
-        - signing
-        - issued
-        - rejected
-        - cancelled
-        - expired
-        example: draft
-        type: string
-      submitted_at:
-        type: string
-      updated_at:
-        type: string
-    type: object
-  creditdto.CompanyCardResponse:
-    properties:
-      id:
-        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
-        format: uuid
-        type: string
-      inn:
-        example: "7705005410"
-        type: string
-      name:
-        example: ООО «Кедровый контур Демо»
-        type: string
-    type: object
-  creditdto.CreateApplicationRequest:
-    properties:
-      company_id:
-        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
-        format: uuid
-        type: string
-    type: object
-  creditdto.ErrorBody:
-    properties:
-      code:
-        enum:
-        - INVALID_REQUEST
-        - UNAUTHENTICATED
-        - FORBIDDEN
-        - NOT_FOUND
-        - REVISION_CONFLICT
-        - INVALID_STATE
-        - CSV_NOT_ALLOWED
-        - OFFER_CHANGED
-        - IDEMPOTENCY_CONFLICT
-        - VALIDATION_FAILED
-        - INVALID_CSV
-        - SERVICE_UNAVAILABLE
-        - INTERNAL_ERROR
-        example: VALIDATION_FAILED
-        type: string
-      current_revision:
-        description: 'Только при REVISION_CONFLICT: revision, с которой заявка сейчас.'
-        type: integer
-      field_errors:
-        items:
-          $ref: '#/definitions/creditdto.FieldErrorResponse'
-        type: array
-      message:
-        example: Исправьте поля
-        type: string
-    type: object
-  creditdto.ErrorResponse:
-    properties:
-      error:
-        $ref: '#/definitions/creditdto.ErrorBody'
-      request_id:
-        type: string
-    type: object
-  creditdto.FieldErrorResponse:
-    properties:
-      code:
-        example: REQUIRED
-        type: string
-      field:
-        example: company_id
-        type: string
-      message:
-        example: Выберите компанию
-        type: string
-    type: object
-  creditdto.FinancialStateResponse:
-    properties:
-      allow_csv_upload:
-        example: false
-        type: boolean
-      data_status:
-        enum:
-        - missing
-        - ready
-        - no_history
-        example: missing
-        type: string
-      issues:
-        items:
-          $ref: '#/definitions/creditdto.IssueResponse'
-        type: array
-      revision:
-        example: 1
-        type: integer
-      snapshot:
-        type: object
-      source_status:
-        enum:
-        - not_requested
-        - ok
-        - not_found
-        - unavailable
-        - invalid
-        example: not_requested
-        type: string
-      source_type:
-        enum:
-        - automatic
-        - csv
-        type: string
-    type: object
-  creditdto.IssueResponse:
-    properties:
-      code:
-        type: string
-      field:
-        type: string
-      message:
-        type: string
-    type: object
-  creditdto.NeedPeriodResponse:
-    properties:
-      unit:
-        enum:
-        - months
-        - days
-        - unknown
-        example: unknown
-        type: string
-      value:
-        type: integer
-    type: object
-  creditdto.RequestResponse:
-    properties:
-      amount_kopecks:
-        type: integer
-      collateral_mode:
-        enum:
-        - none
-        - pledged
-        example: none
-        type: string
-      need_period:
-        $ref: '#/definitions/creditdto.NeedPeriodResponse'
-      product_code:
-        enum:
-        - express
-        - overdraft
-        - working_capital
-        - equipment
-        - start
-        type: string
-      purpose:
-        enum:
-        - working_capital
-        - cash_gap
-        - equipment
-        - business_start
-        - business_expansion
-        - other
-        type: string
-      purpose_description:
-        type: string
-      term_months:
-        type: integer
     type: object
   creditproducts.CollateralMode:
     enum:
@@ -1194,13 +1194,13 @@ definitions:
   reviewdto.ReviewApplicationResponse:
     properties:
       applicant:
-        $ref: '#/definitions/creditdto.ApplicantResponse'
+        $ref: '#/definitions/applicationdto.ApplicantResponse'
       applicant_id:
         example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
         format: uuid
         type: string
       assignee:
-        $ref: '#/definitions/creditdto.ApplicantResponse'
+        $ref: '#/definitions/applicationdto.ApplicantResponse'
       available_actions:
         example:
         - edit
@@ -1218,7 +1218,7 @@ definitions:
           $ref: '#/definitions/reviewdto.StaffCollateralReviewResponse'
         type: array
       company:
-        $ref: '#/definitions/creditdto.CompanyCardResponse'
+        $ref: '#/definitions/applicationdto.CompanyCardResponse'
       company_id:
         example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
         format: uuid
@@ -1229,7 +1229,7 @@ definitions:
         type: string
       decision_blockers:
         items:
-          $ref: '#/definitions/creditdto.FieldErrorResponse'
+          $ref: '#/definitions/applicationdto.FieldErrorResponse'
         type: array
       decisions:
         items:
@@ -1243,7 +1243,7 @@ definitions:
           type: string
         type: array
       financials:
-        $ref: '#/definitions/creditdto.FinancialStateResponse'
+        $ref: '#/definitions/applicationdto.FinancialStateResponse'
       history:
         items:
           $ref: '#/definitions/reviewdto.EventResponse'
@@ -1266,7 +1266,7 @@ definitions:
       product_details:
         type: object
       request:
-        $ref: '#/definitions/creditdto.RequestResponse'
+        $ref: '#/definitions/applicationdto.RequestResponse'
       revision:
         example: 1
         type: integer
@@ -1357,13 +1357,13 @@ definitions:
   reviewdto.UnderwriterApplicationResponse:
     properties:
       applicant:
-        $ref: '#/definitions/creditdto.ApplicantResponse'
+        $ref: '#/definitions/applicationdto.ApplicantResponse'
       applicant_id:
         example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
         format: uuid
         type: string
       assignee:
-        $ref: '#/definitions/creditdto.ApplicantResponse'
+        $ref: '#/definitions/applicationdto.ApplicantResponse'
       available_actions:
         example:
         - edit
@@ -1377,7 +1377,7 @@ definitions:
       collateral:
         type: object
       company:
-        $ref: '#/definitions/creditdto.CompanyCardResponse'
+        $ref: '#/definitions/applicationdto.CompanyCardResponse'
       company_id:
         example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
         format: uuid
@@ -1394,7 +1394,7 @@ definitions:
           type: string
         type: array
       financials:
-        $ref: '#/definitions/creditdto.FinancialStateResponse'
+        $ref: '#/definitions/applicationdto.FinancialStateResponse'
       id:
         example: 3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13
         format: uuid
@@ -1409,7 +1409,7 @@ definitions:
       product_details:
         type: object
       request:
-        $ref: '#/definitions/creditdto.RequestResponse'
+        $ref: '#/definitions/applicationdto.RequestResponse'
       revision:
         example: 1
         type: integer
@@ -1530,18 +1530,18 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/creditdto.CreateApplicationRequest'
+          $ref: '#/definitions/applicationdto.CreateApplicationRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/creditdto.ApplicationResponse'
+            $ref: '#/definitions/applicationdto.ApplicationResponse'
         "400":
           description: INVALID_REQUEST
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
@@ -1553,15 +1553,15 @@ paths:
         "404":
           description: 'NOT_FOUND: нет компании или пользователь не её участник'
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "409":
           description: IDEMPOTENCY_CONFLICT
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "422":
           description: VALIDATION_FAILED
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Новая заявка
@@ -1644,7 +1644,7 @@ paths:
         "404":
           description: NOT_FOUND
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Договор к предложению
@@ -1675,7 +1675,7 @@ paths:
         "404":
           description: 'NOT_FOUND: нет заявки или она чужая'
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Запросы банка
@@ -1712,23 +1712,23 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/creditdto.ApplicationResponse'
+            $ref: '#/definitions/applicationdto.ApplicationResponse'
         "400":
           description: INVALID_REQUEST
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "404":
           description: NOT_FOUND
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "409":
           description: REVISION_CONFLICT, INVALID_STATE
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "422":
           description: VALIDATION_FAILED
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Ответить на запрос банка
@@ -1753,7 +1753,7 @@ paths:
         "404":
           description: NOT_FOUND
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Текущее предложение
@@ -1790,19 +1790,19 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/creditdto.ApplicationResponse'
+            $ref: '#/definitions/applicationdto.ApplicationResponse'
         "400":
           description: INVALID_REQUEST
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "404":
           description: NOT_FOUND
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "409":
           description: REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Отправить повторно
@@ -2417,11 +2417,11 @@ paths:
         "404":
           description: NOT_FOUND
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "503":
           description: SERVICE_UNAVAILABLE
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Файл документа
@@ -2473,7 +2473,7 @@ paths:
         "400":
           description: INVALID_REQUEST
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
@@ -2517,7 +2517,7 @@ paths:
         "404":
           description: NOT_FOUND
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Карточка заявки
@@ -2613,27 +2613,27 @@ paths:
         "400":
           description: INVALID_REQUEST
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "403":
           description: 'FORBIDDEN: заявка у другого сотрудника'
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "404":
           description: NOT_FOUND
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "409":
           description: REVISION_CONFLICT, INVALID_STATE
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "422":
           description: 'VALIDATION_FAILED: условия, проверки, залог'
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "503":
           description: 'SERVICE_UNAVAILABLE: хранилище договоров'
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Опубликовать решение
@@ -2669,23 +2669,23 @@ paths:
         "400":
           description: INVALID_REQUEST
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "403":
           description: 'FORBIDDEN: заявка у другого сотрудника'
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "404":
           description: NOT_FOUND
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "409":
           description: REVISION_CONFLICT, INVALID_STATE
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "422":
           description: VALIDATION_FAILED
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Запросить уточнения
@@ -2721,27 +2721,27 @@ paths:
         "400":
           description: INVALID_REQUEST
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "403":
           description: 'FORBIDDEN: заявка у другого сотрудника'
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "404":
           description: NOT_FOUND
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "409":
           description: REVISION_CONFLICT, INVALID_STATE
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "422":
           description: VALIDATION_FAILED
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "503":
           description: SERVICE_UNAVAILABLE
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Повторить проверки
@@ -2777,15 +2777,15 @@ paths:
         "400":
           description: INVALID_REQUEST
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "404":
           description: NOT_FOUND
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "409":
           description: REVISION_CONFLICT, INVALID_STATE
           schema:
-            $ref: '#/definitions/creditdto.ErrorResponse'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Взять заявку

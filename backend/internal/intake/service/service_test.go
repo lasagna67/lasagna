@@ -1,4 +1,4 @@
-package creditservice
+package intakeservice
 
 import (
 	"context"
@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 )
 
 var (
@@ -37,26 +37,26 @@ type storedKey struct {
 // один раз, повтор с тем же хешем возвращает прежнюю заявку.
 type fakeApplications struct {
 	keys        map[string]storedKey
-	apps        map[uuid.UUID]creditdomain.Application
-	transitions []creditdomain.Transition
+	apps        map[uuid.UUID]applicationdomain.Application
+	transitions []applicationdomain.Transition
 }
 
 func newFakeApplications() *fakeApplications {
-	return &fakeApplications{keys: map[string]storedKey{}, apps: map[uuid.UUID]creditdomain.Application{}}
+	return &fakeApplications{keys: map[string]storedKey{}, apps: map[uuid.UUID]applicationdomain.Application{}}
 }
 
-func (f *fakeApplications) Create(_ context.Context, app creditdomain.Application, tr creditdomain.Transition, key creditdomain.IdempotencyKey) (creditdomain.ApplicationDetails, error) {
+func (f *fakeApplications) Create(_ context.Context, app applicationdomain.Application, tr applicationdomain.Transition, key applicationdomain.IdempotencyKey) (applicationdomain.ApplicationDetails, error) {
 	scope := key.UserID.String() + "|" + string(key.Operation) + "|" + key.Key
 	if stored, ok := f.keys[scope]; ok {
 		if stored.hash != key.RequestHash {
-			return creditdomain.ApplicationDetails{}, crediterrors.ErrIdempotencyConflict
+			return applicationdomain.ApplicationDetails{}, applicationerrors.ErrIdempotencyConflict
 		}
-		return creditdomain.ApplicationDetails{Application: f.apps[stored.id]}, nil
+		return applicationdomain.ApplicationDetails{Application: f.apps[stored.id]}, nil
 	}
 	f.keys[scope] = storedKey{hash: key.RequestHash, id: app.ID}
 	f.apps[app.ID] = app
 	f.transitions = append(f.transitions, tr)
-	return creditdomain.ApplicationDetails{Application: app}, nil
+	return applicationdomain.ApplicationDetails{Application: app}, nil
 }
 
 func newService() (*ApplicationService, *fakeApplications) {
@@ -66,16 +66,16 @@ func newService() (*ApplicationService, *fakeApplications) {
 
 func TestCreate(t *testing.T) {
 	s, repo := newService()
-	cmd := creditdomain.CreateCommand{CompanyID: companyID, ApplicantID: memberID, IdempotencyKey: "key-1"}
+	cmd := applicationdomain.CreateCommand{CompanyID: companyID, ApplicantID: memberID, IdempotencyKey: "key-1"}
 
 	got, err := s.Create(context.Background(), cmd)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Status != creditdomain.StatusDraft || got.CompanyID != companyID || got.ApplicantID != memberID || got.ID == uuid.Nil {
+	if got.Status != applicationdomain.StatusDraft || got.CompanyID != companyID || got.ApplicantID != memberID || got.ID == uuid.Nil {
 		t.Errorf("created = %+v; want draft of company by member", got.Application)
 	}
-	if len(repo.transitions) != 1 || repo.transitions[0] != (creditdomain.Transition{To: creditdomain.StatusDraft}) {
+	if len(repo.transitions) != 1 || repo.transitions[0] != (applicationdomain.Transition{To: applicationdomain.StatusDraft}) {
 		t.Errorf("transitions = %+v; want one -> draft", repo.transitions)
 	}
 
@@ -102,10 +102,10 @@ func TestCreate(t *testing.T) {
 func TestCreateIdempotencyConflict(t *testing.T) {
 	s, repo := newService()
 	// Тот же ключ уже занят запросом с другим телом.
-	repo.keys[memberID.String()+"|"+string(creditdomain.OperationCreate)+"|key-1"] = storedKey{hash: requestHash(uuid.NewString())}
+	repo.keys[memberID.String()+"|"+string(applicationdomain.OperationCreate)+"|key-1"] = storedKey{hash: requestHash(uuid.NewString())}
 
-	_, err := s.Create(context.Background(), creditdomain.CreateCommand{CompanyID: companyID, ApplicantID: memberID, IdempotencyKey: "key-1"})
-	if !errors.Is(err, crediterrors.ErrIdempotencyConflict) {
+	_, err := s.Create(context.Background(), applicationdomain.CreateCommand{CompanyID: companyID, ApplicantID: memberID, IdempotencyKey: "key-1"})
+	if !errors.Is(err, applicationerrors.ErrIdempotencyConflict) {
 		t.Errorf("err = %v; want ErrIdempotencyConflict", err)
 	}
 }
@@ -113,27 +113,27 @@ func TestCreateIdempotencyConflict(t *testing.T) {
 func TestCreateRejected(t *testing.T) {
 	tests := []struct {
 		name  string
-		cmd   creditdomain.CreateCommand
+		cmd   applicationdomain.CreateCommand
 		check func(error) bool
 	}{
 		{"no idempotency key",
-			creditdomain.CreateCommand{CompanyID: companyID, ApplicantID: memberID},
+			applicationdomain.CreateCommand{CompanyID: companyID, ApplicantID: memberID},
 			isRequestError},
 		{"blank idempotency key",
-			creditdomain.CreateCommand{CompanyID: companyID, ApplicantID: memberID, IdempotencyKey: "  "},
+			applicationdomain.CreateCommand{CompanyID: companyID, ApplicantID: memberID, IdempotencyKey: "  "},
 			isRequestError},
 		{"too long idempotency key",
-			creditdomain.CreateCommand{CompanyID: companyID, ApplicantID: memberID, IdempotencyKey: strings.Repeat("k", 256)},
+			applicationdomain.CreateCommand{CompanyID: companyID, ApplicantID: memberID, IdempotencyKey: strings.Repeat("k", 256)},
 			isRequestError},
 		{"no company",
-			creditdomain.CreateCommand{ApplicantID: memberID, IdempotencyKey: "k"},
+			applicationdomain.CreateCommand{ApplicantID: memberID, IdempotencyKey: "k"},
 			isFieldError("company_id", "REQUIRED")},
 		{"not a member",
-			creditdomain.CreateCommand{CompanyID: companyID, ApplicantID: uuid.New(), IdempotencyKey: "k"},
-			is(crediterrors.ErrCompanyNotFound)},
+			applicationdomain.CreateCommand{CompanyID: companyID, ApplicantID: uuid.New(), IdempotencyKey: "k"},
+			is(applicationerrors.ErrCompanyNotFound)},
 		{"unknown company",
-			creditdomain.CreateCommand{CompanyID: uuid.New(), ApplicantID: memberID, IdempotencyKey: "k"},
-			is(crediterrors.ErrCompanyNotFound)},
+			applicationdomain.CreateCommand{CompanyID: uuid.New(), ApplicantID: memberID, IdempotencyKey: "k"},
+			is(applicationerrors.ErrCompanyNotFound)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -150,13 +150,13 @@ func TestCreateRejected(t *testing.T) {
 }
 
 func isRequestError(err error) bool {
-	var target *crediterrors.RequestError
+	var target *applicationerrors.RequestError
 	return errors.As(err, &target)
 }
 
 func isFieldError(field, code string) func(error) bool {
 	return func(err error) bool {
-		var target *crediterrors.ValidationError
+		var target *applicationerrors.ValidationError
 		return errors.As(err, &target) && len(target.Fields) == 1 &&
 			target.Fields[0].Field == field && target.Fields[0].Code == code
 	}

@@ -8,15 +8,15 @@ import (
 
 	"github.com/google/uuid"
 
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 	reviewerrors "github.com/lasagna67/lasagna.git/internal/review/errors"
 )
 
 func TestTake(t *testing.T) {
-	a := creditdomain.Application{Status: creditdomain.StatusManualReview}
+	a := applicationdomain.Application{Status: applicationdomain.StatusManualReview}
 	if changed, err := Take(&a, reviewerID); err != nil || !changed || *a.AssigneeID != reviewerID {
 		t.Fatalf("take free = %v, %v, assignee %v", changed, err, a.AssigneeID)
 	}
@@ -27,8 +27,8 @@ func TestTake(t *testing.T) {
 	if _, err := Take(&a, uuid.New()); !errors.Is(err, reviewerrors.ErrTakenByOther) || *a.AssigneeID != reviewerID {
 		t.Errorf("take by other = %v, assignee %v; want ErrTakenByOther", err, *a.AssigneeID)
 	}
-	a = creditdomain.Application{Status: creditdomain.StatusInfoRequested}
-	if _, err := Take(&a, reviewerID); !errors.Is(err, crediterrors.ErrInvalidState) || a.AssigneeID != nil {
+	a = applicationdomain.Application{Status: applicationdomain.StatusInfoRequested}
+	if _, err := Take(&a, reviewerID); !errors.Is(err, applicationerrors.ErrInvalidState) || a.AssigneeID != nil {
 		t.Errorf("take in info_requested = %v", err)
 	}
 }
@@ -37,33 +37,33 @@ func TestActions(t *testing.T) {
 	other := Reviewer{ID: uuid.New()}
 	me := Reviewer{ID: reviewerID}
 	admin := Reviewer{ID: uuid.New(), Admin: true}
-	details := func(a creditdomain.Application, withCollateral bool) Details {
-		d := Details{ApplicationDetails: creditdomain.ApplicationDetails{Application: a}}
+	details := func(a applicationdomain.Application, withCollateral bool) Details {
+		d := Details{ApplicationDetails: applicationdomain.ApplicationDetails{Application: a}}
 		if withCollateral {
 			d.Collateral = &collateraldomain.Collateral{Revision: 1}
 		}
 		return d
 	}
-	review, mine := creditdomain.StatusManualReview, &reviewerID
+	review, mine := applicationdomain.StatusManualReview, &reviewerID
 
 	tests := []struct {
 		name string
 		d    Details
 		who  Reviewer
-		want []creditdomain.Action
+		want []applicationdomain.Action
 	}{
-		{"свободная заявка", details(creditdomain.Application{Status: review}, false), me,
-			[]creditdomain.Action{creditdomain.ActionTake}},
-		{"свободная у admin", details(creditdomain.Application{Status: review}, true), admin,
-			[]creditdomain.Action{creditdomain.ActionTake, creditdomain.ActionRequestInfo, creditdomain.ActionDecide, creditdomain.ActionRetryChecks}},
-		{"моя с залогом", details(creditdomain.Application{Status: review, AssigneeID: mine}, true), me,
-			[]creditdomain.Action{creditdomain.ActionRequestInfo, creditdomain.ActionReviewCollateral, creditdomain.ActionDecide, creditdomain.ActionRetryChecks}},
-		{"чужая", details(creditdomain.Application{Status: review, AssigneeID: mine}, true), other, []creditdomain.Action{}},
-		{"моё предложение", details(creditdomain.Application{Status: creditdomain.StatusApproved, AssigneeID: mine}, false), me,
-			[]creditdomain.Action{creditdomain.ActionDecide}},
-		{"ждём клиента", details(creditdomain.Application{Status: creditdomain.StatusInfoRequested, AssigneeID: mine}, false), me, []creditdomain.Action{}},
-		{"ждём клиента, залог проверяется", details(creditdomain.Application{Status: creditdomain.StatusInfoRequested, AssigneeID: mine}, true), me,
-			[]creditdomain.Action{creditdomain.ActionReviewCollateral}},
+		{"свободная заявка", details(applicationdomain.Application{Status: review}, false), me,
+			[]applicationdomain.Action{applicationdomain.ActionTake}},
+		{"свободная у admin", details(applicationdomain.Application{Status: review}, true), admin,
+			[]applicationdomain.Action{applicationdomain.ActionTake, applicationdomain.ActionRequestInfo, applicationdomain.ActionDecide, applicationdomain.ActionRetryChecks}},
+		{"моя с залогом", details(applicationdomain.Application{Status: review, AssigneeID: mine}, true), me,
+			[]applicationdomain.Action{applicationdomain.ActionRequestInfo, applicationdomain.ActionReviewCollateral, applicationdomain.ActionDecide, applicationdomain.ActionRetryChecks}},
+		{"чужая", details(applicationdomain.Application{Status: review, AssigneeID: mine}, true), other, []applicationdomain.Action{}},
+		{"моё предложение", details(applicationdomain.Application{Status: applicationdomain.StatusApproved, AssigneeID: mine}, false), me,
+			[]applicationdomain.Action{applicationdomain.ActionDecide}},
+		{"ждём клиента", details(applicationdomain.Application{Status: applicationdomain.StatusInfoRequested, AssigneeID: mine}, false), me, []applicationdomain.Action{}},
+		{"ждём клиента, залог проверяется", details(applicationdomain.Application{Status: applicationdomain.StatusInfoRequested, AssigneeID: mine}, true), me,
+			[]applicationdomain.Action{applicationdomain.ActionReviewCollateral}},
 	}
 	for _, tt := range tests {
 		if got := Actions(tt.d, tt.who); !slices.Equal(got, tt.want) {
@@ -105,7 +105,7 @@ func TestInfoRequestRespond(t *testing.T) {
 	if r.Status != InfoRequestAnswered || *r.Answer != "Станок новый" || *r.AnsweredBy != client || r.AnsweredAt == nil {
 		t.Errorf("answered = %+v", r)
 	}
-	if err := r.Respond(client, "ещё", now); !errors.Is(err, crediterrors.ErrInvalidState) {
+	if err := r.Respond(client, "ещё", now); !errors.Is(err, applicationerrors.ErrInvalidState) {
 		t.Errorf("second answer: %v; want ErrInvalidState", err)
 	}
 }
@@ -117,12 +117,12 @@ func TestReviewBlockers(t *testing.T) {
 	}
 	r.Details = pledged(r.Details, "equipment", 200000000)
 	r.Checks.CreditBureau.Status = SourceUnavailable
-	got := fieldErrors(&crediterrors.ValidationError{Fields: r.Blockers(now)})
+	got := fieldErrors(&applicationerrors.ValidationError{Fields: r.Blockers(now)})
 	if !slices.Equal(got, []string{"checks.credit_bureau:CHECK_NOT_READY", "collateral:REVIEW_REQUIRED"}) {
 		t.Errorf("blockers = %v", got)
 	}
 	r.CollateralReview = reviewOf(r.Collateral, "accepted", 250000000)
-	got = fieldErrors(&crediterrors.ValidationError{Fields: r.Blockers(now)})
+	got = fieldErrors(&applicationerrors.ValidationError{Fields: r.Blockers(now)})
 	if !slices.Equal(got, []string{"checks.credit_bureau:CHECK_NOT_READY", "collateral:COLLATERAL_INSUFFICIENT"}) {
 		t.Errorf("blockers with low collateral = %v", got)
 	}

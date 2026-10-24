@@ -13,8 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	e "github.com/lasagna67/lasagna.git/internal/application/errors"
 	d "github.com/lasagna67/lasagna.git/internal/collateral/domain"
-	e "github.com/lasagna67/lasagna.git/internal/credit/errors"
 )
 
 // Uses an isolated migrated database: immutable review history is deliberately retained.

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 	reviewdomain "github.com/lasagna67/lasagna.git/internal/review/domain"
 	reviewerrors "github.com/lasagna67/lasagna.git/internal/review/errors"
 )
@@ -76,26 +76,26 @@ func newEnv() env {
 }
 
 // manualReview — заявка на рассмотрении: express, 1 млн на 12 месяцев без залога.
-func (e env) manualReview(number int64) creditdomain.ApplicationDetails {
-	purpose := creditdomain.PurposeWorkingCapital
-	d := creditdomain.ApplicationDetails{
-		Application: creditdomain.Application{
+func (e env) manualReview(number int64) applicationdomain.ApplicationDetails {
+	purpose := applicationdomain.PurposeWorkingCapital
+	d := applicationdomain.ApplicationDetails{
+		Application: applicationdomain.Application{
 			ID:          uuid.New(),
 			Number:      number,
 			Revision:    4,
 			CompanyID:   companyID,
 			ApplicantID: applicantID,
-			Status:      creditdomain.StatusManualReview,
-			Request: creditdomain.Request{
+			Status:      applicationdomain.StatusManualReview,
+			Request: applicationdomain.Request{
 				Purpose:        &purpose,
 				AmountKopecks:  ptr(int64(100000000)),
-				NeedPeriod:     creditdomain.NeedPeriod{Unit: creditdomain.NeedPeriodUnknown},
+				NeedPeriod:     applicationdomain.NeedPeriod{Unit: applicationdomain.NeedPeriodUnknown},
 				ProductCode:    ptr("express"),
 				TermMonths:     ptr(12),
-				CollateralMode: creditdomain.CollateralNone,
+				CollateralMode: applicationdomain.CollateralNone,
 			},
 		},
-		Company: creditdomain.CompanyCard{ID: companyID, Name: "ООО «Кедр»", INN: companyINN},
+		Company: applicationdomain.CompanyCard{ID: companyID, Name: "ООО «Кедр»", INN: companyINN},
 	}
 	e.repo.add(d)
 	return d
@@ -122,7 +122,7 @@ func expressTerms() *reviewdomain.TermsInput {
 }
 
 func fieldCodes(err error) []string {
-	var v *crediterrors.ValidationError
+	var v *applicationerrors.ValidationError
 	if !errors.As(err, &v) {
 		return nil
 	}
@@ -160,7 +160,7 @@ func TestDecideApproved(t *testing.T) {
 	e.take(t, app.ID, me)
 
 	stale := reviewdomain.DecideCommand{ApplicationID: app.ID, Reviewer: me, ExpectedRevision: 4, Outcome: reviewdomain.OutcomeApproved, Terms: expressTerms()}
-	var conflict *crediterrors.RevisionConflictError
+	var conflict *applicationerrors.RevisionConflictError
 	if _, err := e.svc.Decide(ctx, stale); !errors.As(err, &conflict) || conflict.Current != 5 {
 		t.Fatalf("stale decide = %v; want RevisionConflictError{5}", err)
 	}
@@ -174,7 +174,7 @@ func TestDecideApproved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if review.Status != creditdomain.StatusApproved || review.Offer == nil || review.Offer.Contract == nil || review.Revision != 6 {
+	if review.Status != applicationdomain.StatusApproved || review.Offer == nil || review.Offer.Contract == nil || review.Revision != 6 {
 		t.Fatalf("status %s, offer %+v, revision %d", review.Status, review.Offer, review.Revision)
 	}
 	offer := review.Offer
@@ -193,7 +193,7 @@ func TestDecideApproved(t *testing.T) {
 	if got, err := e.svc.Offer(ctx, applicantID, app.ID); err != nil || got == nil || got.ID != offer.ID {
 		t.Errorf("client offer = %v, %v", got, err)
 	}
-	if _, err := e.svc.Offer(ctx, outsiderID, app.ID); !errors.Is(err, crediterrors.ErrNotFound) {
+	if _, err := e.svc.Offer(ctx, outsiderID, app.ID); !errors.Is(err, applicationerrors.ErrNotFound) {
 		t.Errorf("outsider offer = %v; want ErrNotFound", err)
 	}
 	_, body, err := e.svc.DocumentContent(ctx, reviewdomain.Viewer{UserID: applicantID}, offer.Contract.ID)
@@ -218,7 +218,7 @@ func TestDecideApproved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if review.Status != creditdomain.StatusCounterOffer || review.Offer.Version != 2 || review.Offer.Contract.ID == offer.Contract.ID || len(review.Decisions) != 2 {
+	if review.Status != applicationdomain.StatusCounterOffer || review.Offer.Version != 2 || review.Offer.Contract.ID == offer.Contract.ID || len(review.Decisions) != 2 {
 		t.Errorf("second offer: status %s, version %d, decisions %d", review.Status, review.Offer.Version, len(review.Decisions))
 	}
 }
@@ -246,10 +246,10 @@ func TestDecideStorageUnavailable(t *testing.T) {
 	e.storage.fail = true
 
 	_, err := e.svc.Decide(ctx, reviewdomain.DecideCommand{ApplicationID: app.ID, Reviewer: me, ExpectedRevision: 5, Outcome: reviewdomain.OutcomeApproved, Terms: expressTerms()})
-	if !errors.Is(err, crediterrors.ErrServiceUnavailable) {
+	if !errors.Is(err, applicationerrors.ErrServiceUnavailable) {
 		t.Fatalf("err = %v; want ErrServiceUnavailable", err)
 	}
-	if d, _ := e.repo.GetDetails(ctx, app.ID); d.Status != creditdomain.StatusManualReview || d.Offer != nil {
+	if d, _ := e.repo.GetDetails(ctx, app.ID); d.Status != applicationdomain.StatusManualReview || d.Offer != nil {
 		t.Errorf("status %s, offer %v after failed upload", d.Status, d.Offer)
 	}
 }
@@ -264,10 +264,10 @@ func TestDecideRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if review.Status != creditdomain.StatusRejected || review.Offer != nil || len(e.storage.files) != 0 {
+	if review.Status != applicationdomain.StatusRejected || review.Offer != nil || len(e.storage.files) != 0 {
 		t.Errorf("status %s, offer %v, files %d", review.Status, review.Offer, len(e.storage.files))
 	}
-	if h := review.History[0]; h.To != creditdomain.StatusRejected || h.Comment == nil || *h.Comment != "Высокая долговая нагрузка" {
+	if h := review.History[0]; h.To != applicationdomain.StatusRejected || h.Comment == nil || *h.Comment != "Высокая долговая нагрузка" {
 		t.Errorf("history = %+v", h)
 	}
 	if n := e.repo.notifications; len(n) != 1 || n[0].Type != reviewdomain.NotificationStatusChanged {
@@ -286,7 +286,7 @@ func TestOnlyAssigneeOrAdmin(t *testing.T) {
 		t.Errorf("colleague request-info = %v; want ErrNotAssignee", err)
 	}
 	cmd.Reviewer = admin
-	if review, err := e.svc.RequestInfo(ctx, cmd); err != nil || review.Status != creditdomain.StatusInfoRequested {
+	if review, err := e.svc.RequestInfo(ctx, cmd); err != nil || review.Status != applicationdomain.StatusInfoRequested {
 		t.Errorf("admin request-info = %v", err)
 	}
 }
@@ -302,7 +302,7 @@ func TestInfoRequestLoop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if review.Status != creditdomain.StatusInfoRequested || !slices.Equal(review.EditableFields(), []string{"request.amount_kopecks"}) {
+	if review.Status != applicationdomain.StatusInfoRequested || !slices.Equal(review.EditableFields(), []string{"request.amount_kopecks"}) {
 		t.Fatalf("status %s, editable %v", review.Status, review.EditableFields())
 	}
 	if n := e.repo.notifications; len(n) != 1 || n[0].Type != reviewdomain.NotificationInfoRequested || n[0].UserID != applicantID {
@@ -313,12 +313,12 @@ func TestInfoRequestLoop(t *testing.T) {
 	if err != nil || len(reqs) != 1 {
 		t.Fatalf("info requests = %v, %v", reqs, err)
 	}
-	if _, err := e.svc.InfoRequests(ctx, outsiderID, app.ID); !errors.Is(err, crediterrors.ErrNotFound) {
+	if _, err := e.svc.InfoRequests(ctx, outsiderID, app.ID); !errors.Is(err, applicationerrors.ErrNotFound) {
 		t.Errorf("outsider requests = %v", err)
 	}
 
 	resubmit := reviewdomain.ResubmitCommand{ApplicationID: app.ID, UserID: applicantID, ExpectedRevision: 6, IdempotencyKey: "resubmit-1"}
-	if _, err := e.svc.Resubmit(ctx, resubmit); !errors.Is(err, crediterrors.ErrInfoRequestsOpen) {
+	if _, err := e.svc.Resubmit(ctx, resubmit); !errors.Is(err, applicationerrors.ErrInfoRequestsOpen) {
 		t.Fatalf("resubmit before answer = %v; want ErrInfoRequestsOpen", err)
 	}
 
@@ -327,11 +327,11 @@ func TestInfoRequestLoop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Info.Open != 0 || !slices.Equal(d.ClientActions(), []creditdomain.Action{creditdomain.ActionEdit, creditdomain.ActionResubmit}) {
+	if d.Info.Open != 0 || !slices.Equal(d.ClientActions(), []applicationdomain.Action{applicationdomain.ActionEdit, applicationdomain.ActionResubmit}) {
 		t.Errorf("after answer: open %d, actions %v", d.Info.Open, d.ClientActions())
 	}
 	answer.ExpectedRevision = 7
-	if _, err := e.svc.AnswerInfo(ctx, answer); !errors.Is(err, crediterrors.ErrInvalidState) {
+	if _, err := e.svc.AnswerInfo(ctx, answer); !errors.Is(err, applicationerrors.ErrInvalidState) {
 		t.Errorf("second answer = %v; want ErrInvalidState", err)
 	}
 
@@ -341,7 +341,7 @@ func TestInfoRequestLoop(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Временный конвейер сразу возвращает заявку тому же сотруднику.
-	if d.ID != app.ID || d.Status != creditdomain.StatusManualReview || d.AssigneeID == nil || *d.AssigneeID != me.ID {
+	if d.ID != app.ID || d.Status != applicationdomain.StatusManualReview || d.AssigneeID == nil || *d.AssigneeID != me.ID {
 		t.Fatalf("after resubmit: %s, assignee %v", d.Status, d.AssigneeID)
 	}
 	transitions := len(e.repo.history[app.ID])
@@ -351,7 +351,7 @@ func TestInfoRequestLoop(t *testing.T) {
 		t.Errorf("replay = revision %d, %v, history %d -> %d", again.Revision, err, transitions, len(e.repo.history[app.ID]))
 	}
 	resubmit.ExpectedRevision = 99
-	if _, err := e.svc.Resubmit(ctx, resubmit); !errors.Is(err, crediterrors.ErrIdempotencyConflict) {
+	if _, err := e.svc.Resubmit(ctx, resubmit); !errors.Is(err, applicationerrors.ErrIdempotencyConflict) {
 		t.Errorf("same key, other body = %v; want ErrIdempotencyConflict", err)
 	}
 	if n := e.repo.notifications; n[len(n)-1].UserID != me.ID {
@@ -366,7 +366,7 @@ func TestSecuredDecisionNeedsAcceptedCollateral(t *testing.T) {
 	app.Request.ProductCode = ptr("equipment")
 	app.Request.AmountKopecks = ptr(int64(200000000))
 	app.Request.TermMonths = ptr(36)
-	app.Request.CollateralMode = creditdomain.CollateralPledged
+	app.Request.CollateralMode = applicationdomain.CollateralPledged
 	e.repo.add(app)
 	asset := collateraldomain.Collateral{Revision: 1, Type: "equipment", Ownership: "acquired", Description: "Станок", DeclaredValueKopecks: 300000000}
 	e.repo.assets[app.ID] = asset
@@ -385,7 +385,7 @@ func TestSecuredDecisionNeedsAcceptedCollateral(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := fieldCodes(&crediterrors.ValidationError{Fields: review.DecisionBlockers}); !slices.Equal(got, []string{"collateral:COLLATERAL_INSUFFICIENT"}) {
+	if got := fieldCodes(&applicationerrors.ValidationError{Fields: review.DecisionBlockers}); !slices.Equal(got, []string{"collateral:COLLATERAL_INSUFFICIENT"}) {
 		t.Errorf("card blockers = %v", got)
 	}
 
@@ -405,7 +405,7 @@ func TestRetryChecks(t *testing.T) {
 		t.Errorf("unknown source = %v", err)
 	}
 	cmd.Sources = []reviewdomain.CheckSource{reviewdomain.CheckRegistry}
-	if _, err := e.svc.RetryChecks(ctx, cmd); !errors.Is(err, crediterrors.ErrServiceUnavailable) {
+	if _, err := e.svc.RetryChecks(ctx, cmd); !errors.Is(err, applicationerrors.ErrServiceUnavailable) {
 		t.Errorf("retry without pipeline = %v; want ErrServiceUnavailable", err)
 	}
 }
@@ -413,13 +413,13 @@ func TestRetryChecks(t *testing.T) {
 func TestStaffDoesNotSeeDrafts(t *testing.T) {
 	e := newEnv()
 	app := e.manualReview(1000)
-	app.Status = creditdomain.StatusDraft
+	app.Status = applicationdomain.StatusDraft
 	e.repo.add(app)
 
-	if _, err := e.svc.Get(ctx, app.ID); !errors.Is(err, crediterrors.ErrNotFound) {
+	if _, err := e.svc.Get(ctx, app.ID); !errors.Is(err, applicationerrors.ErrNotFound) {
 		t.Errorf("get draft = %v", err)
 	}
-	if _, err := e.svc.Take(ctx, reviewdomain.TakeCommand{ApplicationID: app.ID, Reviewer: me, ExpectedRevision: 4}); !errors.Is(err, crediterrors.ErrNotFound) {
+	if _, err := e.svc.Take(ctx, reviewdomain.TakeCommand{ApplicationID: app.ID, Reviewer: me, ExpectedRevision: 4}); !errors.Is(err, applicationerrors.ErrNotFound) {
 		t.Errorf("take draft = %v", err)
 	}
 }
@@ -440,7 +440,7 @@ func TestListPages(t *testing.T) {
 	if _, _, err := e.svc.List(ctx, reviewdomain.Filter{Limit: 101}); err == nil {
 		t.Error("limit 101 accepted")
 	}
-	if _, _, err := e.svc.List(ctx, reviewdomain.Filter{Status: ptr(creditdomain.StatusDraft)}); err == nil {
+	if _, _, err := e.svc.List(ctx, reviewdomain.Filter{Status: ptr(applicationdomain.StatusDraft)}); err == nil {
 		t.Error("draft filter accepted")
 	}
 }

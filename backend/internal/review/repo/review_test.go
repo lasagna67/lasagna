@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 	reviewdomain "github.com/lasagna67/lasagna.git/internal/review/domain"
 	reviewerrors "github.com/lasagna67/lasagna.git/internal/review/errors"
 )
@@ -89,7 +89,7 @@ func seed(t *testing.T, pool *pgxpool.Pool) fixture {
 }
 
 // application — отправленная заявка express в статусе status, revision 4.
-func (f fixture) application(t *testing.T, status creditdomain.Status) uuid.UUID {
+func (f fixture) application(t *testing.T, status applicationdomain.Status) uuid.UUID {
 	t.Helper()
 	var id uuid.UUID
 	err := f.pool.QueryRow(context.Background(), `
@@ -112,18 +112,18 @@ func TestUpdateChecksRevision(t *testing.T) {
 	f := seed(t, testPool(t))
 	repo := New(f.pool)
 	ctx := context.Background()
-	id := f.application(t, creditdomain.StatusManualReview)
+	id := f.application(t, applicationdomain.StatusManualReview)
 
-	take := func(a *creditdomain.Application) (reviewdomain.Change, error) {
+	take := func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		_, err := reviewdomain.Take(a, f.reviewerID)
 		return reviewdomain.Change{}, err
 	}
-	_, err := repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 3, ActorID: &f.reviewerID}, take)
-	var conflict *crediterrors.RevisionConflictError
+	_, err := repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 3, ActorID: &f.reviewerID}, take)
+	var conflict *applicationerrors.RevisionConflictError
 	if !errors.As(err, &conflict) || conflict.Current != 4 {
 		t.Fatalf("stale update = %v; want RevisionConflictError{4}", err)
 	}
-	if _, err := repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, take); err != nil {
+	if _, err := repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, take); err != nil {
 		t.Fatal(err)
 	}
 	d, err := repo.GetDetails(ctx, id)
@@ -134,14 +134,14 @@ func TestUpdateChecksRevision(t *testing.T) {
 		t.Errorf("after take: revision %d, assignee %v", d.Revision, d.Assignee)
 	}
 	// Ошибка в fn откатывает всё.
-	_, err = repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 5}, func(a *creditdomain.Application) (reviewdomain.Change, error) {
+	_, err = repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 5}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		a.AssigneeID = nil
 		return reviewdomain.Change{}, errors.New("boom")
 	})
 	if d, _ := repo.GetDetails(ctx, id); err == nil || d.Revision != 5 || d.AssigneeID == nil {
 		t.Errorf("failed fn changed application: %v, revision %d", err, d.Revision)
 	}
-	if _, err := repo.GetDetails(ctx, uuid.New()); !errors.Is(err, crediterrors.ErrNotFound) {
+	if _, err := repo.GetDetails(ctx, uuid.New()); !errors.Is(err, applicationerrors.ErrNotFound) {
 		t.Errorf("missing application = %v", err)
 	}
 }
@@ -151,16 +151,16 @@ func TestInfoRequestRound(t *testing.T) {
 	f := seed(t, testPool(t))
 	repo := New(f.pool)
 	ctx := context.Background()
-	id := f.application(t, creditdomain.StatusManualReview)
+	id := f.application(t, applicationdomain.StatusManualReview)
 
 	req, err := reviewdomain.NewInfoRequest(uuid.New(), id, f.reviewerID, "Уточните сумму", []string{"request.amount_kopecks", "collateral"}, timeNow())
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *creditdomain.Application) (reviewdomain.Change, error) {
+	_, err = repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		tr, err := a.RequestInfo()
 		return reviewdomain.Change{
-			Transitions: []creditdomain.Transition{tr}, Comment: &req.Message, InfoRequest: &req,
+			Transitions: []applicationdomain.Transition{tr}, Comment: &req.Message, InfoRequest: &req,
 			Notification: &reviewdomain.Notification{UserID: a.ApplicantID, ApplicationID: a.ID, Type: reviewdomain.NotificationInfoRequested, Title: "Нужны сведения", Body: req.Message},
 		}, err
 	})
@@ -168,7 +168,7 @@ func TestInfoRequestRound(t *testing.T) {
 		t.Fatal(err)
 	}
 	d, _ := repo.GetDetails(ctx, id)
-	if d.Status != creditdomain.StatusInfoRequested || d.Info.Open != 1 || !slices.Equal(d.Info.EditableFields, []string{"request.amount_kopecks", "collateral"}) {
+	if d.Status != applicationdomain.StatusInfoRequested || d.Info.Open != 1 || !slices.Equal(d.Info.EditableFields, []string{"request.amount_kopecks", "collateral"}) {
 		t.Fatalf("round = %s %+v", d.Status, d.Info)
 	}
 	var notified int
@@ -186,13 +186,13 @@ func TestInfoRequestRound(t *testing.T) {
 	if err := stored.Respond(f.applicantID, "Сумма прежняя", timeNow()); err != nil {
 		t.Fatal(err)
 	}
-	answer := func(a *creditdomain.Application) (reviewdomain.Change, error) {
+	answer := func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		return reviewdomain.Change{AnsweredRequest: &stored}, nil
 	}
-	if _, err := repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 5, ActorID: &f.applicantID}, answer); err != nil {
+	if _, err := repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 5, ActorID: &f.applicantID}, answer); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 6, ActorID: &f.applicantID}, answer); !errors.Is(err, crediterrors.ErrInvalidState) {
+	if _, err := repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 6, ActorID: &f.applicantID}, answer); !errors.Is(err, applicationerrors.ErrInvalidState) {
 		t.Errorf("second answer = %v; want ErrInvalidState", err)
 	}
 	d, _ = repo.GetDetails(ctx, id)
@@ -200,13 +200,13 @@ func TestInfoRequestRound(t *testing.T) {
 		t.Errorf("answered round = %+v", d.Info)
 	}
 
-	key := creditdomain.IdempotencyKey{UserID: f.applicantID, Operation: creditdomain.OperationResubmit, ResourceID: &id, Key: "k1",
+	key := applicationdomain.IdempotencyKey{UserID: f.applicantID, Operation: applicationdomain.OperationResubmit, ResourceID: &id, Key: "k1",
 		RequestHash: "1111111111111111111111111111111111111111111111111111111111111111"}
-	resubmit := func(a *creditdomain.Application) (reviewdomain.Change, error) {
+	resubmit := func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		tr, err := a.Resubmit()
-		return reviewdomain.Change{Transitions: []creditdomain.Transition{tr}}, err
+		return reviewdomain.Change{Transitions: []applicationdomain.Transition{tr}}, err
 	}
-	cmd := reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 6, ActorID: &f.applicantID, Key: &key}
+	cmd := applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 6, ActorID: &f.applicantID, Key: &key}
 	if replayed, err := repo.Update(ctx, cmd, resubmit); err != nil || replayed {
 		t.Fatalf("resubmit = %v, replayed %v", err, replayed)
 	}
@@ -217,11 +217,11 @@ func TestInfoRequestRound(t *testing.T) {
 	other := key
 	other.RequestHash = "2222222222222222222222222222222222222222222222222222222222222222"
 	cmd.Key = &other
-	if _, err := repo.Update(ctx, cmd, resubmit); !errors.Is(err, crediterrors.ErrIdempotencyConflict) {
+	if _, err := repo.Update(ctx, cmd, resubmit); !errors.Is(err, applicationerrors.ErrIdempotencyConflict) {
 		t.Errorf("other body = %v; want ErrIdempotencyConflict", err)
 	}
 	d, _ = repo.GetDetails(ctx, id)
-	if d.Status != creditdomain.StatusSubmitted || d.Revision != 7 {
+	if d.Status != applicationdomain.StatusSubmitted || d.Revision != 7 {
 		t.Errorf("after resubmit: %s, revision %d", d.Status, d.Revision)
 	}
 
@@ -240,7 +240,7 @@ func TestDecisionWithContract(t *testing.T) {
 	f := seed(t, testPool(t))
 	repo := New(f.pool)
 	ctx := context.Background()
-	id := f.application(t, creditdomain.StatusManualReview)
+	id := f.application(t, applicationdomain.StatusManualReview)
 
 	product, err := repo.Product(ctx, "express")
 	if err != nil {
@@ -274,9 +274,9 @@ func TestDecisionWithContract(t *testing.T) {
 			MonthlyPaymentKopecks: ptr(int64(9367153)), BankAccountID: &f.accountID},
 	}
 	decision.Contract = &reviewdomain.Contract{ID: docID, Version: 1, OfferID: decision.ID}
-	_, err = repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *creditdomain.Application) (reviewdomain.Change, error) {
+	_, err = repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		tr, err := a.Approve()
-		return reviewdomain.Change{Transitions: []creditdomain.Transition{tr}, Document: &doc, Decision: &decision}, err
+		return reviewdomain.Change{Transitions: []applicationdomain.Transition{tr}, Document: &doc, Decision: &decision}, err
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -287,7 +287,7 @@ func TestDecisionWithContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	o := d.Offer
-	if d.Status != creditdomain.StatusApproved || o == nil || o.Terms == nil || o.Contract == nil {
+	if d.Status != applicationdomain.StatusApproved || o == nil || o.Terms == nil || o.Contract == nil {
 		t.Fatalf("status %s, offer %+v", d.Status, o)
 	}
 	if o.Terms.ProductCode != "express" || *o.Terms.MonthlyPaymentKopecks != 9367153 || *o.DecidedBy != f.reviewerID ||
@@ -312,13 +312,13 @@ func TestRejectedDecision(t *testing.T) {
 	f := seed(t, testPool(t))
 	repo := New(f.pool)
 	ctx := context.Background()
-	id := f.application(t, creditdomain.StatusManualReview)
+	id := f.application(t, applicationdomain.StatusManualReview)
 
 	rejected := reviewdomain.Decision{ID: uuid.New(), ApplicationID: id, Version: 1, Outcome: reviewdomain.OutcomeRejected,
 		ChangedFields: []string{}, ReasonCode: ptr("HIGH_DEBT_LOAD"), Reasons: []string{"Высокая нагрузка"}, DecidedBy: &f.reviewerID}
-	_, err := repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *creditdomain.Application) (reviewdomain.Change, error) {
+	_, err := repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		tr, err := a.Reject()
-		return reviewdomain.Change{Transitions: []creditdomain.Transition{tr}, Decision: &rejected}, err
+		return reviewdomain.Change{Transitions: []applicationdomain.Transition{tr}, Decision: &rejected}, err
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -327,7 +327,7 @@ func TestRejectedDecision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Status != creditdomain.StatusRejected || r.Offer != nil || len(r.Decisions) != 1 || r.Decisions[0].Terms != nil ||
+	if r.Status != applicationdomain.StatusRejected || r.Offer != nil || len(r.Decisions) != 1 || r.Decisions[0].Terms != nil ||
 		*r.Decisions[0].ReasonCode != "HIGH_DEBT_LOAD" || !slices.Equal(r.Decisions[0].Reasons, []string{"Высокая нагрузка"}) {
 		t.Errorf("review: status %s, offer %v, decisions %+v", r.Status, r.Offer, r.Decisions)
 	}
@@ -339,7 +339,7 @@ func TestCollateralFromCollateralModule(t *testing.T) {
 	f := seed(t, testPool(t))
 	repo := New(f.pool)
 	ctx := context.Background()
-	id := f.application(t, creditdomain.StatusManualReview)
+	id := f.application(t, applicationdomain.StatusManualReview)
 
 	c := collateraldomain.Collateral{Revision: 1, Type: "vehicle", Ownership: "existing", Description: "Газель", DeclaredValueKopecks: 150000000}
 	_, err := f.pool.Exec(ctx, `
@@ -380,10 +380,10 @@ func TestListFilters(t *testing.T) {
 	f := seed(t, testPool(t))
 	repo := New(f.pool)
 	ctx := context.Background()
-	free := f.application(t, creditdomain.StatusManualReview)
-	mine := f.application(t, creditdomain.StatusManualReview)
-	approved := f.application(t, creditdomain.StatusApproved)
-	draft := f.application(t, creditdomain.StatusDraft)
+	free := f.application(t, applicationdomain.StatusManualReview)
+	mine := f.application(t, applicationdomain.StatusManualReview)
+	approved := f.application(t, applicationdomain.StatusApproved)
+	draft := f.application(t, applicationdomain.StatusDraft)
 	if _, err := f.pool.Exec(ctx, `UPDATE applications SET assignee_id = $2 WHERE id = ANY($1)`, []uuid.UUID{mine, approved}, f.reviewerID); err != nil {
 		t.Fatal(err)
 	}
@@ -403,7 +403,7 @@ func TestListFilters(t *testing.T) {
 		}
 		return out
 	}
-	review := creditdomain.StatusManualReview
+	review := applicationdomain.StatusManualReview
 	if got := ids(reviewdomain.Filter{}); slices.Contains(got, draft) || len(got) != 3 {
 		t.Errorf("all = %v; want 3 without draft", got)
 	}
@@ -427,7 +427,7 @@ func TestChecksSummary(t *testing.T) {
 	f := seed(t, testPool(t))
 	checks := NewChecksRepo(f.pool)
 	ctx := context.Background()
-	id := f.application(t, creditdomain.StatusManualReview)
+	id := f.application(t, applicationdomain.StatusManualReview)
 
 	s, err := checks.Summary(ctx, id)
 	if err != nil {

@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
+	applicationdto "github.com/lasagna67/lasagna.git/internal/application/dto"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	authdomain "github.com/lasagna67/lasagna.git/internal/auth/domain"
-	creditdto "github.com/lasagna67/lasagna.git/internal/credit/dto"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 	reviewdomain "github.com/lasagna67/lasagna.git/internal/review/domain"
 	reviewdto "github.com/lasagna67/lasagna.git/internal/review/dto"
 	reviewerrors "github.com/lasagna67/lasagna.git/internal/review/errors"
@@ -83,7 +83,7 @@ func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, clientOnly, staf
 //	@Param			limit		query		int		false	"От 1 до 100, по умолчанию 20"
 //	@Param			cursor		query		string	false	"next_cursor предыдущей страницы"
 //	@Success		200			{object}	reviewdto.ApplicationPageResponse
-//	@Failure		400			{object}	creditdto.ErrorResponse	"INVALID_REQUEST"
+//	@Failure		400			{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
 //	@Failure		401			{object}	swagger.HTTPError
 //	@Failure		403			{object}	swagger.HTTPError	"не сотрудник"
 //	@Router			/underwriter/applications [get]
@@ -94,7 +94,7 @@ func (h *Handler) list(c *echo.Context) error {
 	}
 	status, ok := reviewdto.ParseStatus(c.QueryParam("status"))
 	if !ok {
-		return h.fail(c, &crediterrors.RequestError{Message: "Неизвестный статус заявки"})
+		return h.fail(c, &applicationerrors.RequestError{Message: "Неизвестный статус заявки"})
 	}
 	f := reviewdomain.Filter{Status: status}
 	switch a := c.QueryParam("assignee"); a {
@@ -106,21 +106,21 @@ func (h *Handler) list(c *echo.Context) error {
 	default:
 		id, err := uuid.Parse(a)
 		if err != nil {
-			return h.fail(c, &crediterrors.RequestError{Message: "assignee — me, none или id сотрудника"})
+			return h.fail(c, &applicationerrors.RequestError{Message: "assignee — me, none или id сотрудника"})
 		}
 		f.Assignee, f.AssigneeID = reviewdomain.AssigneeUser, id
 	}
 	if l := c.QueryParam("limit"); l != "" {
 		n, err := strconv.Atoi(l)
 		if err != nil || n < 1 {
-			return h.fail(c, &crediterrors.RequestError{Message: "limit — от 1 до 100"})
+			return h.fail(c, &applicationerrors.RequestError{Message: "limit — от 1 до 100"})
 		}
 		f.Limit = n
 	}
 	if cur := c.QueryParam("cursor"); cur != "" {
 		after, err := reviewdto.DecodeCursor(cur)
 		if err != nil {
-			return h.fail(c, &crediterrors.RequestError{Message: "Некорректный cursor"})
+			return h.fail(c, &applicationerrors.RequestError{Message: "Некорректный cursor"})
 		}
 		f.After = &after
 	}
@@ -144,7 +144,7 @@ func (h *Handler) list(c *echo.Context) error {
 //	@Success		200	{object}	reviewdto.ReviewApplicationResponse
 //	@Failure		401	{object}	swagger.HTTPError
 //	@Failure		403	{object}	swagger.HTTPError	"не сотрудник"
-//	@Failure		404	{object}	creditdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		404	{object}	applicationdto.ErrorResponse	"NOT_FOUND"
 //	@Router			/underwriter/applications/{id} [get]
 func (h *Handler) get(c *echo.Context) error {
 	reviewer, id, err := h.staffTarget(c)
@@ -170,9 +170,9 @@ func (h *Handler) get(c *echo.Context) error {
 //	@Param			id		path		string						true	"Заявка"	format(uuid)
 //	@Param			request	body		reviewdto.RevisionRequest	true	"Версия заявки"
 //	@Success		200		{object}	reviewdto.ReviewApplicationResponse
-//	@Failure		400		{object}	creditdto.ErrorResponse	"INVALID_REQUEST"
-//	@Failure		404		{object}	creditdto.ErrorResponse	"NOT_FOUND"
-//	@Failure		409		{object}	creditdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
+//	@Failure		400		{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
+//	@Failure		404		{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		409		{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
 //	@Router			/underwriter/applications/{id}/take [post]
 func (h *Handler) take(c *echo.Context) error {
 	reviewer, id, err := h.staffTarget(c)
@@ -205,11 +205,11 @@ func (h *Handler) take(c *echo.Context) error {
 //	@Param			id		path		string							true	"Заявка"	format(uuid)
 //	@Param			request	body		reviewdto.RequestInfoRequest	true	"Запрос"
 //	@Success		200		{object}	reviewdto.ReviewApplicationResponse
-//	@Failure		400		{object}	creditdto.ErrorResponse	"INVALID_REQUEST"
-//	@Failure		403		{object}	creditdto.ErrorResponse	"FORBIDDEN: заявка у другого сотрудника"
-//	@Failure		404		{object}	creditdto.ErrorResponse	"NOT_FOUND"
-//	@Failure		409		{object}	creditdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
-//	@Failure		422		{object}	creditdto.ErrorResponse	"VALIDATION_FAILED"
+//	@Failure		400		{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
+//	@Failure		403		{object}	applicationdto.ErrorResponse	"FORBIDDEN: заявка у другого сотрудника"
+//	@Failure		404		{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		409		{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
+//	@Failure		422		{object}	applicationdto.ErrorResponse	"VALIDATION_FAILED"
 //	@Router			/underwriter/applications/{id}/request-info [post]
 func (h *Handler) requestInfo(c *echo.Context) error {
 	reviewer, id, err := h.staffTarget(c)
@@ -245,12 +245,12 @@ func (h *Handler) requestInfo(c *echo.Context) error {
 //	@Param			id		path		string						true	"Заявка"	format(uuid)
 //	@Param			request	body		reviewdto.DecisionRequest	true	"Решение"
 //	@Success		200		{object}	reviewdto.ReviewApplicationResponse
-//	@Failure		400		{object}	creditdto.ErrorResponse	"INVALID_REQUEST"
-//	@Failure		403		{object}	creditdto.ErrorResponse	"FORBIDDEN: заявка у другого сотрудника"
-//	@Failure		404		{object}	creditdto.ErrorResponse	"NOT_FOUND"
-//	@Failure		409		{object}	creditdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
-//	@Failure		422		{object}	creditdto.ErrorResponse	"VALIDATION_FAILED: условия, проверки, залог"
-//	@Failure		503		{object}	creditdto.ErrorResponse	"SERVICE_UNAVAILABLE: хранилище договоров"
+//	@Failure		400		{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
+//	@Failure		403		{object}	applicationdto.ErrorResponse	"FORBIDDEN: заявка у другого сотрудника"
+//	@Failure		404		{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		409		{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
+//	@Failure		422		{object}	applicationdto.ErrorResponse	"VALIDATION_FAILED: условия, проверки, залог"
+//	@Failure		503		{object}	applicationdto.ErrorResponse	"SERVICE_UNAVAILABLE: хранилище договоров"
 //	@Router			/underwriter/applications/{id}/decision [post]
 func (h *Handler) decide(c *echo.Context) error {
 	reviewer, id, err := h.staffTarget(c)
@@ -288,12 +288,12 @@ func (h *Handler) decide(c *echo.Context) error {
 //	@Param			id		path		string							true	"Заявка"	format(uuid)
 //	@Param			request	body		reviewdto.RetryChecksRequest	true	"Источники"
 //	@Success		200		{object}	reviewdto.ReviewApplicationResponse
-//	@Failure		400		{object}	creditdto.ErrorResponse	"INVALID_REQUEST"
-//	@Failure		403		{object}	creditdto.ErrorResponse	"FORBIDDEN: заявка у другого сотрудника"
-//	@Failure		404		{object}	creditdto.ErrorResponse	"NOT_FOUND"
-//	@Failure		409		{object}	creditdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
-//	@Failure		422		{object}	creditdto.ErrorResponse	"VALIDATION_FAILED"
-//	@Failure		503		{object}	creditdto.ErrorResponse	"SERVICE_UNAVAILABLE"
+//	@Failure		400		{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
+//	@Failure		403		{object}	applicationdto.ErrorResponse	"FORBIDDEN: заявка у другого сотрудника"
+//	@Failure		404		{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		409		{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
+//	@Failure		422		{object}	applicationdto.ErrorResponse	"VALIDATION_FAILED"
+//	@Failure		503		{object}	applicationdto.ErrorResponse	"SERVICE_UNAVAILABLE"
 //	@Router			/underwriter/applications/{id}/retry-checks [post]
 func (h *Handler) retryChecks(c *echo.Context) error {
 	reviewer, id, err := h.staffTarget(c)
@@ -327,7 +327,7 @@ func (h *Handler) retryChecks(c *echo.Context) error {
 //	@Param		id	path		string	true	"Заявка"	format(uuid)
 //	@Success	200	{array}		reviewdto.InfoRequestResponse
 //	@Failure	401	{object}	swagger.HTTPError
-//	@Failure	404	{object}	creditdto.ErrorResponse	"NOT_FOUND: нет заявки или она чужая"
+//	@Failure	404	{object}	applicationdto.ErrorResponse	"NOT_FOUND: нет заявки или она чужая"
 //	@Router		/applications/{id}/info-requests [get]
 func (h *Handler) infoRequests(c *echo.Context) error {
 	userID, id, err := h.clientTarget(c)
@@ -352,11 +352,11 @@ func (h *Handler) infoRequests(c *echo.Context) error {
 //	@Param			id		path		string						true	"Заявка"	format(uuid)
 //	@Param			rid		path		string						true	"Запрос"	format(uuid)
 //	@Param			request	body		reviewdto.AnswerInfoRequest	true	"Ответ"
-//	@Success		200		{object}	creditdto.ApplicationResponse
-//	@Failure		400		{object}	creditdto.ErrorResponse	"INVALID_REQUEST"
-//	@Failure		404		{object}	creditdto.ErrorResponse	"NOT_FOUND"
-//	@Failure		409		{object}	creditdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
-//	@Failure		422		{object}	creditdto.ErrorResponse	"VALIDATION_FAILED"
+//	@Success		200		{object}	applicationdto.ApplicationResponse
+//	@Failure		400		{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
+//	@Failure		404		{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		409		{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
+//	@Failure		422		{object}	applicationdto.ErrorResponse	"VALIDATION_FAILED"
 //	@Router			/applications/{id}/info-requests/{rid}/answer [post]
 func (h *Handler) answerInfo(c *echo.Context) error {
 	userID, id, err := h.clientTarget(c)
@@ -393,10 +393,10 @@ func (h *Handler) answerInfo(c *echo.Context) error {
 //	@Param			id				path		string						true	"Заявка"	format(uuid)
 //	@Param			Idempotency-Key	header		string						true	"Ключ повтора, до 255 символов"
 //	@Param			request			body		reviewdto.RevisionRequest	true	"Версия заявки"
-//	@Success		200				{object}	creditdto.ApplicationResponse
-//	@Failure		400				{object}	creditdto.ErrorResponse	"INVALID_REQUEST"
-//	@Failure		404				{object}	creditdto.ErrorResponse	"NOT_FOUND"
-//	@Failure		409				{object}	creditdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT"
+//	@Success		200				{object}	applicationdto.ApplicationResponse
+//	@Failure		400				{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
+//	@Failure		404				{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		409				{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT"
 //	@Router			/applications/{id}/resubmit [post]
 func (h *Handler) resubmit(c *echo.Context) error {
 	userID, id, err := h.clientTarget(c)
@@ -426,7 +426,7 @@ func (h *Handler) resubmit(c *echo.Context) error {
 //	@Security	BearerAuth
 //	@Param		id	path		string	true	"Заявка"	format(uuid)
 //	@Success	200	{object}	reviewdto.OfferResponse	"null — предложения нет"
-//	@Failure	404	{object}	creditdto.ErrorResponse	"NOT_FOUND"
+//	@Failure	404	{object}	applicationdto.ErrorResponse	"NOT_FOUND"
 //	@Router		/applications/{id}/offer [get]
 func (h *Handler) offer(c *echo.Context) error {
 	userID, id, err := h.clientTarget(c)
@@ -452,7 +452,7 @@ func (h *Handler) offer(c *echo.Context) error {
 //	@Security		BearerAuth
 //	@Param			id	path		string	true	"Заявка"	format(uuid)
 //	@Success		200	{object}	reviewdto.ContractResponse	"null — договора нет"
-//	@Failure		404	{object}	creditdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		404	{object}	applicationdto.ErrorResponse	"NOT_FOUND"
 //	@Router			/applications/{id}/contract [get]
 func (h *Handler) contract(c *echo.Context) error {
 	userID, id, err := h.clientTarget(c)
@@ -479,8 +479,8 @@ func (h *Handler) contract(c *echo.Context) error {
 //	@Param			id	path		string	true	"Документ"	format(uuid)
 //	@Success		200	{file}		binary
 //	@Failure		401	{object}	swagger.HTTPError
-//	@Failure		404	{object}	creditdto.ErrorResponse	"NOT_FOUND"
-//	@Failure		503	{object}	creditdto.ErrorResponse	"SERVICE_UNAVAILABLE"
+//	@Failure		404	{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		503	{object}	applicationdto.ErrorResponse	"SERVICE_UNAVAILABLE"
 //	@Router			/documents/{id}/content [get]
 func (h *Handler) documentContent(c *echo.Context) error {
 	claims, ok := authdomain.GetClaims(c.Request().Context())
@@ -526,7 +526,7 @@ func (h *Handler) staffTarget(c *echo.Context) (reviewdomain.Reviewer, uuid.UUID
 	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		return reviewdomain.Reviewer{}, uuid.Nil, crediterrors.ErrNotFound
+		return reviewdomain.Reviewer{}, uuid.Nil, applicationerrors.ErrNotFound
 	}
 	return reviewer, id, nil
 }
@@ -539,7 +539,7 @@ func (h *Handler) clientTarget(c *echo.Context) (uuid.UUID, uuid.UUID, error) {
 	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		return uuid.Nil, uuid.Nil, crediterrors.ErrNotFound
+		return uuid.Nil, uuid.Nil, applicationerrors.ErrNotFound
 	}
 	return claims.UserID, id, nil
 }
@@ -549,10 +549,10 @@ var errUnauthenticated = errors.New("unauthenticated")
 // bindRevision читает тело и обязательный expected_revision.
 func bindRevision(c *echo.Context, req any, revision **int) (int, error) {
 	if err := c.Bind(req); err != nil {
-		return 0, &crediterrors.RequestError{Message: "Некорректное тело запроса"}
+		return 0, &applicationerrors.RequestError{Message: "Некорректное тело запроса"}
 	}
 	if *revision == nil {
-		return 0, &crediterrors.RequestError{Message: "Передайте expected_revision"}
+		return 0, &applicationerrors.RequestError{Message: "Передайте expected_revision"}
 	}
 	return **revision, nil
 }
@@ -560,9 +560,9 @@ func bindRevision(c *echo.Context, req any, revision **int) (int, error) {
 // fail переводит ошибку сервиса в ответ общего формата. 5xx логируются
 // с заявкой и кодом; клиенту уходит только общий текст.
 func (h *Handler) fail(c *echo.Context, err error) error {
-	var requestErr *crediterrors.RequestError
-	var validationErr *crediterrors.ValidationError
-	var conflict *crediterrors.RevisionConflictError
+	var requestErr *applicationerrors.RequestError
+	var validationErr *applicationerrors.ValidationError
+	var conflict *applicationerrors.RevisionConflictError
 	switch {
 	case errors.Is(err, errUnauthenticated):
 		return h.respond(c, http.StatusUnauthorized, "UNAUTHENTICATED", "Требуется авторизация", nil)
@@ -571,26 +571,26 @@ func (h *Handler) fail(c *echo.Context, err error) error {
 	case errors.As(err, &validationErr):
 		return h.respond(c, http.StatusUnprocessableEntity, "VALIDATION_FAILED", "Исправьте поля", validationErr.Fields)
 	case errors.As(err, &conflict):
-		resp := creditdto.NewErrorResponse("REVISION_CONFLICT", "Заявка уже изменилась — обновите данные", requestID(c), nil)
+		resp := applicationdto.NewErrorResponse("REVISION_CONFLICT", "Заявка уже изменилась — обновите данные", requestID(c), nil)
 		resp.Error.CurrentRevision = &conflict.Current
 		return c.JSON(http.StatusConflict, resp)
-	case errors.Is(err, crediterrors.ErrIdempotencyConflict):
+	case errors.Is(err, applicationerrors.ErrIdempotencyConflict):
 		return h.respond(c, http.StatusConflict, "IDEMPOTENCY_CONFLICT", "Idempotency-Key уже использован с другим запросом", nil)
 	case errors.Is(err, reviewerrors.ErrTakenByOther):
 		return h.respond(c, http.StatusConflict, "INVALID_STATE", "Заявку уже взял другой сотрудник", nil)
-	case errors.Is(err, crediterrors.ErrInfoRequestsOpen):
+	case errors.Is(err, applicationerrors.ErrInfoRequestsOpen):
 		return h.respond(c, http.StatusConflict, "INVALID_STATE", "Сначала ответьте на все запросы банка", nil)
-	case errors.Is(err, crediterrors.ErrInvalidState):
+	case errors.Is(err, applicationerrors.ErrInvalidState):
 		return h.respond(c, http.StatusConflict, "INVALID_STATE", "Действие недоступно в текущем статусе заявки", nil)
 	case errors.Is(err, reviewerrors.ErrNotAssignee):
 		return h.respond(c, http.StatusForbidden, "FORBIDDEN", "Заявка назначена другому сотруднику", nil)
-	case errors.Is(err, crediterrors.ErrNotFound):
+	case errors.Is(err, applicationerrors.ErrNotFound):
 		return h.respond(c, http.StatusNotFound, "NOT_FOUND", "Заявка не найдена", nil)
 	case errors.Is(err, reviewerrors.ErrInfoRequestNotFound):
 		return h.respond(c, http.StatusNotFound, "NOT_FOUND", "Запрос не найден", nil)
 	case errors.Is(err, reviewerrors.ErrDocumentNotFound):
 		return h.respond(c, http.StatusNotFound, "NOT_FOUND", "Документ не найден", nil)
-	case errors.Is(err, crediterrors.ErrServiceUnavailable):
+	case errors.Is(err, applicationerrors.ErrServiceUnavailable):
 		h.log(c, "SERVICE_UNAVAILABLE", err)
 		return h.respond(c, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Сервис временно недоступен, попробуйте позже", nil)
 	default:
@@ -610,8 +610,8 @@ func (h *Handler) log(c *echo.Context, code string, err error) {
 	)
 }
 
-func (h *Handler) respond(c *echo.Context, status int, code, message string, fields []crediterrors.FieldError) error {
-	return c.JSON(status, creditdto.NewErrorResponse(code, message, requestID(c), fields))
+func (h *Handler) respond(c *echo.Context, status int, code, message string, fields []applicationerrors.FieldError) error {
+	return c.JSON(status, applicationdto.NewErrorResponse(code, message, requestID(c), fields))
 }
 
 // requestID — id запроса от middleware RequestID или прокси; пусто, если его нет.

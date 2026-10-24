@@ -1,4 +1,4 @@
-package creditdomain
+package applicationdomain
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 )
 
 // Статус заявки на кредит — state машина
@@ -183,6 +183,15 @@ type IdempotencyKey struct {
 	RequestHash string
 }
 
+// UpdateCommand — изменение заявки с optimistic locking. Key задан — повтор с
+// тем же ключом и телом не меняет заявку, а возвращает replayed.
+type UpdateCommand struct {
+	ID               uuid.UUID
+	ExpectedRevision int
+	ActorID          *uuid.UUID // nil — конвейер
+	Key              *IdempotencyKey
+}
+
 //=================================================================================================
 // ПЕРЕХОДЫ СТАТУСА:
 
@@ -216,7 +225,7 @@ func NewDraft(id, companyID, applicantID uuid.UUID) (Application, Transition) {
 // При ошибке статус не меняется.
 func (a *Application) transit(to Status, from ...Status) (Transition, error) {
 	if !slices.Contains(from, a.Status) {
-		return Transition{}, fmt.Errorf("%w: %s -> %s", crediterrors.ErrInvalidState, a.Status, to)
+		return Transition{}, fmt.Errorf("%w: %s -> %s", applicationerrors.ErrInvalidState, a.Status, to)
 	}
 	tr := Transition{From: a.Status, To: to}
 	a.Status = to
@@ -235,7 +244,7 @@ func (a *Application) Submit() (Transition, error) {
 // Заявка та же, конвейер повторяет затронутые проверки.
 func (a *Application) Resubmit() (Transition, error) {
 	if a.Status == StatusInfoRequested && a.Info.Open > 0 {
-		return Transition{}, fmt.Errorf("%w: %d open", crediterrors.ErrInfoRequestsOpen, a.Info.Open)
+		return Transition{}, fmt.Errorf("%w: %d open", applicationerrors.ErrInfoRequestsOpen, a.Info.Open)
 	}
 	return a.transit(StatusSubmitted, StatusInfoRequested)
 }
@@ -309,7 +318,7 @@ func (a *Application) Issue() (Transition, error) {
 // предложение бессрочно и не истекает.
 func (a *Application) Expire(validUntil *time.Time, now time.Time) (Transition, error) {
 	if validUntil == nil || now.Before(*validUntil) {
-		return Transition{}, fmt.Errorf("%w: offer is not expired", crediterrors.ErrInvalidState)
+		return Transition{}, fmt.Errorf("%w: offer is not expired", applicationerrors.ErrInvalidState)
 	}
 	return a.transit(StatusExpired, StatusApproved, StatusCounterOffer)
 }

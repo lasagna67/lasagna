@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 )
 
 const companyINN = "7705005410"
@@ -35,25 +35,25 @@ func readyChecks() CheckSummary {
 
 // application — заявка на рассмотрении у reviewerID: express, 1 млн на 12 месяцев без залога.
 func application() Details {
-	purpose := creditdomain.PurposeWorkingCapital
-	return Details{ApplicationDetails: creditdomain.ApplicationDetails{
-		Application: creditdomain.Application{
+	purpose := applicationdomain.PurposeWorkingCapital
+	return Details{ApplicationDetails: applicationdomain.ApplicationDetails{
+		Application: applicationdomain.Application{
 			ID:         uuid.New(),
 			Number:     1000,
 			Revision:   5,
 			CompanyID:  companyID,
-			Status:     creditdomain.StatusManualReview,
+			Status:     applicationdomain.StatusManualReview,
 			AssigneeID: ptr(reviewerID),
-			Request: creditdomain.Request{
+			Request: applicationdomain.Request{
 				Purpose:        &purpose,
 				AmountKopecks:  ptr(int64(100000000)),
-				NeedPeriod:     creditdomain.NeedPeriod{Unit: creditdomain.NeedPeriodMonths, Value: ptr(12)},
+				NeedPeriod:     applicationdomain.NeedPeriod{Unit: applicationdomain.NeedPeriodMonths, Value: ptr(12)},
 				ProductCode:    ptr("express"),
 				TermMonths:     ptr(12),
-				CollateralMode: creditdomain.CollateralNone,
+				CollateralMode: applicationdomain.CollateralNone,
 			},
 		},
-		Company: creditdomain.CompanyCard{ID: companyID, Name: "ООО «Кедр»", INN: companyINN},
+		Company: applicationdomain.CompanyCard{ID: companyID, Name: "ООО «Кедр»", INN: companyINN},
 	}}
 }
 
@@ -61,7 +61,7 @@ func application() Details {
 func pledged(app Details, code string, amount int64) Details {
 	app.Request.ProductCode = ptr(code)
 	app.Request.AmountKopecks = ptr(amount)
-	app.Request.CollateralMode = creditdomain.CollateralPledged
+	app.Request.CollateralMode = applicationdomain.CollateralPledged
 	app.Collateral = &collateraldomain.Collateral{Revision: 1, Type: "equipment", Ownership: "acquired",
 		Description: "Станок ЧПУ", DeclaredValueKopecks: 300000000}
 	return app
@@ -118,7 +118,7 @@ func context(app Details, p *Product) DecisionContext {
 
 // fieldErrors — «поле:код» из ValidationError; nil, если ошибка другая.
 func fieldErrors(err error) []string {
-	var v *crediterrors.ValidationError
+	var v *applicationerrors.ValidationError
 	if !errors.As(err, &v) {
 		return nil
 	}
@@ -283,7 +283,7 @@ func TestDecideOverdraft(t *testing.T) {
 		app := application()
 		app.Request.ProductCode = ptr("overdraft")
 		app.Request.TermMonths = nil
-		app.Request.NeedPeriod = creditdomain.NeedPeriod{Unit: creditdomain.NeedPeriodDays, Value: ptr(45)}
+		app.Request.NeedPeriod = applicationdomain.NeedPeriod{Unit: applicationdomain.NeedPeriodDays, Value: ptr(45)}
 		return app
 	}
 	terms := func() *TermsInput {
@@ -424,18 +424,18 @@ func TestDecideRejected(t *testing.T) {
 
 func TestDecideState(t *testing.T) {
 	published := application()
-	published.Status = creditdomain.StatusApproved
+	published.Status = applicationdomain.StatusApproved
 	if _, _, err := Decide(uuid.New(), approve(expressTerms()), context(published, product("express"))); err != nil {
 		t.Errorf("new offer version before signing: %v", err)
 	}
 	reject := DecideCommand{Reviewer: Reviewer{ID: reviewerID}, Outcome: OutcomeRejected, ReasonCode: ptr("X"), Reasons: []string{"x"}}
-	if _, _, err := Decide(uuid.New(), reject, context(published, nil)); !errors.Is(err, crediterrors.ErrInvalidState) {
+	if _, _, err := Decide(uuid.New(), reject, context(published, nil)); !errors.Is(err, applicationerrors.ErrInvalidState) {
 		t.Errorf("reject published offer: %v; want ErrInvalidState", err)
 	}
-	for _, s := range []creditdomain.Status{creditdomain.StatusDraft, creditdomain.StatusInfoRequested, creditdomain.StatusSigning, creditdomain.StatusRejected} {
+	for _, s := range []applicationdomain.Status{applicationdomain.StatusDraft, applicationdomain.StatusInfoRequested, applicationdomain.StatusSigning, applicationdomain.StatusRejected} {
 		app := application()
 		app.Status = s
-		if _, _, err := Decide(uuid.New(), approve(expressTerms()), context(app, product("express"))); !errors.Is(err, crediterrors.ErrInvalidState) {
+		if _, _, err := Decide(uuid.New(), approve(expressTerms()), context(app, product("express"))); !errors.Is(err, applicationerrors.ErrInvalidState) {
 			t.Errorf("approve in %s: %v; want ErrInvalidState", s, err)
 		}
 	}

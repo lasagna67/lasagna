@@ -14,9 +14,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	authdomain "github.com/lasagna67/lasagna.git/internal/auth/domain"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 	reviewdomain "github.com/lasagna67/lasagna.git/internal/review/domain"
 	reviewerrors "github.com/lasagna67/lasagna.git/internal/review/errors"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
@@ -41,11 +41,11 @@ type fakeService struct {
 }
 
 func review() reviewdomain.Review {
-	return reviewdomain.Review{Details: reviewdomain.Details{ApplicationDetails: creditdomain.ApplicationDetails{
-		Application: creditdomain.Application{
-			ID: appID, Number: 1000, Revision: 5, Status: creditdomain.StatusManualReview,
+	return reviewdomain.Review{Details: reviewdomain.Details{ApplicationDetails: applicationdomain.ApplicationDetails{
+		Application: applicationdomain.Application{
+			ID: appID, Number: 1000, Revision: 5, Status: applicationdomain.StatusManualReview,
 			AssigneeID: &underwriter.UserID, CreatedAt: time.Now(), UpdatedAt: time.Now(),
-			Request: creditdomain.Request{NeedPeriod: creditdomain.NeedPeriod{Unit: creditdomain.NeedPeriodUnknown}, CollateralMode: creditdomain.CollateralNone},
+			Request: applicationdomain.Request{NeedPeriod: applicationdomain.NeedPeriod{Unit: applicationdomain.NeedPeriodUnknown}, CollateralMode: applicationdomain.CollateralNone},
 		},
 	}}}
 }
@@ -157,7 +157,7 @@ func TestListParsesQuery(t *testing.T) {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
 	}
 	f := svc.filter
-	if *f.Status != creditdomain.StatusManualReview || f.Assignee != reviewdomain.AssigneeUser || f.AssigneeID != underwriter.UserID ||
+	if *f.Status != applicationdomain.StatusManualReview || f.Assignee != reviewdomain.AssigneeUser || f.AssigneeID != underwriter.UserID ||
 		f.Limit != 5 || f.After == nil || *f.After != 1000 {
 		t.Errorf("filter = %+v", f)
 	}
@@ -234,11 +234,11 @@ func TestErrors(t *testing.T) {
 		{"нет expected_revision", `{}`, nil, http.StatusBadRequest, "INVALID_REQUEST"},
 		{"битый json", `{"expected_revision":`, nil, http.StatusBadRequest, "INVALID_REQUEST"},
 		{"чужая заявка", `{"expected_revision":5}`, reviewerrors.ErrNotAssignee, http.StatusForbidden, "FORBIDDEN"},
-		{"нет заявки", `{"expected_revision":5}`, crediterrors.ErrNotFound, http.StatusNotFound, "NOT_FOUND"},
+		{"нет заявки", `{"expected_revision":5}`, applicationerrors.ErrNotFound, http.StatusNotFound, "NOT_FOUND"},
 		{"занята другим", `{"expected_revision":5}`, reviewerrors.ErrTakenByOther, http.StatusConflict, "INVALID_STATE"},
-		{"не тот статус", `{"expected_revision":5}`, crediterrors.ErrInvalidState, http.StatusConflict, "INVALID_STATE"},
-		{"поля", `{"expected_revision":5}`, &crediterrors.ValidationError{Fields: []crediterrors.FieldError{{Field: "collateral", Code: "REVIEW_REQUIRED"}}}, http.StatusUnprocessableEntity, "VALIDATION_FAILED"},
-		{"хранилище", `{"expected_revision":5}`, errors.Join(crediterrors.ErrServiceUnavailable, errors.New("minio")), http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE"},
+		{"не тот статус", `{"expected_revision":5}`, applicationerrors.ErrInvalidState, http.StatusConflict, "INVALID_STATE"},
+		{"поля", `{"expected_revision":5}`, &applicationerrors.ValidationError{Fields: []applicationerrors.FieldError{{Field: "collateral", Code: "REVIEW_REQUIRED"}}}, http.StatusUnprocessableEntity, "VALIDATION_FAILED"},
+		{"хранилище", `{"expected_revision":5}`, errors.Join(applicationerrors.ErrServiceUnavailable, errors.New("minio")), http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE"},
 		{"неожиданная", `{"expected_revision":5}`, errors.New("boom"), http.StatusInternalServerError, "INTERNAL_ERROR"},
 	}
 	for _, tt := range tests {
@@ -260,7 +260,7 @@ func TestErrors(t *testing.T) {
 
 // При REVISION_CONFLICT отдаётся current_revision.
 func TestRevisionConflict(t *testing.T) {
-	svc := &fakeService{err: &crediterrors.RevisionConflictError{Current: 7}}
+	svc := &fakeService{err: &applicationerrors.RevisionConflictError{Current: 7}}
 	rec := do(newTestServer(underwriter, svc), http.MethodPost, "/underwriter/applications/"+appID.String()+"/take", `{"expected_revision":5}`)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d", rec.Code)

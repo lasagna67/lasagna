@@ -9,9 +9,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	e "github.com/lasagna67/lasagna.git/internal/application/errors"
 	d "github.com/lasagna67/lasagna.git/internal/collateral/domain"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	e "github.com/lasagna67/lasagna.git/internal/credit/errors"
 )
 
 type Repo struct {
@@ -44,10 +44,10 @@ func lockApplication(ctx context.Context, tx pgx.Tx, id, user uuid.UUID, review 
 		return a, e.ErrRevisionConflict
 	}
 	if review {
-		if a.Status != creditdomain.StatusManualReview && a.Status != creditdomain.StatusInfoRequested {
+		if a.Status != applicationdomain.StatusManualReview && a.Status != applicationdomain.StatusInfoRequested {
 			return a, e.ErrInvalidState
 		}
-	} else if a.Status != creditdomain.StatusDraft && a.Status != creditdomain.StatusInfoRequested && a.Status != creditdomain.StatusManualReview {
+	} else if a.Status != applicationdomain.StatusDraft && a.Status != applicationdomain.StatusInfoRequested && a.Status != applicationdomain.StatusManualReview {
 		return a, e.ErrInvalidState
 	}
 	a.CollateralRequired = d.CollateralRequired(a.ProductCode, a.HasCollateral)
