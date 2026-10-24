@@ -350,6 +350,149 @@ definitions:
         - unavailable
         type: string
     type: object
+  creditproducts.CollateralMode:
+    enum:
+    - not_supported
+    - optional
+    - required
+    type: string
+    x-enum-varnames:
+    - CollateralNotSupported
+    - CollateralOptional
+    - CollateralRequired
+  creditproducts.CreditProduct:
+    properties:
+      base_rate:
+        description: nil — ставка не задана; её нельзя подменять нулём при расчёте
+          платежа.
+        example: 24
+        type: number
+      code:
+        example: start
+        type: string
+      collateral_mode:
+        allOf:
+        - $ref: '#/definitions/creditproducts.CollateralMode'
+        enum:
+        - not_supported
+        - optional
+        - required
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        format: uuid
+        type: string
+      is_active:
+        type: boolean
+      max_amount_kopecks:
+        example: 300000000
+        format: int64
+        type: integer
+      max_drawdown_days:
+        description: Для овердрафта — 60 дней на отдельный транш, для остальных продуктов
+          — nil.
+        example: 60
+        type: integer
+      max_term_months:
+        example: 36
+        type: integer
+      min_amount_kopecks:
+        example: 10000000
+        format: int64
+        type: integer
+      min_business_age_months:
+        example: 0
+        type: integer
+      min_term_months:
+        example: 12
+        type: integer
+      name:
+        example: Инвестиционный кредит «Старт»
+        type: string
+      purposes:
+        items:
+          $ref: '#/definitions/creditproducts.CreditPurpose'
+        type: array
+      repayment_type:
+        allOf:
+        - $ref: '#/definitions/creditproducts.RepaymentType'
+        enum:
+        - annuity
+        - overdraft
+      updated_at:
+        type: string
+    type: object
+  creditproducts.CreditPurpose:
+    enum:
+    - working_capital
+    - cash_gap
+    - equipment
+    - business_start
+    - business_launch
+    - business_expansion
+    - refinancing
+    - other
+    type: string
+    x-enum-comments:
+      PurposeBusinessLaunch: Старая цель для обратной совместимости.
+    x-enum-descriptions:
+    - ""
+    - ""
+    - ""
+    - ""
+    - Старая цель для обратной совместимости.
+    - ""
+    - ""
+    - ""
+    x-enum-varnames:
+    - PurposeWorkingCapital
+    - PurposeCashGap
+    - PurposeEquipment
+    - PurposeBusinessStart
+    - PurposeBusinessLaunch
+    - PurposeBusinessExpansion
+    - PurposeRefinancing
+    - PurposeOther
+  creditproducts.Eligibility:
+    enum:
+    - eligible
+    - needs_details
+    - ineligible
+    type: string
+    x-enum-varnames:
+    - Eligible
+    - NeedsDetails
+    - Ineligible
+  creditproducts.ProductSuggestion:
+    properties:
+      eligibility:
+        $ref: '#/definitions/creditproducts.Eligibility'
+      product:
+        $ref: '#/definitions/creditproducts.CreditProduct'
+      product_code:
+        type: string
+      reasons:
+        items:
+          $ref: '#/definitions/creditproducts.Reason'
+        type: array
+    type: object
+  creditproducts.Reason:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  creditproducts.RepaymentType:
+    enum:
+    - annuity
+    - overdraft
+    type: string
+    x-enum-varnames:
+    - RepaymentAnnuity
+    - RepaymentOverdraft
   dto.AuthResponse:
     properties:
       access_token:
@@ -891,6 +1034,91 @@ paths:
       summary: Карточка компании из реестра
       tags:
       - companies
+  /credit-products:
+    get:
+      description: 'Возвращает активные продукты, для которых не выявлено нарушений
+        формальных условий. Все query-параметры необязательны: при неполных данных
+        eligibility=needs_details, при полной проверке — eligible. Неподходящие продукты
+        исключаются. Без параметров возвращается активный каталог с причинами недостающих
+        данных; при отсутствии вариантов — []. Это предварительная проверка, а не
+        кредитное решение.'
+      parameters:
+      - description: Цель кредитования
+        enum:
+        - working_capital
+        - cash_gap
+        - equipment
+        - business_start
+        - business_launch
+        - business_expansion
+        - refinancing
+        - other
+        in: query
+        name: purpose
+        type: string
+      - description: Пояснение для цели other
+        in: query
+        name: purpose_description
+        type: string
+      - description: Сумма в копейках
+        format: int64
+        in: query
+        name: amount_kopecks
+        type: integer
+      - description: Срок аннуитетного кредита в месяцах; для овердрафта не используется
+        in: query
+        name: term_months
+        type: integer
+      - description: Период отдельного транша овердрафта в днях; для аннуитетного
+          кредита не используется
+        in: query
+        name: need_period_days
+        type: integer
+      - description: 'Дата регистрации бизнеса: YYYY-MM-DD; возраст рассчитывается
+          по дате Europe/Moscow'
+        format: date
+        in: query
+        name: registration_date
+        type: string
+      - description: required — с залогом, not_supported — без залога, optional —
+          выбор ещё не сделан
+        enum:
+        - not_supported
+        - optional
+        - required
+        in: query
+        name: collateral_mode
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/creditproducts.ProductSuggestion'
+            type: array
+        "400":
+          description: Некорректный формат параметров или неизвестное значение перечисления
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Подбор кредитных продуктов
+      tags:
+      - credit-products
   /users:
     post:
       consumes:
