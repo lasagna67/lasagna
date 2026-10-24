@@ -26,7 +26,7 @@ func NewApp(cfg config.Config, logger *logger.Logger) (*App, error) {
 		return nil, err
 	}
 
-	repo := NewRepo(infra)
+	repo := NewRepo(cfg, infra)
 	services, err := NewService(cfg, repo, logger.Named("services"))
 	if err != nil {
 		_ = infra.Close()

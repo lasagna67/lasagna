@@ -12,7 +12,8 @@ COPY pkg ./pkg
 
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrator ./cmd/migrator \
- && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/demo-seed ./cmd/demo-seed
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/demo-seed ./cmd/demo-seed \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/staff-seed ./cmd/staff-seed
 
 
 
@@ -39,13 +40,20 @@ CMD ["up"]
 
 
 
-# Demo accounts: one-shot API client, no direct database access.
+# Demo users/companies through the API; settlement accounts through PostgreSQL.
 FROM runtime AS demo-seed
 
 RUN mkdir -p /data && chown app:app /data
 COPY --from=builder /out/demo-seed ./demo-seed
 USER app:app
 ENTRYPOINT ["/app/demo-seed"]
+
+# Staff account: one-shot, direct database access — public registration cannot grant a staff role.
+FROM runtime AS staff-seed
+
+COPY --from=builder /out/staff-seed ./staff-seed
+USER app:app
+ENTRYPOINT ["/app/staff-seed"]
 
 # Server (стадия по умолчанию)
 FROM runtime AS server

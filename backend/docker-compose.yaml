@@ -71,6 +71,9 @@ services:
   minio:
     image: bitnamilegacy/minio:2025.7.23-debian-12-r5
     env_file: ../.env.docker
+    environment:
+      # Бакет договоров и подписей (S3_DOCUMENTS_BUCKET) создаётся при старте.
+      MINIO_DEFAULT_BUCKETS: ${S3_DOCUMENTS_BUCKET:-documents}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -156,6 +159,8 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      minio:
+        condition: service_healthy
       migrator:
         condition: service_completed_successfully
       registry-mock:
@@ -170,6 +175,8 @@ services:
     build:
       <<: *backend-build
       target: demo-seed
+    # Доступ к PostgreSQL нужен только для идемпотентного создания расчётных счетов.
+    env_file: ../.env.docker
     environment:
       DEMO_BACKEND_URL: http://backend:8080
       DEMO_REGISTRY_URL: http://registry-mock:8081
@@ -186,6 +193,23 @@ services:
         condition: service_healthy
       esign-mock:
         condition: service_healthy
+      financials-mock:
+        condition: service_healthy
+    restart: "no"
+
+  # Демо-сотрудник банка (underwriter). Пишет прямо в БД: публичная регистрация
+  # роль сотрудника не даёт. Повторный запуск дублей не создаёт.
+  staff-seed:
+    build:
+      <<: *backend-build
+      target: staff-seed
+    env_file: ../.env.docker
+    environment:
+      STAFF_EMAIL: ${STAFF_EMAIL:-underwriter@lasagna.demo}
+      STAFF_PASSWORD: ${STAFF_PASSWORD:-DemoUnderwriter2026!}
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
     restart: "no"
 
 volumes:

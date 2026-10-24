@@ -15,8 +15,10 @@ require (
 	github.com/labstack/echo/v5 v5.4.0
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/redis/go-redis/v9 v9.23.0
+	github.com/signintech/gopdf v0.38.1
 	github.com/twmb/franz-go v1.22.2
 	golang.org/x/crypto v0.58.0
+	golang.org/x/image v0.46.0
 	golang.org/x/sync v0.24.0
 )
 
@@ -41,7 +43,9 @@ require (
 	github.com/jackc/puddle/v2 v2.2.3 // indirect
 	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
+	github.com/phpdave11/gofpdi v1.0.14-0.20211212211723-1f10f9844311 // indirect
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
+	github.com/pkg/errors v0.8.1 // indirect
 	github.com/sethvargo/go-retry v0.5.0 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.15.0 // indirect
 	go.uber.org/atomic v1.12.0 // indirect

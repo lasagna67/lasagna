@@ -1,0 +1,518 @@
+// Package reviewdto — запросы и ответы рассмотрения заявки. Заявка строится
+// applicationdto; здесь — то, что добавляет рассмотрение, и раздельные ответы для
+// клиента и сотрудника: внутренние комментарии клиенту не попадают по типу.
+package reviewdto
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"strconv"
+	"time"
+
+	"github.com/google/uuid"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationdto "github.com/lasagna67/lasagna.git/internal/application/dto"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
+	reviewdomain "github.com/lasagna67/lasagna.git/internal/review/domain"
+)
+
+//============================================================================================
+// ЗАПРОСЫ. expected_revision обязателен: без него нельзя отличить устаревшую вкладку.
+
+type RevisionRequest struct {
+	ExpectedRevision *int `json:"expected_revision" example:"5"`
+}
+
+type RequestInfoRequest struct {
+	ExpectedRevision *int     `json:"expected_revision" example:"5"`
+	Message          string   `json:"message" example:"Уточните стоимость оборудования и приложите счёт поставщика"`
+	EditableFields   []string `json:"editable_fields" example:"collateral,product_details"`
+}
+
+// TermsRequest — окончательные условия. Платёж, версии и идентификаторы задаёт
+// сервер; bank_account_id и collateral_required по умолчанию — из заявки.
+type TermsRequest struct {
+	ProductCode         *string    `json:"product_code" example:"express"`
+	AmountKopecks       *int64     `json:"amount_kopecks" example:"100000000"`
+	TermMonths          *int       `json:"term_months" example:"12"`
+	AnnualRateBps       *int       `json:"annual_rate_bps" example:"2290"`
+	AgreementTermMonths *int       `json:"agreement_term_months"`
+	MaxTrancheDays      *int       `json:"max_tranche_days"`
+	BankAccountID       *uuid.UUID `json:"bank_account_id" swaggertype:"string" format:"uuid"`
+	CollateralRequired  *bool      `json:"collateral_required"`
+	ValidUntil          *time.Time `json:"valid_until"`
+}
+
+// DecisionRequest — решение. При rejected нужны reason_code и reasons, terms не нужны.
+type DecisionRequest struct {
+	ExpectedRevision *int          `json:"expected_revision" example:"5"`
+	Outcome          string        `json:"outcome" enums:"approved,counter_offer,rejected" example:"approved"`
+	Terms            *TermsRequest `json:"terms"`
+	ReasonCode       *string       `json:"reason_code" example:"HIGH_DEBT_LOAD"`
+	Reasons          []string      `json:"reasons"`
+	Comment          *string       `json:"comment"` // внутренний, клиенту не показывается
+}
+
+type RetryChecksRequest struct {
+	ExpectedRevision *int     `json:"expected_revision" example:"5"`
+	Sources          []string `json:"sources" enums:"registry,credit_bureau" example:"registry,credit_bureau"`
+}
+
+type AnswerInfoRequest struct {
+	ExpectedRevision *int   `json:"expected_revision" example:"6"`
+	Answer           string `json:"answer" example:"Счёт поставщика приложили, стоимость 3 млн"`
+}
+
+var ErrRevisionRequired = errors.New("expected_revision is required")
+
+// Revision — expected_revision из запроса; без него — ErrRevisionRequired.
+func Revision(v *int) (int, error) {
+	if v == nil {
+		return 0, ErrRevisionRequired
+	}
+	return *v, nil
+}
+
+func (r TermsRequest) Domain() *reviewdomain.TermsInput {
+	return &reviewdomain.TermsInput{
+		ProductCode:         r.ProductCode,
+		AmountKopecks:       r.AmountKopecks,
+		TermMonths:          r.TermMonths,
+		AnnualRateBps:       r.AnnualRateBps,
+		AgreementTermMonths: r.AgreementTermMonths,
+		MaxTrancheDays:      r.MaxTrancheDays,
+		BankAccountID:       r.BankAccountID,
+		CollateralRequired:  r.CollateralRequired,
+		ValidUntil:          r.ValidUntil,
+	}
+}
+
+// EncodeCursor и DecodeCursor — непрозрачный курсор очереди: номер последней заявки.
+func EncodeCursor(after int64) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(after, 10)))
+}
+
+func DecodeCursor(s string) (int64, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return 0, err
+	}
+	return strconv.ParseInt(string(raw), 10, 64)
+}
+
+//============================================================================================
+// ОТВЕТЫ КЛИЕНТУ:
+
+// CollateralReviewResponse — проверка залога для клиента: без внутреннего
+// комментария, с публичным. actual=false — клиент изменил сведения после проверки.
+type CollateralReviewResponse struct {
+	Result               string    `json:"result" enums:"accepted,needs_info,rejected"`
+	AcceptedValueKopecks *int64    `json:"accepted_value_kopecks"`
+	PublicComment        *string   `json:"public_comment"`
+	ReviewedBy           uuid.UUID `json:"reviewed_by" swaggertype:"string" format:"uuid"`
+	ReviewedAt           time.Time `json:"reviewed_at"`
+	Actual               bool      `json:"actual"`
+}
+
+// CollateralResponse — предмет залога: сведения клиента и проверка банка раздельно.
+type CollateralResponse struct {
+	Revision             int64                     `json:"revision"`
+	Type                 string                    `json:"type" enums:"real_estate,equipment,vehicle"`
+	Ownership            string                    `json:"ownership" enums:"existing,acquired"`
+	Description          string                    `json:"description"`
+	DeclaredValueKopecks int64                     `json:"declared_value_kopecks"`
+	Review               *CollateralReviewResponse `json:"review"`
+}
+
+// OfferResponse — окончательное предложение. У овердрафта term_months и
+// monthly_payment_kopecks — null, заданы agreement_term_months и max_tranche_days.
+type OfferResponse struct {
+	ID                    uuid.UUID  `json:"id" swaggertype:"string" format:"uuid"`
+	Version               int        `json:"version" example:"1"`
+	Outcome               string     `json:"outcome" enums:"approved,counter_offer"`
+	ProductCode           string     `json:"product_code" example:"express"`
+	ProductName           string     `json:"product_name" example:"Экспресс-кредит"`
+	AmountKopecks         int64      `json:"amount_kopecks" example:"100000000"`
+	TermMonths            *int       `json:"term_months" example:"12"`
+	AnnualRateBps         int        `json:"annual_rate_bps" example:"2290"`
+	MonthlyPaymentKopecks *int64     `json:"monthly_payment_kopecks" example:"9402807"`
+	AgreementTermMonths   *int       `json:"agreement_term_months"`
+	MaxTrancheDays        *int       `json:"max_tranche_days"`
+	BankAccountID         *uuid.UUID `json:"bank_account_id" swaggertype:"string" format:"uuid"`
+	CollateralRequired    bool       `json:"collateral_required"`
+	ChangedFields         []string   `json:"changed_fields" example:"amount_kopecks"`
+	Reasons               []string   `json:"reasons"`
+	ValidUntil            *time.Time `json:"valid_until"`
+	CreatedAt             time.Time  `json:"created_at"`
+}
+
+// ContractResponse — договор к предложению; файл — /documents/{id}/content.
+// Поля подписания заполнятся вместе с подписью.
+type ContractResponse struct {
+	ID                  uuid.UUID  `json:"id" swaggertype:"string" format:"uuid"`
+	Version             int        `json:"version" example:"1"`
+	OfferID             uuid.UUID  `json:"offer_id" swaggertype:"string" format:"uuid"`
+	ContentSHA256       string     `json:"content_sha256"`
+	FileName            string     `json:"file_name" example:"contract-1000-v1.pdf"`
+	SignedAt            *time.Time `json:"signed_at"`
+	SignedBy            *uuid.UUID `json:"signed_by" swaggertype:"string" format:"uuid"`
+	SignatureDocumentID *uuid.UUID `json:"signature_document_id" swaggertype:"string" format:"uuid"`
+	CreatedAt           time.Time  `json:"created_at"`
+}
+
+type InfoRequestResponse struct {
+	ID             uuid.UUID  `json:"id" swaggertype:"string" format:"uuid"`
+	Message        string     `json:"message"`
+	EditableFields []string   `json:"editable_fields"`
+	Status         string     `json:"status" enums:"open,answered,cancelled"`
+	Answer         *string    `json:"answer"`
+	RequestedAt    time.Time  `json:"requested_at"`
+	AnsweredAt     *time.Time `json:"answered_at"`
+}
+
+// NewApplication — заявка для клиента: залог с проверкой, предложение и договор.
+func NewApplication(d reviewdomain.Details) applicationdto.ApplicationResponse {
+	resp := applicationdto.NewApplicationResponse(d.ApplicationDetails)
+	if c := newCollateral(d); c != nil {
+		resp.Collateral = c
+	}
+	if d.Offer != nil {
+		resp.Offer = NewOffer(*d.Offer)
+		if c := NewContract(d.Offer.Contract); c != nil {
+			resp.Contract = c
+		}
+	}
+	return resp
+}
+
+func newCollateral(d reviewdomain.Details) *CollateralResponse {
+	c := d.Collateral
+	if c == nil {
+		return nil
+	}
+	resp := &CollateralResponse{
+		Revision:             c.Revision,
+		Type:                 c.Type,
+		Ownership:            c.Ownership,
+		Description:          c.Description,
+		DeclaredValueKopecks: c.DeclaredValueKopecks,
+	}
+	if r := d.CollateralReview; r != nil {
+		review := newCollateralReview(*r, c)
+		resp.Review = &review
+	}
+	return resp
+}
+
+func newCollateralReview(r collateraldomain.CollateralReview, c *collateraldomain.Collateral) CollateralReviewResponse {
+	resp := CollateralReviewResponse{
+		Result:     r.Result,
+		ReviewedBy: r.Reviewer,
+		ReviewedAt: r.CreatedAt.UTC(),
+		Actual:     c != nil && r.CollateralRevision == c.Revision && r.CollateralHash == c.Hash(),
+	}
+	if r.AcceptedValueKopecks > 0 {
+		v := r.AcceptedValueKopecks
+		resp.AcceptedValueKopecks = &v
+	}
+	if r.PublicComment != "" {
+		comment := r.PublicComment
+		resp.PublicComment = &comment
+	}
+	return resp
+}
+
+func NewOffer(d reviewdomain.Decision) *OfferResponse {
+	t := d.Terms
+	if t == nil {
+		return nil
+	}
+	return &OfferResponse{
+		ID:                    d.ID,
+		Version:               d.Version,
+		Outcome:               string(d.Outcome),
+		ProductCode:           t.ProductCode,
+		ProductName:           t.ProductName,
+		AmountKopecks:         t.AmountKopecks,
+		TermMonths:            t.TermMonths,
+		AnnualRateBps:         t.AnnualRateBps,
+		MonthlyPaymentKopecks: t.MonthlyPaymentKopecks,
+		AgreementTermMonths:   t.AgreementTermMonths,
+		MaxTrancheDays:        t.MaxTrancheDays,
+		BankAccountID:         t.BankAccountID,
+		CollateralRequired:    t.CollateralRequired,
+		ChangedFields:         nonNil(d.ChangedFields),
+		Reasons:               nonNil(d.Reasons),
+		ValidUntil:            utc(t.ValidUntil),
+		CreatedAt:             d.CreatedAt.UTC(),
+	}
+}
+
+func NewContract(c *reviewdomain.Contract) *ContractResponse {
+	if c == nil {
+		return nil
+	}
+	return &ContractResponse{
+		ID:            c.ID,
+		Version:       c.Version,
+		OfferID:       c.OfferID,
+		ContentSHA256: c.SHA256,
+		FileName:      c.FileName,
+		CreatedAt:     c.CreatedAt.UTC(),
+	}
+}
+
+func NewInfoRequests(reqs []reviewdomain.InfoRequest) []InfoRequestResponse {
+	resp := make([]InfoRequestResponse, 0, len(reqs))
+	for _, r := range reqs {
+		resp = append(resp, InfoRequestResponse{
+			ID:             r.ID,
+			Message:        r.Message,
+			EditableFields: nonNil(r.EditableFields),
+			Status:         string(r.Status),
+			Answer:         r.Answer,
+			RequestedAt:    r.RequestedAt.UTC(),
+			AnsweredAt:     utc(r.AnsweredAt),
+		})
+	}
+	return resp
+}
+
+//============================================================================================
+// ОТВЕТЫ СОТРУДНИКУ:
+
+// UnderwriterApplicationResponse — заявка в очереди: действия сотрудника и ответственный.
+type UnderwriterApplicationResponse struct {
+	applicationdto.ApplicationResponse
+	Assignee *applicationdto.ApplicantResponse `json:"assignee"`
+}
+
+type ApplicationPageResponse struct {
+	Items      []UnderwriterApplicationResponse `json:"items"`
+	NextCursor *string                          `json:"next_cursor"`
+}
+
+type RegistryCheckResponse struct {
+	Status       string          `json:"status" enums:"not_requested,ok,not_found,unavailable,invalid"`
+	CheckedAt    *time.Time      `json:"checked_at"`
+	INN          *string         `json:"inn"`
+	CompanyState *string         `json:"company_state" enums:"active,reorganizing,terminated"`
+	Snapshot     json.RawMessage `json:"snapshot" swaggertype:"object"`
+}
+
+type CreditBureauCheckResponse struct {
+	Status           string          `json:"status" enums:"not_requested,ok,not_found,unavailable,invalid"`
+	CheckedAt        *time.Time      `json:"checked_at"`
+	HasCreditHistory *bool           `json:"has_credit_history"`
+	Snapshot         json.RawMessage `json:"snapshot" swaggertype:"object"`
+}
+
+type FinancialsCheckResponse struct {
+	DataStatus string  `json:"data_status" enums:"missing,ready,no_history"`
+	SourceType *string `json:"source_type" enums:"automatic,csv"`
+	Coverage   *string `json:"coverage" enums:"complete,partial"`
+}
+
+type ChecksResponse struct {
+	Registry     RegistryCheckResponse     `json:"registry"`
+	CreditBureau CreditBureauCheckResponse `json:"credit_bureau"`
+	Financials   FinancialsCheckResponse   `json:"financials"`
+}
+
+// ScoringResponse — результат модели. not_configured: модель не подключена,
+// score и risk_grade — null, решение принимает сотрудник.
+type ScoringResponse struct {
+	Status       string          `json:"status" enums:"completed,insufficient_data,not_configured,failed"`
+	Score        *int            `json:"score"`
+	RiskGrade    *string         `json:"risk_grade"`
+	ModelVersion *string         `json:"model_version"`
+	Factors      json.RawMessage `json:"factors" swaggertype:"array,object"`
+}
+
+// StaffCollateralReviewResponse — проверка залога с внутренним комментарием.
+type StaffCollateralReviewResponse struct {
+	ID      uuid.UUID `json:"id" swaggertype:"string" format:"uuid"`
+	Version int64     `json:"version"`
+	CollateralReviewResponse
+	Comment string `json:"comment"`
+}
+
+type DecisionResponse struct {
+	ID         uuid.UUID         `json:"id" swaggertype:"string" format:"uuid"`
+	Version    int               `json:"version"`
+	Outcome    string            `json:"outcome" enums:"approved,counter_offer,rejected"`
+	Offer      *OfferResponse    `json:"offer"`
+	Contract   *ContractResponse `json:"contract"`
+	ReasonCode *string           `json:"reason_code"`
+	Reasons    []string          `json:"reasons"`
+	Comment    *string           `json:"comment"`
+	DecidedBy  *uuid.UUID        `json:"decided_by" swaggertype:"string" format:"uuid"`
+	CreatedAt  time.Time         `json:"created_at"`
+}
+
+type EventResponse struct {
+	ID         int64      `json:"id"`
+	Type       string     `json:"type" enums:"status_changed"`
+	FromStatus *string    `json:"from_status"`
+	ToStatus   string     `json:"to_status"`
+	Message    *string    `json:"message"`
+	ActorID    *uuid.UUID `json:"actor_id" swaggertype:"string" format:"uuid"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
+// ReviewApplicationResponse — карточка сотрудника. decision_blockers — что
+// сейчас мешает одобрить заявку на запрошенных условиях.
+type ReviewApplicationResponse struct {
+	UnderwriterApplicationResponse
+	InfoRequests      []InfoRequestResponse               `json:"info_requests"`
+	CollateralReviews []StaffCollateralReviewResponse     `json:"collateral_reviews"`
+	Decisions         []DecisionResponse                  `json:"decisions"`
+	History           []EventResponse                     `json:"history"`
+	DecisionBlockers  []applicationdto.FieldErrorResponse `json:"decision_blockers"`
+}
+
+// NewUnderwriterApplication — заявка в очереди глазами сотрудника r.
+func NewUnderwriterApplication(d reviewdomain.Details, r reviewdomain.Reviewer) UnderwriterApplicationResponse {
+	resp := UnderwriterApplicationResponse{ApplicationResponse: NewApplication(d)}
+	actions := reviewdomain.Actions(d, r)
+	resp.AvailableActions = make([]string, 0, len(actions))
+	for _, a := range actions {
+		resp.AvailableActions = append(resp.AvailableActions, string(a))
+	}
+	if d.Assignee != nil {
+		card := applicationdto.NewApplicantResponse(*d.Assignee)
+		resp.Assignee = &card
+	}
+	return resp
+}
+
+func NewPage(items []reviewdomain.Details, next *int64, r reviewdomain.Reviewer) ApplicationPageResponse {
+	page := ApplicationPageResponse{Items: make([]UnderwriterApplicationResponse, 0, len(items))}
+	for _, d := range items {
+		page.Items = append(page.Items, NewUnderwriterApplication(d, r))
+	}
+	if next != nil {
+		cursor := EncodeCursor(*next)
+		page.NextCursor = &cursor
+	}
+	return page
+}
+
+func NewReview(rv reviewdomain.Review, r reviewdomain.Reviewer) ReviewApplicationResponse {
+	resp := ReviewApplicationResponse{
+		UnderwriterApplicationResponse: NewUnderwriterApplication(rv.Details, r),
+		InfoRequests:                   NewInfoRequests(rv.InfoRequests),
+		CollateralReviews:              make([]StaffCollateralReviewResponse, 0, len(rv.CollateralReviews)),
+		Decisions:                      make([]DecisionResponse, 0, len(rv.Decisions)),
+		History:                        make([]EventResponse, 0, len(rv.History)),
+		DecisionBlockers:               fieldErrors(rv.DecisionBlockers),
+	}
+	resp.Checks = newChecks(rv.Checks)
+	resp.Scoring = newScoring(rv.Checks.Scoring)
+	for _, cr := range rv.CollateralReviews {
+		resp.CollateralReviews = append(resp.CollateralReviews, StaffCollateralReviewResponse{
+			ID:                       cr.ID,
+			Version:                  cr.Version,
+			CollateralReviewResponse: newCollateralReview(cr, rv.Collateral),
+			Comment:                  cr.Comment,
+		})
+	}
+	for _, d := range rv.Decisions {
+		resp.Decisions = append(resp.Decisions, DecisionResponse{
+			ID:         d.ID,
+			Version:    d.Version,
+			Outcome:    string(d.Outcome),
+			Offer:      NewOffer(d),
+			Contract:   NewContract(d.Contract),
+			ReasonCode: d.ReasonCode,
+			Reasons:    nonNil(d.Reasons),
+			Comment:    d.Comment,
+			DecidedBy:  d.DecidedBy,
+			CreatedAt:  d.CreatedAt.UTC(),
+		})
+	}
+	for _, e := range rv.History {
+		var from *string
+		if e.From != nil {
+			s := string(*e.From)
+			from = &s
+		}
+		resp.History = append(resp.History, EventResponse{
+			ID:         e.ID,
+			Type:       "status_changed",
+			FromStatus: from,
+			ToStatus:   string(e.To),
+			Message:    e.Comment,
+			ActorID:    e.ActorID,
+			CreatedAt:  e.CreatedAt.UTC(),
+		})
+	}
+	return resp
+}
+
+func newChecks(c reviewdomain.CheckSummary) ChecksResponse {
+	return ChecksResponse{
+		Registry: RegistryCheckResponse{
+			Status:       string(c.Registry.Status),
+			CheckedAt:    utc(c.Registry.CheckedAt),
+			INN:          c.Registry.INN,
+			CompanyState: c.Registry.CompanyState,
+			Snapshot:     c.Registry.Snapshot,
+		},
+		CreditBureau: CreditBureauCheckResponse{
+			Status:           string(c.CreditBureau.Status),
+			CheckedAt:        utc(c.CreditBureau.CheckedAt),
+			HasCreditHistory: c.CreditBureau.HasCreditHistory,
+			Snapshot:         c.CreditBureau.Snapshot,
+		},
+		Financials: FinancialsCheckResponse{
+			DataStatus: string(c.Financials.DataStatus),
+			SourceType: c.Financials.SourceType,
+			Coverage:   c.Financials.Coverage,
+		},
+	}
+}
+
+func newScoring(s reviewdomain.ScoringCheck) ScoringResponse {
+	return ScoringResponse{
+		Status:       string(s.Status),
+		Score:        s.Score,
+		RiskGrade:    s.RiskGrade,
+		ModelVersion: s.ModelVersion,
+		Factors:      s.Factors,
+	}
+}
+
+func fieldErrors(fields []applicationerrors.FieldError) []applicationdto.FieldErrorResponse {
+	resp := make([]applicationdto.FieldErrorResponse, 0, len(fields))
+	for _, f := range fields {
+		resp = append(resp, applicationdto.FieldErrorResponse{Field: f.Field, Code: f.Code, Message: f.Message})
+	}
+	return resp
+}
+
+// ParseStatus — статус из query; пустая строка — без фильтра.
+func ParseStatus(s string) (*applicationdomain.Status, bool) {
+	if s == "" {
+		return nil, true
+	}
+	st := applicationdomain.Status(s)
+	return &st, st.Valid()
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+func utc(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	u := t.UTC()
+	return &u
+}

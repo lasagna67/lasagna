@@ -77,7 +77,9 @@ func (r *CompanyRepo) SaveConnection(ctx context.Context, company companydomain.
 		if err := row.Scan(memberDest(&result.Member)...); err != nil {
 			return fmt.Errorf("upsert member: %w", err)
 		}
-		return nil
+		// Счёт появляется только вместе с подтверждённым подключением компании.
+		// Баланс нового счёта равен нулю; повторное подключение его не меняет.
+		return ensureSettlementAccount(ctx, tx, result.Company.ID)
 	})
 	if err != nil {
 		return companydomain.Membership{}, err
