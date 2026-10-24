@@ -61,6 +61,26 @@ type (
 		Prefix string `default:"server"`
 	}
 
+	S3Config struct {
+		Endpoint string `env:"ENDPOINT,required"`
+		Region   string `env:"REGION,required"`
+		// Адрес S3 для браузера — им подписываются presigned-ссылки. Пусто — Endpoint:
+		PublicEndpoint string
+
+		AccessKey string `env:"ACCESS_KEY_ID,required"`
+		SecretKey string `env:"SECRET_ACCESS_KEY,required"`
+
+		// Бакеты, которые Healthy проверяет через HeadBucket. Пусто — ListBuckets (нужны права на все бакеты):
+		Buckets       []string
+		PingTimeout   time.Duration `default:"15s"`
+		UploadExpires time.Duration `default:"15m"`
+	}
+
+	KafkaConfig struct {
+		Brokers  []string `default:"kafka:9092"`
+		ClientID string   `default:"lasagna"`
+	}
+
 	LoggingConfig struct {
 		Level    string      `default:"info"`
 		Encoding LogEncoding `default:"json"`
@@ -88,6 +108,8 @@ type (
 		Postgres    PostgresConfig   `prefix:"POSTGRES_"`
 		HTTP        HTTPConfig       `prefix:"HTTP_"`
 		Redis       RedisConfig      `prefix:"REDIS_"`
+		S3			S3Config		 `prefix:"S3_"`
+		Kafka       KafkaConfig      `prefix:"KAFKA_"`
 		Logging     LoggingConfig    `prefix:"LOGGING_"`
 		Auth        AuthConfig       `prefix:"AUTH_"`
 		Registry    RegistryConfig   `prefix:"REGISTRY_"`
