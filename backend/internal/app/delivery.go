@@ -13,6 +13,7 @@ import (
 	credithandler "github.com/lasagna67/lasagna.git/internal/credit/handler"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
 	financialscsvhandler "github.com/lasagna67/lasagna.git/internal/financials-csv/handler"
+	reviewhandler "github.com/lasagna67/lasagna.git/internal/review/handler"
 	userhandler "github.com/lasagna67/lasagna.git/internal/user/handler"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 	"github.com/lasagna67/lasagna.git/pkg/server"
@@ -47,6 +48,12 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 
 	products := creditproducts.NewHandler(services.CreditProducts, logger.Named("credit-products"))
 	products.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
+
+	review := reviewhandler.New(services.Review, logger.Named("review"))
+	review.RegisterRoutes(api, auth.Authenticate,
+		auth.RequireRole(authdomain.RoleClient),
+		auth.RequireRole(authdomain.RoleUnderwriter, authdomain.RoleAdmin),
+	)
 
 	return &Delivery{
 		server: srv,

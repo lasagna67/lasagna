@@ -173,6 +173,287 @@
                 }
             }
         },
+        "/applications/{id}/contract": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Метаданные; файл — GET /documents/{id}/content с id договора.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Договор к предложению",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "null — договора нет",
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.ContractResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/info-requests": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Запросы банка",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/reviewdto.InfoRequestResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND: нет заявки или она чужая",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/info-requests/{rid}/answer": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Поля из editable_fields правятся через PATCH заявки; после ответов на все запросы — resubmit.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Ответить на запрос банка",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Запрос",
+                        "name": "rid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Ответ",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.AnswerInfoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/offer": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Текущее предложение",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "null — предложения нет",
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.OfferResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/resubmit": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "После ответов на все запросы банка. Заявка та же, проверки повторяются.\nПовтор с тем же Idempotency-Key и телом возвращает тот же результат.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Отправить повторно",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Ключ повтора, до 255 символов",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Версия заявки",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.RevisionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "consumes": [
@@ -1032,6 +1313,196 @@
                 }
             }
         },
+        "/documents/{id}/content": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Клиенту — документы заявок своей компании, сотруднику — любые.",
+                "produces": [
+                    "application/pdf"
+                ],
+                "tags": [
+                    "documents"
+                ],
+                "summary": "Файл документа",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Документ",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "SERVICE_UNAVAILABLE",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/underwriter/applications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Заявки на рассмотрении и после него, старые сверху. Черновики не показываются.\nassignee: me — мои, none — свободные, uuid — сотрудника.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "underwriter"
+                ],
+                "summary": "Очередь заявок",
+                "parameters": [
+                    {
+                        "enum": [
+                            "submitted",
+                            "validation",
+                            "enrichment",
+                            "scoring",
+                            "manual_review",
+                            "info_requested",
+                            "approved",
+                            "counter_offer",
+                            "signing",
+                            "issued",
+                            "rejected",
+                            "cancelled",
+                            "expired"
+                        ],
+                        "type": "string",
+                        "description": "Статус заявки",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "me, none или id сотрудника",
+                        "name": "assignee",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "От 1 до 100, по умолчанию 20",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "next_cursor предыдущей страницы",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.ApplicationPageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "не сотрудник",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/underwriter/applications/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Заявка, проверки, скоринг, залог, запросы уточнений, решения и история.\ndecision_blockers — что мешает одобрить заявку на запрошенных условиях.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "underwriter"
+                ],
+                "summary": "Карточка заявки",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "не сотрудник",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/underwriter/applications/{id}/collateral-review": {
             "post": {
                 "security": [
@@ -1110,6 +1581,314 @@
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
+        "/underwriter/applications/{id}/decision": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "approved — условия как в запросе (ставка не считается), counter_offer — изменён продукт,\nсумма, срок или обеспечение. Положительное решение требует готовых проверок и принятого\nзалога у обеспеченного продукта; создаёт предложение и PDF договора. Платёж считает сервер.\nrejected — с reason_code и пояснениями для клиента.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "underwriter"
+                ],
+                "summary": "Опубликовать решение",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Решение",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.DecisionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN: заявка у другого сотрудника",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED: условия, проверки, залог",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "SERVICE_UNAVAILABLE: хранилище договоров",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/underwriter/applications/{id}/request-info": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Создаёт запрос клиенту и переводит заявку в info_requested.\neditable_fields — поля черновика, которые клиент сможет поправить.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "underwriter"
+                ],
+                "summary": "Запросить уточнения",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Запрос",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.RequestInfoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN: заявка у другого сотрудника",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/underwriter/applications/{id}/retry-checks": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Перезапрашивает источники; результат придёт асинхронно с новой revision.\nПока конвейер не подключён — 503.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "underwriter"
+                ],
+                "summary": "Повторить проверки",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Источники",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.RetryChecksRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN: заявка у другого сотрудника",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "SERVICE_UNAVAILABLE",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/underwriter/applications/{id}/take": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Назначает заявку на текущего сотрудника. Повтор тем же сотрудником безопасен;\nзаявку другого сотрудника — 409 INVALID_STATE.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "underwriter"
+                ],
+                "summary": "Взять заявку",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Версия заявки",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.RevisionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/creditdto.ErrorResponse"
                         }
                     }
                 }
@@ -2254,6 +3033,10 @@
                     ],
                     "example": "VALIDATION_FAILED"
                 },
+                "current_revision": {
+                    "description": "Только при REVISION_CONFLICT: revision, с которой заявка сейчас.",
+                    "type": "integer"
+                },
                 "field_errors": {
                     "type": "array",
                     "items": {
@@ -2662,6 +3445,683 @@
                         "admin"
                     ],
                     "example": "client"
+                }
+            }
+        },
+        "reviewdto.AnswerInfoRequest": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string",
+                    "example": "Счёт поставщика приложили, стоимость 3 млн"
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 6
+                }
+            }
+        },
+        "reviewdto.ApplicationPageResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reviewdto.UnderwriterApplicationResponse"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "reviewdto.ContractResponse": {
+            "type": "object",
+            "properties": {
+                "content_sha256": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "file_name": {
+                    "type": "string",
+                    "example": "contract-1000-v1.pdf"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "offer_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "signature_document_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "signed_at": {
+                    "type": "string"
+                },
+                "signed_by": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "version": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "reviewdto.DecisionRequest": {
+            "type": "object",
+            "properties": {
+                "comment": {
+                    "description": "внутренний, клиенту не показывается",
+                    "type": "string"
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "outcome": {
+                    "type": "string",
+                    "enum": [
+                        "approved",
+                        "counter_offer",
+                        "rejected"
+                    ],
+                    "example": "approved"
+                },
+                "reason_code": {
+                    "type": "string",
+                    "example": "HIGH_DEBT_LOAD"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "terms": {
+                    "$ref": "#/definitions/reviewdto.TermsRequest"
+                }
+            }
+        },
+        "reviewdto.DecisionResponse": {
+            "type": "object",
+            "properties": {
+                "comment": {
+                    "type": "string"
+                },
+                "contract": {
+                    "$ref": "#/definitions/reviewdto.ContractResponse"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "decided_by": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "offer": {
+                    "$ref": "#/definitions/reviewdto.OfferResponse"
+                },
+                "outcome": {
+                    "type": "string",
+                    "enum": [
+                        "approved",
+                        "counter_offer",
+                        "rejected"
+                    ]
+                },
+                "reason_code": {
+                    "type": "string"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "reviewdto.EventResponse": {
+            "type": "object",
+            "properties": {
+                "actor_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "from_status": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "to_status": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "status_changed"
+                    ]
+                }
+            }
+        },
+        "reviewdto.InfoRequestResponse": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                },
+                "answered_at": {
+                    "type": "string"
+                },
+                "editable_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "requested_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "open",
+                        "answered",
+                        "cancelled"
+                    ]
+                }
+            }
+        },
+        "reviewdto.OfferResponse": {
+            "type": "object",
+            "properties": {
+                "agreement_term_months": {
+                    "type": "integer"
+                },
+                "amount_kopecks": {
+                    "type": "integer",
+                    "example": 100000000
+                },
+                "annual_rate_bps": {
+                    "type": "integer",
+                    "example": 2290
+                },
+                "bank_account_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "changed_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "amount_kopecks"
+                    ]
+                },
+                "collateral_required": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "max_tranche_days": {
+                    "type": "integer"
+                },
+                "monthly_payment_kopecks": {
+                    "type": "integer",
+                    "example": 9402807
+                },
+                "outcome": {
+                    "type": "string",
+                    "enum": [
+                        "approved",
+                        "counter_offer"
+                    ]
+                },
+                "product_code": {
+                    "type": "string",
+                    "example": "express"
+                },
+                "product_name": {
+                    "type": "string",
+                    "example": "Экспресс-кредит"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "term_months": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "valid_until": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "reviewdto.RequestInfoRequest": {
+            "type": "object",
+            "properties": {
+                "editable_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "collateral",
+                        "product_details"
+                    ]
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Уточните стоимость оборудования и приложите счёт поставщика"
+                }
+            }
+        },
+        "reviewdto.RetryChecksRequest": {
+            "type": "object",
+            "properties": {
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "registry",
+                            "credit_bureau"
+                        ]
+                    },
+                    "example": [
+                        "registry",
+                        "credit_bureau"
+                    ]
+                }
+            }
+        },
+        "reviewdto.ReviewApplicationResponse": {
+            "type": "object",
+            "properties": {
+                "applicant": {
+                    "$ref": "#/definitions/creditdto.ApplicantResponse"
+                },
+                "applicant_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                },
+                "assignee": {
+                    "$ref": "#/definitions/creditdto.ApplicantResponse"
+                },
+                "available_actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "edit",
+                        "fetch_financials",
+                        "submit"
+                    ]
+                },
+                "checks": {
+                    "type": "object"
+                },
+                "collateral": {
+                    "type": "object"
+                },
+                "collateral_reviews": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reviewdto.StaffCollateralReviewResponse"
+                    }
+                },
+                "company": {
+                    "$ref": "#/definitions/creditdto.CompanyCardResponse"
+                },
+                "company_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                },
+                "contract": {
+                    "type": "object"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "decision_blockers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/creditdto.FieldErrorResponse"
+                    }
+                },
+                "decisions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reviewdto.DecisionResponse"
+                    }
+                },
+                "editable_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "request.amount_kopecks",
+                        "request.product_code"
+                    ]
+                },
+                "financials": {
+                    "$ref": "#/definitions/creditdto.FinancialStateResponse"
+                },
+                "history": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reviewdto.EventResponse"
+                    }
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13"
+                },
+                "info_requests": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/reviewdto.InfoRequestResponse"
+                    }
+                },
+                "issue": {
+                    "type": "object"
+                },
+                "number": {
+                    "type": "integer",
+                    "example": 1000
+                },
+                "offer": {
+                    "type": "object"
+                },
+                "product_details": {
+                    "type": "object"
+                },
+                "request": {
+                    "$ref": "#/definitions/creditdto.RequestResponse"
+                },
+                "revision": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "scoring": {
+                    "type": "object"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "draft",
+                        "submitted",
+                        "validation",
+                        "enrichment",
+                        "scoring",
+                        "manual_review",
+                        "info_requested",
+                        "approved",
+                        "counter_offer",
+                        "signing",
+                        "issued",
+                        "rejected",
+                        "cancelled",
+                        "expired"
+                    ],
+                    "example": "draft"
+                },
+                "submitted_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "reviewdto.RevisionRequest": {
+            "type": "object",
+            "properties": {
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 5
+                }
+            }
+        },
+        "reviewdto.StaffCollateralReviewResponse": {
+            "type": "object",
+            "properties": {
+                "accepted_value_kopecks": {
+                    "type": "integer"
+                },
+                "actual": {
+                    "type": "boolean"
+                },
+                "comment": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "public_comment": {
+                    "type": "string"
+                },
+                "result": {
+                    "type": "string",
+                    "enum": [
+                        "accepted",
+                        "needs_info",
+                        "rejected"
+                    ]
+                },
+                "reviewed_at": {
+                    "type": "string"
+                },
+                "reviewed_by": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "reviewdto.TermsRequest": {
+            "type": "object",
+            "properties": {
+                "agreement_term_months": {
+                    "type": "integer"
+                },
+                "amount_kopecks": {
+                    "type": "integer",
+                    "example": 100000000
+                },
+                "annual_rate_bps": {
+                    "type": "integer",
+                    "example": 2290
+                },
+                "bank_account_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "collateral_required": {
+                    "type": "boolean"
+                },
+                "max_tranche_days": {
+                    "type": "integer"
+                },
+                "product_code": {
+                    "type": "string",
+                    "example": "express"
+                },
+                "term_months": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "valid_until": {
+                    "type": "string"
+                }
+            }
+        },
+        "reviewdto.UnderwriterApplicationResponse": {
+            "type": "object",
+            "properties": {
+                "applicant": {
+                    "$ref": "#/definitions/creditdto.ApplicantResponse"
+                },
+                "applicant_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                },
+                "assignee": {
+                    "$ref": "#/definitions/creditdto.ApplicantResponse"
+                },
+                "available_actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "edit",
+                        "fetch_financials",
+                        "submit"
+                    ]
+                },
+                "checks": {
+                    "type": "object"
+                },
+                "collateral": {
+                    "type": "object"
+                },
+                "company": {
+                    "$ref": "#/definitions/creditdto.CompanyCardResponse"
+                },
+                "company_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                },
+                "contract": {
+                    "type": "object"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "editable_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "request.amount_kopecks",
+                        "request.product_code"
+                    ]
+                },
+                "financials": {
+                    "$ref": "#/definitions/creditdto.FinancialStateResponse"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13"
+                },
+                "issue": {
+                    "type": "object"
+                },
+                "number": {
+                    "type": "integer",
+                    "example": 1000
+                },
+                "offer": {
+                    "type": "object"
+                },
+                "product_details": {
+                    "type": "object"
+                },
+                "request": {
+                    "$ref": "#/definitions/creditdto.RequestResponse"
+                },
+                "revision": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "scoring": {
+                    "type": "object"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "draft",
+                        "submitted",
+                        "validation",
+                        "enrichment",
+                        "scoring",
+                        "manual_review",
+                        "info_requested",
+                        "approved",
+                        "counter_offer",
+                        "signing",
+                        "issued",
+                        "rejected",
+                        "cancelled",
+                        "expired"
+                    ],
+                    "example": "draft"
+                },
+                "submitted_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },

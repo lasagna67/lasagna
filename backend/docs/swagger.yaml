@@ -659,6 +659,9 @@ definitions:
         - INTERNAL_ERROR
         example: VALIDATION_FAILED
         type: string
+      current_revision:
+        description: 'Только при REVISION_CONFLICT: revision, с которой заявка сейчас.'
+        type: integer
       field_errors:
         items:
           $ref: '#/definitions/creditdto.FieldErrorResponse'
@@ -956,6 +959,485 @@ definitions:
         example: client
         type: string
     type: object
+  reviewdto.AnswerInfoRequest:
+    properties:
+      answer:
+        example: Счёт поставщика приложили, стоимость 3 млн
+        type: string
+      expected_revision:
+        example: 6
+        type: integer
+    type: object
+  reviewdto.ApplicationPageResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/reviewdto.UnderwriterApplicationResponse'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  reviewdto.ContractResponse:
+    properties:
+      content_sha256:
+        type: string
+      created_at:
+        type: string
+      file_name:
+        example: contract-1000-v1.pdf
+        type: string
+      id:
+        format: uuid
+        type: string
+      offer_id:
+        format: uuid
+        type: string
+      signature_document_id:
+        format: uuid
+        type: string
+      signed_at:
+        type: string
+      signed_by:
+        format: uuid
+        type: string
+      version:
+        example: 1
+        type: integer
+    type: object
+  reviewdto.DecisionRequest:
+    properties:
+      comment:
+        description: внутренний, клиенту не показывается
+        type: string
+      expected_revision:
+        example: 5
+        type: integer
+      outcome:
+        enum:
+        - approved
+        - counter_offer
+        - rejected
+        example: approved
+        type: string
+      reason_code:
+        example: HIGH_DEBT_LOAD
+        type: string
+      reasons:
+        items:
+          type: string
+        type: array
+      terms:
+        $ref: '#/definitions/reviewdto.TermsRequest'
+    type: object
+  reviewdto.DecisionResponse:
+    properties:
+      comment:
+        type: string
+      contract:
+        $ref: '#/definitions/reviewdto.ContractResponse'
+      created_at:
+        type: string
+      decided_by:
+        format: uuid
+        type: string
+      id:
+        format: uuid
+        type: string
+      offer:
+        $ref: '#/definitions/reviewdto.OfferResponse'
+      outcome:
+        enum:
+        - approved
+        - counter_offer
+        - rejected
+        type: string
+      reason_code:
+        type: string
+      reasons:
+        items:
+          type: string
+        type: array
+      version:
+        type: integer
+    type: object
+  reviewdto.EventResponse:
+    properties:
+      actor_id:
+        format: uuid
+        type: string
+      created_at:
+        type: string
+      from_status:
+        type: string
+      id:
+        type: integer
+      message:
+        type: string
+      to_status:
+        type: string
+      type:
+        enum:
+        - status_changed
+        type: string
+    type: object
+  reviewdto.InfoRequestResponse:
+    properties:
+      answer:
+        type: string
+      answered_at:
+        type: string
+      editable_fields:
+        items:
+          type: string
+        type: array
+      id:
+        format: uuid
+        type: string
+      message:
+        type: string
+      requested_at:
+        type: string
+      status:
+        enum:
+        - open
+        - answered
+        - cancelled
+        type: string
+    type: object
+  reviewdto.OfferResponse:
+    properties:
+      agreement_term_months:
+        type: integer
+      amount_kopecks:
+        example: 100000000
+        type: integer
+      annual_rate_bps:
+        example: 2290
+        type: integer
+      bank_account_id:
+        format: uuid
+        type: string
+      changed_fields:
+        example:
+        - amount_kopecks
+        items:
+          type: string
+        type: array
+      collateral_required:
+        type: boolean
+      created_at:
+        type: string
+      id:
+        format: uuid
+        type: string
+      max_tranche_days:
+        type: integer
+      monthly_payment_kopecks:
+        example: 9402807
+        type: integer
+      outcome:
+        enum:
+        - approved
+        - counter_offer
+        type: string
+      product_code:
+        example: express
+        type: string
+      product_name:
+        example: Экспресс-кредит
+        type: string
+      reasons:
+        items:
+          type: string
+        type: array
+      term_months:
+        example: 12
+        type: integer
+      valid_until:
+        type: string
+      version:
+        example: 1
+        type: integer
+    type: object
+  reviewdto.RequestInfoRequest:
+    properties:
+      editable_fields:
+        example:
+        - collateral
+        - product_details
+        items:
+          type: string
+        type: array
+      expected_revision:
+        example: 5
+        type: integer
+      message:
+        example: Уточните стоимость оборудования и приложите счёт поставщика
+        type: string
+    type: object
+  reviewdto.RetryChecksRequest:
+    properties:
+      expected_revision:
+        example: 5
+        type: integer
+      sources:
+        example:
+        - registry
+        - credit_bureau
+        items:
+          enum:
+          - registry
+          - credit_bureau
+          type: string
+        type: array
+    type: object
+  reviewdto.ReviewApplicationResponse:
+    properties:
+      applicant:
+        $ref: '#/definitions/creditdto.ApplicantResponse'
+      applicant_id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+      assignee:
+        $ref: '#/definitions/creditdto.ApplicantResponse'
+      available_actions:
+        example:
+        - edit
+        - fetch_financials
+        - submit
+        items:
+          type: string
+        type: array
+      checks:
+        type: object
+      collateral:
+        type: object
+      collateral_reviews:
+        items:
+          $ref: '#/definitions/reviewdto.StaffCollateralReviewResponse'
+        type: array
+      company:
+        $ref: '#/definitions/creditdto.CompanyCardResponse'
+      company_id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+      contract:
+        type: object
+      created_at:
+        type: string
+      decision_blockers:
+        items:
+          $ref: '#/definitions/creditdto.FieldErrorResponse'
+        type: array
+      decisions:
+        items:
+          $ref: '#/definitions/reviewdto.DecisionResponse'
+        type: array
+      editable_fields:
+        example:
+        - request.amount_kopecks
+        - request.product_code
+        items:
+          type: string
+        type: array
+      financials:
+        $ref: '#/definitions/creditdto.FinancialStateResponse'
+      history:
+        items:
+          $ref: '#/definitions/reviewdto.EventResponse'
+        type: array
+      id:
+        example: 3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13
+        format: uuid
+        type: string
+      info_requests:
+        items:
+          $ref: '#/definitions/reviewdto.InfoRequestResponse'
+        type: array
+      issue:
+        type: object
+      number:
+        example: 1000
+        type: integer
+      offer:
+        type: object
+      product_details:
+        type: object
+      request:
+        $ref: '#/definitions/creditdto.RequestResponse'
+      revision:
+        example: 1
+        type: integer
+      scoring:
+        type: object
+      status:
+        enum:
+        - draft
+        - submitted
+        - validation
+        - enrichment
+        - scoring
+        - manual_review
+        - info_requested
+        - approved
+        - counter_offer
+        - signing
+        - issued
+        - rejected
+        - cancelled
+        - expired
+        example: draft
+        type: string
+      submitted_at:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  reviewdto.RevisionRequest:
+    properties:
+      expected_revision:
+        example: 5
+        type: integer
+    type: object
+  reviewdto.StaffCollateralReviewResponse:
+    properties:
+      accepted_value_kopecks:
+        type: integer
+      actual:
+        type: boolean
+      comment:
+        type: string
+      id:
+        format: uuid
+        type: string
+      public_comment:
+        type: string
+      result:
+        enum:
+        - accepted
+        - needs_info
+        - rejected
+        type: string
+      reviewed_at:
+        type: string
+      reviewed_by:
+        format: uuid
+        type: string
+      version:
+        type: integer
+    type: object
+  reviewdto.TermsRequest:
+    properties:
+      agreement_term_months:
+        type: integer
+      amount_kopecks:
+        example: 100000000
+        type: integer
+      annual_rate_bps:
+        example: 2290
+        type: integer
+      bank_account_id:
+        format: uuid
+        type: string
+      collateral_required:
+        type: boolean
+      max_tranche_days:
+        type: integer
+      product_code:
+        example: express
+        type: string
+      term_months:
+        example: 12
+        type: integer
+      valid_until:
+        type: string
+    type: object
+  reviewdto.UnderwriterApplicationResponse:
+    properties:
+      applicant:
+        $ref: '#/definitions/creditdto.ApplicantResponse'
+      applicant_id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+      assignee:
+        $ref: '#/definitions/creditdto.ApplicantResponse'
+      available_actions:
+        example:
+        - edit
+        - fetch_financials
+        - submit
+        items:
+          type: string
+        type: array
+      checks:
+        type: object
+      collateral:
+        type: object
+      company:
+        $ref: '#/definitions/creditdto.CompanyCardResponse'
+      company_id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+      contract:
+        type: object
+      created_at:
+        type: string
+      editable_fields:
+        example:
+        - request.amount_kopecks
+        - request.product_code
+        items:
+          type: string
+        type: array
+      financials:
+        $ref: '#/definitions/creditdto.FinancialStateResponse'
+      id:
+        example: 3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13
+        format: uuid
+        type: string
+      issue:
+        type: object
+      number:
+        example: 1000
+        type: integer
+      offer:
+        type: object
+      product_details:
+        type: object
+      request:
+        $ref: '#/definitions/creditdto.RequestResponse'
+      revision:
+        example: 1
+        type: integer
+      scoring:
+        type: object
+      status:
+        enum:
+        - draft
+        - submitted
+        - validation
+        - enrichment
+        - scoring
+        - manual_review
+        - info_requested
+        - approved
+        - counter_offer
+        - signing
+        - issued
+        - rejected
+        - cancelled
+        - expired
+        example: draft
+        type: string
+      submitted_at:
+        type: string
+      updated_at:
+        type: string
+    type: object
   swagger.HTTPError:
     properties:
       message:
@@ -1140,6 +1622,190 @@ paths:
       security:
       - BearerAuth: []
       summary: Изменить сумму и залог своей заявки
+      tags:
+      - applications
+  /applications/{id}/contract:
+    get:
+      description: Метаданные; файл — GET /documents/{id}/content с id договора.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: null — договора нет
+          schema:
+            $ref: '#/definitions/reviewdto.ContractResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Договор к предложению
+      tags:
+      - applications
+  /applications/{id}/info-requests:
+    get:
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/reviewdto.InfoRequestResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: 'NOT_FOUND: нет заявки или она чужая'
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Запросы банка
+      tags:
+      - applications
+  /applications/{id}/info-requests/{rid}/answer:
+    post:
+      consumes:
+      - application/json
+      description: Поля из editable_fields правятся через PATCH заявки; после ответов
+        на все запросы — resubmit.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Запрос
+        format: uuid
+        in: path
+        name: rid
+        required: true
+        type: string
+      - description: Ответ
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reviewdto.AnswerInfoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/creditdto.ApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "422":
+          description: VALIDATION_FAILED
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Ответить на запрос банка
+      tags:
+      - applications
+  /applications/{id}/offer:
+    get:
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: null — предложения нет
+          schema:
+            $ref: '#/definitions/reviewdto.OfferResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Текущее предложение
+      tags:
+      - applications
+  /applications/{id}/resubmit:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        После ответов на все запросы банка. Заявка та же, проверки повторяются.
+        Повтор с тем же Idempotency-Key и телом возвращает тот же результат.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Версия заявки
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reviewdto.RevisionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/creditdto.ApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Отправить повторно
       tags:
       - applications
   /auth/login:
@@ -1727,6 +2393,136 @@ paths:
       summary: Подбор кредитных продуктов
       tags:
       - credit-products
+  /documents/{id}/content:
+    get:
+      description: Клиенту — документы заявок своей компании, сотруднику — любые.
+      parameters:
+      - description: Документ
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/pdf
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "503":
+          description: SERVICE_UNAVAILABLE
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Файл документа
+      tags:
+      - documents
+  /underwriter/applications:
+    get:
+      description: |-
+        Заявки на рассмотрении и после него, старые сверху. Черновики не показываются.
+        assignee: me — мои, none — свободные, uuid — сотрудника.
+      parameters:
+      - description: Статус заявки
+        enum:
+        - submitted
+        - validation
+        - enrichment
+        - scoring
+        - manual_review
+        - info_requested
+        - approved
+        - counter_offer
+        - signing
+        - issued
+        - rejected
+        - cancelled
+        - expired
+        in: query
+        name: status
+        type: string
+      - description: me, none или id сотрудника
+        in: query
+        name: assignee
+        type: string
+      - description: От 1 до 100, по умолчанию 20
+        in: query
+        name: limit
+        type: integer
+      - description: next_cursor предыдущей страницы
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/reviewdto.ApplicationPageResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: не сотрудник
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Очередь заявок
+      tags:
+      - underwriter
+  /underwriter/applications/{id}:
+    get:
+      description: |-
+        Заявка, проверки, скоринг, залог, запросы уточнений, решения и история.
+        decision_blockers — что мешает одобрить заявку на запрошенных условиях.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: не сотрудник
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Карточка заявки
+      tags:
+      - underwriter
   /underwriter/applications/{id}/collateral-review:
     post:
       consumes:
@@ -1785,6 +2581,216 @@ paths:
       summary: Записать банковскую проверку залога
       tags:
       - applications
+  /underwriter/applications/{id}/decision:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        approved — условия как в запросе (ставка не считается), counter_offer — изменён продукт,
+        сумма, срок или обеспечение. Положительное решение требует готовых проверок и принятого
+        залога у обеспеченного продукта; создаёт предложение и PDF договора. Платёж считает сервер.
+        rejected — с reason_code и пояснениями для клиента.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Решение
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reviewdto.DecisionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "403":
+          description: 'FORBIDDEN: заявка у другого сотрудника'
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "422":
+          description: 'VALIDATION_FAILED: условия, проверки, залог'
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "503":
+          description: 'SERVICE_UNAVAILABLE: хранилище договоров'
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Опубликовать решение
+      tags:
+      - underwriter
+  /underwriter/applications/{id}/request-info:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Создаёт запрос клиенту и переводит заявку в info_requested.
+        editable_fields — поля черновика, которые клиент сможет поправить.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Запрос
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reviewdto.RequestInfoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "403":
+          description: 'FORBIDDEN: заявка у другого сотрудника'
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "422":
+          description: VALIDATION_FAILED
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Запросить уточнения
+      tags:
+      - underwriter
+  /underwriter/applications/{id}/retry-checks:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Перезапрашивает источники; результат придёт асинхронно с новой revision.
+        Пока конвейер не подключён — 503.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Источники
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reviewdto.RetryChecksRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "403":
+          description: 'FORBIDDEN: заявка у другого сотрудника'
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "422":
+          description: VALIDATION_FAILED
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "503":
+          description: SERVICE_UNAVAILABLE
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Повторить проверки
+      tags:
+      - underwriter
+  /underwriter/applications/{id}/take:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Назначает заявку на текущего сотрудника. Повтор тем же сотрудником безопасен;
+        заявку другого сотрудника — 409 INVALID_STATE.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Версия заявки
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/reviewdto.RevisionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Взять заявку
+      tags:
+      - underwriter
   /users:
     post:
       consumes:

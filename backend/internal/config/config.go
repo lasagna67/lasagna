@@ -74,6 +74,8 @@ type (
 		Buckets       []string
 		PingTimeout   time.Duration `default:"15s"`
 		UploadExpires time.Duration `default:"15m"`
+		// Бакет документов заявок: договоры, подписи.
+		DocumentsBucket string `default:"documents"`
 	}
 
 	KafkaConfig struct {

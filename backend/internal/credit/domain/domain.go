@@ -93,7 +93,7 @@ type Request struct {
 	CollateralMode     CollateralMode
 }
 
-// Application — заявка на кредит 
+// Application — заявка на кредит
 //
 // CompanyID и ApplicantID не меняются после создания; Revision растёт с каждым изменением.
 type Application struct {
@@ -105,9 +105,19 @@ type Application struct {
 	Status      Status
 	Request     Request
 
+	AssigneeID *uuid.UUID // сотрудник, взявший заявку на рассмотрение; назначает модуль review
+	Info       InfoRound  // запросы банка текущего раунда; только в info_requested
+
 	SubmittedAt *time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+// InfoRound — запросы банка, на которые клиент отвечает сейчас: что разрешено
+// править и сколько запросов ещё без ответа. Заполняет repo в статусе info_requested.
+type InfoRound struct {
+	EditableFields []string
+	Open           int
 }
 
 // CompanyCard — краткая карточка компании-заёмщика.
@@ -157,7 +167,10 @@ const (
 // Operation — операция с Idempotency-Key.
 type Operation string
 
-const OperationCreate Operation = "create_application"
+const (
+	OperationCreate   Operation = "create_application"
+	OperationResubmit Operation = "resubmit_application"
+)
 
 // IdempotencyKey — область повтора: пользователь, операция, ресурс и ключ клиента.
 //
@@ -221,6 +234,9 @@ func (a *Application) Submit() (Transition, error) {
 // Resubmit — повторная отправка после ответа на все открытые запросы банка.
 // Заявка та же, конвейер повторяет затронутые проверки.
 func (a *Application) Resubmit() (Transition, error) {
+	if a.Status == StatusInfoRequested && a.Info.Open > 0 {
+		return Transition{}, fmt.Errorf("%w: %d open", crediterrors.ErrInfoRequestsOpen, a.Info.Open)
+	}
 	return a.transit(StatusSubmitted, StatusInfoRequested)
 }
 
@@ -308,20 +324,39 @@ var draftFields = []string{
 	"request.collateral_mode", "product_details", "collateral",
 }
 
-// EditableFields — поля, которые клиент может менять сейчас.
-// TODO: info_requested — поля из открытых запросов банка.
+// DraftFields — поля черновика; из них банк выбирает, что открыть клиенту
+// для правки в запросе уточнений.
+func DraftFields() []string {
+	return slices.Clone(draftFields)
+}
+
+// EditableFields — поля, которые клиент может менять сейчас: в черновике все,
+// в info_requested — только перечисленные в запросах банка.
 func (a *Application) EditableFields() []string {
-	if a.Status == StatusDraft {
+	switch a.Status {
+	case StatusDraft:
 		return slices.Clone(draftFields)
+	case StatusInfoRequested:
+		return slices.Clone(a.Info.EditableFields)
 	}
 	return []string{}
 }
 
 // ClientActions — действия клиента в текущем статусе.
-// TODO: остальные статусы и зависимость от финансового шага — вместе с их операциями.
+// TODO: approved/counter_offer и зависимость от финансового шага — вместе с их операциями.
 func (a *Application) ClientActions() []Action {
-	if a.Status == StatusDraft {
+	switch a.Status {
+	case StatusDraft:
 		return []Action{ActionEdit, ActionFetchFinancials, ActionSubmit}
+	case StatusInfoRequested:
+		actions := []Action{}
+		if len(a.Info.EditableFields) > 0 {
+			actions = append(actions, ActionEdit)
+		}
+		if a.Info.Open > 0 {
+			return append(actions, ActionAnswerInfo)
+		}
+		return append(actions, ActionResubmit)
 	}
 	return []Action{}
 }

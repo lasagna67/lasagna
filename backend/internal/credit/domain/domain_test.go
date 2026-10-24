@@ -172,3 +172,23 @@ func TestDraftIsEditable(t *testing.T) {
 		t.Errorf("submitted: fields %v, actions %v; want none", fields, actions)
 	}
 }
+
+func TestInfoRequestedRound(t *testing.T) {
+	a := &Application{Status: StatusInfoRequested, Info: InfoRound{EditableFields: []string{"collateral"}, Open: 1}}
+	if fields, actions := a.EditableFields(), a.ClientActions(); !slices.Equal(fields, []string{"collateral"}) ||
+		!slices.Equal(actions, []Action{ActionEdit, ActionAnswerInfo}) {
+		t.Errorf("open round: fields %v, actions %v", fields, actions)
+	}
+	if _, err := a.Resubmit(); !errors.Is(err, crediterrors.ErrInfoRequestsOpen) || a.Status != StatusInfoRequested {
+		t.Errorf("resubmit with open requests = %v; want ErrInfoRequestsOpen", err)
+	}
+
+	// Всё отвечено, править нечего — остаётся только resubmit.
+	a.Info = InfoRound{}
+	if fields, actions := a.EditableFields(), a.ClientActions(); len(fields) != 0 || !slices.Equal(actions, []Action{ActionResubmit}) {
+		t.Errorf("answered round: fields %v, actions %v", fields, actions)
+	}
+	if tr, err := a.Resubmit(); err != nil || tr.To != StatusSubmitted {
+		t.Errorf("resubmit = %+v, %v", tr, err)
+	}
+}
