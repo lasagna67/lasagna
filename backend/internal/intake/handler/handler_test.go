@@ -16,6 +16,7 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	authdomain "github.com/lasagna67/lasagna.git/internal/auth/domain"
+	intakedomain "github.com/lasagna67/lasagna.git/internal/intake/domain"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
 
@@ -26,8 +27,10 @@ var (
 
 // fakeService отдаёт err, если он задан, иначе черновик по команде.
 type fakeService struct {
-	err  error
-	last applicationdomain.CreateCommand
+	err   error
+	last  applicationdomain.CreateCommand
+	patch intakedomain.PatchCommand
+	sent  intakedomain.SubmitCommand
 }
 
 func (f *fakeService) Create(_ context.Context, cmd applicationdomain.CreateCommand) (applicationdomain.ApplicationDetails, error) {

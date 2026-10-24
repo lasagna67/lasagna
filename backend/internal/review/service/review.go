@@ -1,6 +1,6 @@
 // Package reviewservice — рассмотрение заявки: очередь и карточка сотрудника,
-// назначение, запросы уточнений, решение с договором; ответы клиента и
-// повторная отправка. Проверку залога пишет модуль collateral.
+// назначение, запросы уточнений, решение с договором; ответы клиента на
+// запросы. Правку и отправку заявки ведёт модуль intake, проверку залога — collateral.
 package reviewservice
 
 import (
@@ -26,8 +26,6 @@ import (
 const (
 	defaultLimit = 20
 	maxLimit     = 100
-	// maxIdempotencyKeyLen — длина колонки idempotency_keys.idempotency_key.
-	maxIdempotencyKeyLen = 255
 )
 
 type Repo interface {
@@ -73,11 +71,9 @@ type ContractRenderer interface {
 	Render(reviewdomain.ContractData) ([]byte, error)
 }
 
-// Pipeline — конвейер validation → enrichment → scoring. Run повторяет проверки
-// после resubmit и должен быть идемпотентным: не делает ничего, если заявка уже
-// не в submitted.
+// Pipeline — повтор источников конвейера для заявки на рассмотрении. Запуск
+// после отправки — у модуля intake.
 type Pipeline interface {
-	Run(ctx context.Context, applicationID uuid.UUID) error
 	RetryChecks(ctx context.Context, applicationID uuid.UUID, sources []reviewdomain.CheckSource) error
 }
 
@@ -221,10 +217,10 @@ func (s *Service) RequestInfo(ctx context.Context, cmd reviewdomain.RequestInfoC
 			Transitions: []applicationdomain.Transition{tr},
 			Comment:     &req.Message,
 			InfoRequest: &req,
-			Notification: &reviewdomain.Notification{
+			Notification: &applicationdomain.Notification{
 				UserID:        a.ApplicantID,
 				ApplicationID: a.ID,
-				Type:          reviewdomain.NotificationInfoRequested,
+				Type:          applicationdomain.NotificationInfoRequested,
 				Title:         fmt.Sprintf("Заявка № %d: нужны дополнительные сведения", a.Number),
 				Body:          req.Message,
 			},
@@ -392,61 +388,6 @@ func (s *Service) AnswerInfo(ctx context.Context, cmd reviewdomain.AnswerInfoCom
 	return s.clientDetails(ctx, cmd.UserID, cmd.ApplicationID)
 }
 
-// Resubmit — повторная отправка после ответов на все запросы. Повтор с тем же
-// Idempotency-Key и телом не создаёт второй отправки; конвейер запускается,
-// пока заявка в submitted, — и при повторе, если первый запуск не удался.
-func (s *Service) Resubmit(ctx context.Context, cmd reviewdomain.ResubmitCommand) (reviewdomain.Details, error) {
-	if err := validateIdempotencyKey(cmd.IdempotencyKey); err != nil {
-		return reviewdomain.Details{}, err
-	}
-	if _, err := s.clientDetails(ctx, cmd.UserID, cmd.ApplicationID); err != nil {
-		return reviewdomain.Details{}, err
-	}
-	id := cmd.ApplicationID
-	update := s.update(id, cmd.ExpectedRevision, cmd.UserID)
-	update.Key = &applicationdomain.IdempotencyKey{
-		UserID:      cmd.UserID,
-		Operation:   applicationdomain.OperationResubmit,
-		ResourceID:  &id,
-		Key:         cmd.IdempotencyKey,
-		RequestHash: requestHash(id.String(), fmt.Sprint(cmd.ExpectedRevision)),
-	}
-	_, err := s.repo.Update(ctx, update, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
-		tr, err := a.Resubmit()
-		if err != nil {
-			return reviewdomain.Change{}, err
-		}
-		change := reviewdomain.Change{Transitions: []applicationdomain.Transition{tr}}
-		if a.AssigneeID != nil {
-			change.Notification = &reviewdomain.Notification{
-				UserID:        *a.AssigneeID,
-				ApplicationID: a.ID,
-				Type:          reviewdomain.NotificationStatusChanged,
-				Title:         fmt.Sprintf("Заявка № %d отправлена повторно", a.Number),
-				Body:          "Клиент ответил на запросы банка",
-			}
-		}
-		return change, nil
-	})
-	if err != nil {
-		return reviewdomain.Details{}, fmt.Errorf("resubmit: %w", err)
-	}
-
-	d, err := s.repo.GetDetails(ctx, id)
-	if err != nil {
-		return reviewdomain.Details{}, fmt.Errorf("get application: %w", err)
-	}
-	if d.Status == applicationdomain.StatusSubmitted {
-		if err := s.pipeline.Run(ctx, id); err != nil {
-			return reviewdomain.Details{}, fmt.Errorf("run pipeline: %w", err)
-		}
-		if d, err = s.repo.GetDetails(ctx, id); err != nil {
-			return reviewdomain.Details{}, fmt.Errorf("get application: %w", err)
-		}
-	}
-	return d, nil
-}
-
 // Offer — текущее предложение по заявке своей компании; nil — его нет.
 func (s *Service) Offer(ctx context.Context, userID, applicationID uuid.UUID) (*reviewdomain.Decision, error) {
 	d, err := s.clientDetails(ctx, userID, applicationID)
@@ -597,11 +538,11 @@ var changedLabels = map[string]string{
 	"collateral_mode": "обеспечение",
 }
 
-func decisionNotification(a applicationdomain.Application, d reviewdomain.Decision) *reviewdomain.Notification {
-	n := &reviewdomain.Notification{UserID: a.ApplicantID, ApplicationID: a.ID}
+func decisionNotification(a applicationdomain.Application, d reviewdomain.Decision) *applicationdomain.Notification {
+	n := &applicationdomain.Notification{UserID: a.ApplicantID, ApplicationID: a.ID}
 	switch d.Outcome {
 	case reviewdomain.OutcomeApproved:
-		n.Type = reviewdomain.NotificationOfferReady
+		n.Type = applicationdomain.NotificationOfferReady
 		n.Title = fmt.Sprintf("Заявка № %d: предложение готово", a.Number)
 		n.Body = "Банк одобрил заявку на запрошенных условиях. Ознакомьтесь с договором."
 	case reviewdomain.OutcomeCounterOffer:
@@ -609,35 +550,15 @@ func decisionNotification(a applicationdomain.Application, d reviewdomain.Decisi
 		for _, f := range d.ChangedFields {
 			labels = append(labels, changedLabels[f])
 		}
-		n.Type = reviewdomain.NotificationOfferReady
+		n.Type = applicationdomain.NotificationOfferReady
 		n.Title = fmt.Sprintf("Заявка № %d: предложены другие условия", a.Number)
 		n.Body = "Банк предлагает изменить " + strings.Join(labels, ", ") + ". Ознакомьтесь с договором."
 	default:
-		n.Type = reviewdomain.NotificationStatusChanged
+		n.Type = applicationdomain.NotificationStatusChanged
 		n.Title = fmt.Sprintf("Заявка № %d: отказ", a.Number)
 		n.Body = strings.Join(d.Reasons, "; ")
 	}
 	return n
-}
-
-func validateIdempotencyKey(key string) error {
-	if strings.TrimSpace(key) == "" {
-		return &applicationerrors.RequestError{Message: "Передайте заголовок Idempotency-Key"}
-	}
-	if len(key) > maxIdempotencyKeyLen {
-		return &applicationerrors.RequestError{Message: "Idempotency-Key длиннее 255 символов"}
-	}
-	return nil
-}
-
-// requestHash — отпечаток тела запроса для сравнения повторов.
-func requestHash(parts ...string) string {
-	h := sha256.New()
-	for _, p := range parts {
-		h.Write([]byte(p))
-		h.Write([]byte{0})
-	}
-	return hex.EncodeToString(h.Sum(nil))
 }
 
 func invalid(field, code, message string) error {

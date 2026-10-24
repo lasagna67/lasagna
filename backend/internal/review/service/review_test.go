@@ -185,7 +185,7 @@ func TestDecideApproved(t *testing.T) {
 	if !ok || doc.SHA256 != offer.Contract.SHA256 || string(e.storage.files[doc.StorageKey]) != "%PDF-fake contract" {
 		t.Errorf("document %+v not stored with its contract", doc)
 	}
-	if n := e.repo.notifications; len(n) != 1 || n[0].UserID != applicantID || n[0].Type != reviewdomain.NotificationOfferReady {
+	if n := e.repo.notifications; len(n) != 1 || n[0].UserID != applicantID || n[0].Type != applicationdomain.NotificationOfferReady {
 		t.Errorf("notifications = %+v", n)
 	}
 
@@ -270,7 +270,7 @@ func TestDecideRejected(t *testing.T) {
 	if h := review.History[0]; h.To != applicationdomain.StatusRejected || h.Comment == nil || *h.Comment != "Высокая долговая нагрузка" {
 		t.Errorf("history = %+v", h)
 	}
-	if n := e.repo.notifications; len(n) != 1 || n[0].Type != reviewdomain.NotificationStatusChanged {
+	if n := e.repo.notifications; len(n) != 1 || n[0].Type != applicationdomain.NotificationStatusChanged {
 		t.Errorf("notifications = %+v", n)
 	}
 }
@@ -305,7 +305,7 @@ func TestInfoRequestLoop(t *testing.T) {
 	if review.Status != applicationdomain.StatusInfoRequested || !slices.Equal(review.EditableFields(), []string{"request.amount_kopecks"}) {
 		t.Fatalf("status %s, editable %v", review.Status, review.EditableFields())
 	}
-	if n := e.repo.notifications; len(n) != 1 || n[0].Type != reviewdomain.NotificationInfoRequested || n[0].UserID != applicantID {
+	if n := e.repo.notifications; len(n) != 1 || n[0].Type != applicationdomain.NotificationInfoRequested || n[0].UserID != applicantID {
 		t.Errorf("notifications = %+v", n)
 	}
 
@@ -315,11 +315,6 @@ func TestInfoRequestLoop(t *testing.T) {
 	}
 	if _, err := e.svc.InfoRequests(ctx, outsiderID, app.ID); !errors.Is(err, applicationerrors.ErrNotFound) {
 		t.Errorf("outsider requests = %v", err)
-	}
-
-	resubmit := reviewdomain.ResubmitCommand{ApplicationID: app.ID, UserID: applicantID, ExpectedRevision: 6, IdempotencyKey: "resubmit-1"}
-	if _, err := e.svc.Resubmit(ctx, resubmit); !errors.Is(err, applicationerrors.ErrInfoRequestsOpen) {
-		t.Fatalf("resubmit before answer = %v; want ErrInfoRequestsOpen", err)
 	}
 
 	answer := reviewdomain.AnswerInfoCommand{ApplicationID: app.ID, RequestID: reqs[0].ID, UserID: applicantID, ExpectedRevision: 6, Answer: "Сумма прежняя"}
@@ -333,29 +328,6 @@ func TestInfoRequestLoop(t *testing.T) {
 	answer.ExpectedRevision = 7
 	if _, err := e.svc.AnswerInfo(ctx, answer); !errors.Is(err, applicationerrors.ErrInvalidState) {
 		t.Errorf("second answer = %v; want ErrInvalidState", err)
-	}
-
-	resubmit.ExpectedRevision = 7
-	d, err = e.svc.Resubmit(ctx, resubmit)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Временный конвейер сразу возвращает заявку тому же сотруднику.
-	if d.ID != app.ID || d.Status != applicationdomain.StatusManualReview || d.AssigneeID == nil || *d.AssigneeID != me.ID {
-		t.Fatalf("after resubmit: %s, assignee %v", d.Status, d.AssigneeID)
-	}
-	transitions := len(e.repo.history[app.ID])
-
-	// Повтор с тем же ключом и телом не создаёт второй отправки.
-	if again, err := e.svc.Resubmit(ctx, resubmit); err != nil || again.Revision != d.Revision || len(e.repo.history[app.ID]) != transitions {
-		t.Errorf("replay = revision %d, %v, history %d -> %d", again.Revision, err, transitions, len(e.repo.history[app.ID]))
-	}
-	resubmit.ExpectedRevision = 99
-	if _, err := e.svc.Resubmit(ctx, resubmit); !errors.Is(err, applicationerrors.ErrIdempotencyConflict) {
-		t.Errorf("same key, other body = %v; want ErrIdempotencyConflict", err)
-	}
-	if n := e.repo.notifications; n[len(n)-1].UserID != me.ID {
-		t.Errorf("assignee not notified about resubmit: %+v", n[len(n)-1])
 	}
 }
 

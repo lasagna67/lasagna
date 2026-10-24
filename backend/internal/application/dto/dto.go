@@ -9,12 +9,6 @@ import (
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 )
 
-type CreateApplicationRequest struct {
-	CompanyID uuid.UUID `json:"company_id" swaggertype:"string" format:"uuid" example:"9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"`
-}
-
-//============================================================================================
-
 type CompanyCardResponse struct {
 	ID   uuid.UUID `json:"id" swaggertype:"string" format:"uuid" example:"9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"`
 	Name string    `json:"name" example:"ООО «Кедровый контур Демо»"`
@@ -59,8 +53,8 @@ type FinancialStateResponse struct {
 }
 
 // ApplicationResponse — объект заявки из контракта lasagna-credit-v1.
-// product_details, collateral, checks, scoring, offer, contract и issue
-// пока всегда null: их операции ещё не реализованы.
+// collateral, offer и contract заполняют модули, которые их ведут (intake,
+// review); product_details, checks, scoring и issue пока всегда null.
 type ApplicationResponse struct {
 	ID               uuid.UUID              `json:"id" swaggertype:"string" format:"uuid" example:"3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13"`
 	CompanyID        uuid.UUID              `json:"company_id" swaggertype:"string" format:"uuid" example:"9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"`

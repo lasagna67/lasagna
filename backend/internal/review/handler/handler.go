@@ -19,8 +19,6 @@ import (
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
 
-const headerIdempotencyKey = "Idempotency-Key"
-
 type Service interface {
 	List(ctx context.Context, f reviewdomain.Filter) ([]reviewdomain.Details, *int64, error)
 	Get(ctx context.Context, id uuid.UUID) (reviewdomain.Review, error)
@@ -31,7 +29,6 @@ type Service interface {
 
 	InfoRequests(ctx context.Context, userID, applicationID uuid.UUID) ([]reviewdomain.InfoRequest, error)
 	AnswerInfo(ctx context.Context, cmd reviewdomain.AnswerInfoCommand) (reviewdomain.Details, error)
-	Resubmit(ctx context.Context, cmd reviewdomain.ResubmitCommand) (reviewdomain.Details, error)
 	Offer(ctx context.Context, userID, applicationID uuid.UUID) (*reviewdomain.Decision, error)
 	DocumentContent(ctx context.Context, viewer reviewdomain.Viewer, documentID uuid.UUID) (reviewdomain.Document, io.ReadCloser, error)
 }
@@ -50,7 +47,7 @@ func New(service Service, logger *logger.Logger) *Handler {
 
 // RegisterRoutes: /underwriter — сотрудникам, ответы на запросы и предложение —
 // клиенту, документы — обоим, доступ к файлу проверяет сервис.
-// collateral-review регистрирует модуль collateral.
+// collateral-review регистрирует модуль collateral, PATCH и отправку — intake.
 func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, clientOnly, staffOnly echo.MiddlewareFunc) {
 	staff := api.Group("/underwriter/applications", authenticate, staffOnly)
 	staff.GET("", h.list)
@@ -63,7 +60,6 @@ func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, clientOnly, staf
 	client := api.Group("/applications", authenticate, clientOnly)
 	client.GET("/:id/info-requests", h.infoRequests)
 	client.POST("/:id/info-requests/:rid/answer", h.answerInfo)
-	client.POST("/:id/resubmit", h.resubmit)
 	client.GET("/:id/offer", h.offer)
 	client.GET("/:id/contract", h.contract)
 
@@ -374,43 +370,6 @@ func (h *Handler) answerInfo(c *echo.Context) error {
 	}
 	d, err := h.service.AnswerInfo(c.Request().Context(), reviewdomain.AnswerInfoCommand{
 		ApplicationID: id, RequestID: rid, UserID: userID, ExpectedRevision: revision, Answer: req.Answer,
-	})
-	if err != nil {
-		return h.fail(c, err)
-	}
-	return c.JSON(http.StatusOK, reviewdto.NewApplication(d))
-}
-
-// resubmit godoc
-//
-//	@Summary		Отправить повторно
-//	@Description	После ответов на все запросы банка. Заявка та же, проверки повторяются.
-//	@Description	Повтор с тем же Idempotency-Key и телом возвращает тот же результат.
-//	@Tags			applications
-//	@Accept			json
-//	@Produce		json
-//	@Security		BearerAuth
-//	@Param			id				path		string						true	"Заявка"	format(uuid)
-//	@Param			Idempotency-Key	header		string						true	"Ключ повтора, до 255 символов"
-//	@Param			request			body		reviewdto.RevisionRequest	true	"Версия заявки"
-//	@Success		200				{object}	applicationdto.ApplicationResponse
-//	@Failure		400				{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
-//	@Failure		404				{object}	applicationdto.ErrorResponse	"NOT_FOUND"
-//	@Failure		409				{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT"
-//	@Router			/applications/{id}/resubmit [post]
-func (h *Handler) resubmit(c *echo.Context) error {
-	userID, id, err := h.clientTarget(c)
-	if err != nil {
-		return h.fail(c, err)
-	}
-	var req reviewdto.RevisionRequest
-	revision, err := bindRevision(c, &req, &req.ExpectedRevision)
-	if err != nil {
-		return h.fail(c, err)
-	}
-	d, err := h.service.Resubmit(c.Request().Context(), reviewdomain.ResubmitCommand{
-		ApplicationID: id, UserID: userID, ExpectedRevision: revision,
-		IdempotencyKey: c.Request().Header.Get(headerIdempotencyKey),
 	})
 	if err != nil {
 		return h.fail(c, err)

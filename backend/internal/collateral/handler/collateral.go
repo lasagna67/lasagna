@@ -15,8 +15,9 @@ import (
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
 
+// Repository — проверка залога сотрудником. Предмет залога описывает клиент
+// через PATCH заявки в модуле intake.
 type Repository interface {
-	Patch(context.Context, uuid.UUID, uuid.UUID, d.PatchApplication) (d.CollateralApplication, error)
 	Review(context.Context, uuid.UUID, uuid.UUID, d.ReviewCollateral) (d.CollateralApplication, error)
 }
 type Handler struct {
@@ -28,17 +29,16 @@ func New(repo Repository, logger *logger.Logger) *Handler {
 	return &Handler{repo: repo, logger: logger}
 }
 
-func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, clientRole, reviewerRole echo.MiddlewareFunc) {
-	api.PATCH("/applications/:id", h.patch, authenticate, clientRole)
+func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, reviewerRole echo.MiddlewareFunc) {
 	api.POST("/underwriter/applications/:id/collateral-review", h.review, authenticate, reviewerRole)
 }
 
-func identity(c *echo.Context, review bool) (uuid.UUID, uuid.UUID, error) {
+func identity(c *echo.Context) (uuid.UUID, uuid.UUID, error) {
 	claims, ok := auth.GetClaims(c.Request().Context())
 	if !ok || claims.UserID == uuid.Nil {
 		return uuid.Nil, uuid.Nil, echo.NewHTTPError(401, "Требуется авторизация")
 	}
-	if (!review && claims.Role != auth.RoleClient) || (review && claims.Role != auth.RoleUnderwriter && claims.Role != auth.RoleAdmin) {
+	if claims.Role != auth.RoleUnderwriter && claims.Role != auth.RoleAdmin {
 		return uuid.Nil, uuid.Nil, echo.NewHTTPError(403, "Недостаточно прав")
 	}
 	id, err := uuid.Parse(c.Param("id"))
@@ -60,42 +60,6 @@ func decode(c *echo.Context, out any) error {
 	return nil
 }
 
-// patch godoc
-// @Summary Изменить сумму и залог своей заявки
-// @Description Доступно клиенту компании в draft, info_requested, manual_review. Обязателен expected_revision. collateral заменяется целиком; его revision задаёт сервер. Оценки, заключения и хеши банка клиент менять не может. Конфликт версии — 409. Внутренние комментарии банка в ответ не включаются.
-// @Tags applications
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Param id path string true "ID заявки" format(uuid)
-// @Param request body collateraldomain.PatchApplication true "Изменения"
-// @Success 200 {object} collateraldomain.CollateralApplication
-// @Failure 400 {object} swagger.HTTPError
-// @Failure 401 {object} swagger.HTTPError
-// @Failure 403 {object} swagger.HTTPError
-// @Failure 404 {object} swagger.HTTPError
-// @Failure 409 {object} swagger.HTTPError
-// @Failure 500 {object} swagger.HTTPError
-// @Router /applications/{id} [patch]
-func (h *Handler) patch(c *echo.Context) error {
-	id, user, err := identity(c, false)
-	if err != nil {
-		return err
-	}
-	var p d.PatchApplication
-	if err := decode(c, &p); err != nil {
-		return err
-	}
-	if err := p.Validate(); err != nil {
-		return h.fail(err)
-	}
-	result, err := h.repo.Patch(c.Request().Context(), id, user, p)
-	if err != nil {
-		return h.fail(err)
-	}
-	return c.JSON(http.StatusOK, result)
-}
-
 // review godoc
 // @Summary Записать банковскую проверку залога
 // @Description Только назначенный активный underwriter/admin в manual_review или info_requested. Неизменяемое заключение сохраняет версию заявки, версию и SHA-256 залога. Для accepted нужны положительная оценка и внутренний comment. Актуальность — 30 суток включительно. Изменение суммы кредита только пересчитывает покрытие 70%.
@@ -114,7 +78,7 @@ func (h *Handler) patch(c *echo.Context) error {
 // @Failure 500 {object} swagger.HTTPError
 // @Router /underwriter/applications/{id}/collateral-review [post]
 func (h *Handler) review(c *echo.Context) error {
-	id, user, err := identity(c, true)
+	id, user, err := identity(c)
 	if err != nil {
 		return err
 	}

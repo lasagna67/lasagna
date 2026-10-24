@@ -56,7 +56,8 @@ func Update(ctx context.Context, pool *pgxpool.Pool, cmd applicationdomain.Updat
 	return replayed, err
 }
 
-// save пишет историю переходов и саму заявку: статус, ответственного и revision + 1.
+// save пишет историю переходов и саму заявку: статус, ответственного, время
+// отправки и revision + 1.
 func save(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, h History, actorID *uuid.UUID) error {
 	for i, tr := range h.Transitions {
 		var comment *string
@@ -68,9 +69,9 @@ func save(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, h H
 		}
 	}
 	_, err := tx.Exec(ctx, `
-		UPDATE applications SET status = $2, assignee_id = $3, revision = revision + 1
+		UPDATE applications SET status = $2, assignee_id = $3, submitted_at = $4, revision = revision + 1
 		WHERE id = $1`,
-		app.ID, app.Status, app.AssigneeID,
+		app.ID, app.Status, app.AssigneeID, app.SubmittedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("update application: %w", err)

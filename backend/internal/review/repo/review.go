@@ -248,13 +248,8 @@ func apply(ctx context.Context, tx pgx.Tx, c reviewdomain.Change) error {
 		}
 	}
 	if n := c.Notification; n != nil {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO notifications (user_id, application_id, type, title, body)
-			VALUES ($1, $2, $3, $4, $5)`,
-			n.UserID, n.ApplicationID, n.Type, n.Title, n.Body,
-		)
-		if err != nil {
-			return fmt.Errorf("insert notification: %w", err)
+		if err := applicationrepo.InsertNotification(ctx, tx, *n); err != nil {
+			return err
 		}
 	}
 	return nil

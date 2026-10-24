@@ -356,23 +356,6 @@ func overviewSource[T any](status string, data *T) SourceCheck {
 //=================================================================================================
 // ЧТО ПИШЕТСЯ ВМЕСТЕ С ЗАЯВКОЙ:
 
-type NotificationType string
-
-const (
-	NotificationStatusChanged NotificationType = "status_changed"
-	NotificationInfoRequested NotificationType = "info_requested"
-	NotificationOfferReady    NotificationType = "offer_ready"
-)
-
-// Notification — запись в ленте уведомлений пользователя.
-type Notification struct {
-	UserID        uuid.UUID
-	ApplicationID uuid.UUID
-	Type          NotificationType
-	Title         string
-	Body          string
-}
-
 type DocumentType string
 
 const DocumentLoanAgreement DocumentType = "loan_agreement"
@@ -410,7 +393,7 @@ type Change struct {
 	AnsweredRequest *InfoRequest // ответ клиента на запрос
 	Document        *Document    // пишется раньше решения: решение на него ссылается
 	Decision        *Decision
-	Notification    *Notification
+	Notification    *applicationdomain.Notification
 }
 
 //=================================================================================================
@@ -489,13 +472,6 @@ type AnswerInfoCommand struct {
 	UserID           uuid.UUID
 	ExpectedRevision int
 	Answer           string
-}
-
-type ResubmitCommand struct {
-	ApplicationID    uuid.UUID
-	UserID           uuid.UUID
-	ExpectedRevision int
-	IdempotencyKey   string
 }
 
 // Viewer — кто читает документ: участник компании-заёмщика или сотрудник банка.

@@ -7,6 +7,7 @@ import (
 	companyrepo "github.com/lasagna67/lasagna.git/internal/company/repo"
 	"github.com/lasagna67/lasagna.git/internal/config"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
+	intakerepo "github.com/lasagna67/lasagna.git/internal/intake/repo"
 	reviewrepo "github.com/lasagna67/lasagna.git/internal/review/repo"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
 	userrepo "github.com/lasagna67/lasagna.git/internal/user/repo"
@@ -25,6 +26,7 @@ type Repo struct {
 	Scoring           *scoring.Scorer
 
 	Applications   *applicationrepo.ApplicationRepo
+	Drafts         *intakerepo.Repo
 	CreditProducts *creditproducts.ProductRepo
 
 	Review       *reviewrepo.Repo
@@ -44,6 +46,7 @@ func NewRepo(cfg config.Config, infra *Infra) *Repo {
 		Scoring:           scoring.NewScorer(infra.Postgres().Pool()),
 
 		Applications:   applicationrepo.NewApplicationRepo(infra.Postgres().Pool()),
+		Drafts:         intakerepo.New(infra.Postgres().Pool()),
 		CreditProducts: creditproducts.NewProductRepo(infra.Postgres().Pool()),
 
 		Review:       reviewrepo.New(infra.Postgres().Pool()),

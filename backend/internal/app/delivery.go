@@ -42,7 +42,7 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 	uploads := financialscsvhandler.New(services.Financials, logger.Named("financials-csv"))
 	uploads.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 	collateral := collateralhandler.New(services.Collateral, logger.Named("collateral"))
-	collateral.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient), auth.RequireRole(authdomain.RoleUnderwriter, authdomain.RoleAdmin))
+	collateral.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleUnderwriter, authdomain.RoleAdmin))
 	intake := intakehandler.New(services.Intake, logger.Named("intake"))
 	intake.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 

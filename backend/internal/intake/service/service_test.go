@@ -61,7 +61,7 @@ func (f *fakeApplications) Create(_ context.Context, app applicationdomain.Appli
 
 func newService() (*ApplicationService, *fakeApplications) {
 	repo := newFakeApplications()
-	return New(repo, fakeCompanies{}), repo
+	return New(Deps{Applications: repo, Companies: fakeCompanies{}}), repo
 }
 
 func TestCreate(t *testing.T) {

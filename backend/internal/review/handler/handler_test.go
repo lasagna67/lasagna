@@ -31,13 +31,12 @@ var (
 
 // fakeService отдаёт err, если он задан, иначе заявку на рассмотрении у underwriter.
 type fakeService struct {
-	err      error
-	filter   reviewdomain.Filter
-	take     reviewdomain.TakeCommand
-	decide   reviewdomain.DecideCommand
-	resubmit reviewdomain.ResubmitCommand
-	viewer   reviewdomain.Viewer
-	offer    *reviewdomain.Decision
+	err    error
+	filter reviewdomain.Filter
+	take   reviewdomain.TakeCommand
+	decide reviewdomain.DecideCommand
+	viewer reviewdomain.Viewer
+	offer  *reviewdomain.Decision
 }
 
 func review() reviewdomain.Review {
@@ -81,11 +80,6 @@ func (f *fakeService) InfoRequests(context.Context, uuid.UUID, uuid.UUID) ([]rev
 	return nil, f.err
 }
 func (f *fakeService) AnswerInfo(context.Context, reviewdomain.AnswerInfoCommand) (reviewdomain.Details, error) {
-	r, err := f.result()
-	return r.Details, err
-}
-func (f *fakeService) Resubmit(_ context.Context, cmd reviewdomain.ResubmitCommand) (reviewdomain.Details, error) {
-	f.resubmit = cmd
 	r, err := f.result()
 	return r.Details, err
 }
@@ -185,8 +179,8 @@ func TestUnderwriterRoutesNeedStaffRole(t *testing.T) {
 	if rec := do(newTestServer(adminUser, &fakeService{}), http.MethodGet, "/underwriter/applications/"+appID.String(), ""); rec.Code != http.StatusOK {
 		t.Errorf("admin on card: %d", rec.Code)
 	}
-	if rec := do(newTestServer(underwriter, &fakeService{}), http.MethodPost, "/applications/"+appID.String()+"/resubmit", `{"expected_revision":1}`); rec.Code != http.StatusForbidden {
-		t.Errorf("underwriter on client resubmit: %d; want 403", rec.Code)
+	if rec := do(newTestServer(underwriter, &fakeService{}), http.MethodGet, "/applications/"+appID.String()+"/offer", ""); rec.Code != http.StatusForbidden {
+		t.Errorf("underwriter on client offer: %d; want 403", rec.Code)
 	}
 }
 
@@ -268,21 +262,6 @@ func TestRevisionConflict(t *testing.T) {
 	body := decode(t, rec)["error"].(map[string]any)
 	if body["code"] != "REVISION_CONFLICT" || body["current_revision"] != float64(7) {
 		t.Errorf("error = %v", body)
-	}
-}
-
-func TestResubmitPassesIdempotencyKey(t *testing.T) {
-	svc := &fakeService{}
-	rec := do(newTestServer(client, svc), http.MethodPost, "/applications/"+appID.String()+"/resubmit", `{"expected_revision":7}`, "Idempotency-Key", "resubmit-1")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
-	}
-	if svc.resubmit != (reviewdomain.ResubmitCommand{ApplicationID: appID, UserID: client.UserID, ExpectedRevision: 7, IdempotencyKey: "resubmit-1"}) {
-		t.Errorf("command = %+v", svc.resubmit)
-	}
-	// Клиенту — клиентские действия и поля, без ответственного.
-	if _, ok := decode(t, rec)["assignee"]; ok {
-		t.Error("client response leaks assignee")
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 func TestTransitions(t *testing.T) {
 	past := time.Now().Add(-time.Hour)
 	expire := func(a *Application) (Transition, error) { return a.Expire(&past, time.Now()) }
+	submit := func(a *Application) (Transition, error) { return a.Submit(time.Now()) }
 
 	tests := []struct {
 		name string
@@ -25,7 +26,7 @@ func TestTransitions(t *testing.T) {
 		to   Status
 		from []Status
 	}{
-		{"Submit", (*Application).Submit, StatusSubmitted, []Status{StatusDraft}},
+		{"Submit", submit, StatusSubmitted, []Status{StatusDraft}},
 		{"Resubmit", (*Application).Resubmit, StatusSubmitted, []Status{StatusInfoRequested}},
 		{"StartValidation", (*Application).StartValidation, StatusValidation, []Status{StatusSubmitted}},
 		{"StartEnrichment", (*Application).StartEnrichment, StatusEnrichment, []Status{StatusValidation}},
@@ -66,7 +67,8 @@ func TestTransitions(t *testing.T) {
 func TestTerminalStatusesHaveNoTransitions(t *testing.T) {
 	past := time.Now().Add(-time.Hour)
 	methods := []func(*Application) (Transition, error){
-		(*Application).Submit, (*Application).Resubmit, (*Application).StartValidation, (*Application).StartEnrichment,
+		func(a *Application) (Transition, error) { return a.Submit(time.Now()) },
+		(*Application).Resubmit, (*Application).StartValidation, (*Application).StartEnrichment,
 		(*Application).StartScoring, (*Application).SendToManualReview, (*Application).RequestInfo, (*Application).Approve,
 		(*Application).CounterOffer, (*Application).Reject, (*Application).Sign, (*Application).Decline, (*Application).Issue,
 		func(a *Application) (Transition, error) { return a.Expire(&past, time.Now()) },
