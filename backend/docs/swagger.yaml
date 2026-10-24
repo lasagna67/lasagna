@@ -636,6 +636,70 @@ paths:
       summary: Компания
       tags:
       - companies
+  /companies/{id}/financials:
+    post:
+      consumes:
+      - multipart/form-data
+      description: 'Только для client, состоящего в компании. Передайте один CSV в
+        поле file. Максимальный размер всего multipart-запроса — 2 МиБ. Заголовок:
+        inn,month,income,expenses,taxes,owner_withdrawals. Все суммы — неотрицательные
+        целые копейки, месяц — YYYY-MM. ИНН каждой строки должен совпадать с компанией,
+        месяцы не должны повторяться. free_cash = income - expenses - taxes - owner_withdrawals.
+        Файл проверяется полностью до записи. Загрузка заменяет сохранённый финансовый
+        отчёт компании; реестр и БКИ сохраняются. Ответ содержит сохранённый отчёт,
+        месяцы отсортированы. Повторная загрузка не создаёт отдельную строку overview.'
+      parameters:
+      - description: ID компании
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: CSV в UTF-8 с разделителем запятая; суммы в копейках
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/companydomain.FinancialReport'
+        "400":
+          description: Некорректный CSV, ИНН, ID компании или отсутствие файла
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: Компания не найдена или пользователь не участник
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "413":
+          description: Запрос больше 2 МиБ
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "415":
+          description: Ожидается multipart/form-data
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+      security:
+      - BearerAuth: []
+      summary: Загрузка финансовой отчётности из CSV
+      tags:
+      - companies
   /companies/{id}/members:
     get:
       parameters:
@@ -769,10 +833,14 @@ paths:
   /companies/{id}/overview:
     get:
       description: 'Только для client, состоящего в компании. Источники запрашиваются
-        параллельно по ИНН из БД. Ошибка источника не скрывает остальные: status=ok,
-        not_found или unavailable; при ошибке data=null. Даже если все источники недоступны,
-        возвращается 200 с их статусами. Отчёты не сохраняются. Суммы БКИ и финансового
-        мока передаются в исходных единицах (рубли), без пересчёта в копейки.'
+        параллельно по ИНН из БД. Если источник не вернул данные, берётся сохранённый
+        блок той же компании. Если в финансах нет последнего завершённого календарного
+        месяца по Europe/Moscow, недостающие месяцы добавляются из БД; для совпадающих
+        месяцев приоритет у мока. При наличии данных status=ok; без данных сохраняется
+        not_found или unavailable и data=null. Если и в БД нет нужного месяца, отсутствующие
+        данные не выдумываются: возвращается доступный отчёт. Отсутствие снимка не
+        является ошибкой; ошибка чтения БД даёт 500. GET ничего не сохраняет. Денежные
+        суммы передаются в целых копейках.'
       parameters:
       - description: ID компании
         format: uuid

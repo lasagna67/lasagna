@@ -62,6 +62,7 @@ type Period struct {
 	To   string `json:"to"`
 }
 
+// MonthlyData содержит месячные показатели; все денежные суммы — в копейках.
 type MonthlyData struct {
 	Month            string `json:"month"`
 	Income           int64  `json:"income" format:"int64"`

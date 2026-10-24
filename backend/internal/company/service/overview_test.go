@@ -3,6 +3,7 @@ package companyservice
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,6 +12,108 @@ import (
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 )
+
+type overviewSavingRepo struct {
+	CompanyRepo
+	saved []companydomain.Overview
+	err   error
+}
+
+func (f *fakeCompanies) SaveOverview(context.Context, companydomain.Overview) error {
+	return errors.New("unexpected snapshot save")
+}
+
+func (f *fakeCompanies) GetOverview(context.Context, uuid.UUID) (companydomain.Overview, error) {
+	return companydomain.Overview{}, companyerrors.ErrOverviewNotFound
+}
+
+func (r *overviewSavingRepo) SaveOverview(_ context.Context, overview companydomain.Overview) error {
+	if r.err != nil {
+		return r.err
+	}
+	r.saved = append(r.saved, overview)
+	return nil
+}
+
+func TestSaveOverview(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		sourceErr error
+	}{
+		{"complete", nil},
+		{"partial", companyerrors.ErrReportNotFound},
+		{"unavailable", context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv()
+			user := uuid.New()
+			m, err := e.connect(t, user, llcINN, "HEAD")
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := &overviewSavingRepo{CompanyRepo: e.companies}
+			e.svc.companies = r
+			e.svc.external = &overviewExternal{fakeExternal: e.external, creditErr: tc.sourceErr}
+			got, err := e.svc.SaveOverview(context.Background(), m.Company.ID, user)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(r.saved) != 1 || !reflect.DeepEqual(got, r.saved[0]) || got.CompanyID != m.Company.ID {
+				t.Fatalf("snapshot not saved completely: got=%+v saved=%+v", got, r.saved)
+			}
+			if tc.sourceErr != nil && r.saved[0].CreditHistory.Data != nil {
+				t.Fatal("missing report must remain nil")
+			}
+			if r.saved[0].Registry.Data.Head.INN != headINN {
+				t.Fatal("full registry data lost")
+			}
+		})
+	}
+}
+
+func TestOverviewDoesNotSave(t *testing.T) {
+	e := newEnv()
+	user := uuid.New()
+	m, err := e.connect(t, user, llcINN, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &overviewSavingRepo{CompanyRepo: e.companies, err: errors.New("writes disabled")}
+	e.svc.companies = r
+	if _, err := e.svc.Overview(context.Background(), m.Company.ID, user); err != nil {
+		t.Fatalf("read-only overview tried to save: %v", err)
+	}
+	if len(r.saved) != 0 {
+		t.Fatal("read-only overview persisted data")
+	}
+}
+
+func TestSaveOverviewErrors(t *testing.T) {
+	e := newEnv()
+	user := uuid.New()
+	m, err := e.connect(t, user, llcINN, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := errors.New("database failure")
+	r := &overviewSavingRepo{CompanyRepo: e.companies, err: want}
+	e.svc.companies = r
+	if _, err := e.svc.SaveOverview(context.Background(), m.Company.ID, user); !errors.Is(err, want) {
+		t.Fatalf("save error lost: %v", err)
+	}
+	r.err = nil
+	if _, err := e.svc.SaveOverview(context.Background(), m.Company.ID, uuid.New()); !errors.Is(err, companyerrors.ErrCompanyNotFound) {
+		t.Fatalf("unauthorized save: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := e.svc.SaveOverview(ctx, m.Company.ID, user); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled save: %v", err)
+	}
+	if len(r.saved) != 0 {
+		t.Fatal("snapshot saved despite failed authorization or cancellation")
+	}
+}
 
 type overviewExternal struct {
 	*fakeExternal

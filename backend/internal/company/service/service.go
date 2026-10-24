@@ -17,6 +17,9 @@ import (
 const challengeTTL = 5 * time.Minute
 
 type CompanyRepo interface {
+	SaveOverview(ctx context.Context, overview companydomain.Overview) error
+	GetOverview(ctx context.Context, companyID uuid.UUID) (companydomain.Overview, error)
+
 	// SaveConnection в одной транзакции создаёт или обновляет компанию по ИНН
 	// и связь с пользователем.
 	SaveConnection(ctx context.Context, company companydomain.Company, member companydomain.Member) (companydomain.Membership, error)
