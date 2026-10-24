@@ -126,7 +126,7 @@ type Application struct {
 	Status      Status
 	Request     Request
 
-	AssigneeID *uuid.UUID // сотрудник, взявший заявку на рассмотрение; назначает модуль review
+	AssigneeID *uuid.UUID // сотрудник, взявший заявку на рассмотрение; назначает модуль underwriting
 	Info       InfoRound  // запросы банка текущего раунда; только в info_requested
 
 	SubmittedAt *time.Time
