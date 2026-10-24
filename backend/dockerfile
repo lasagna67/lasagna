@@ -39,7 +39,7 @@ CMD ["up"]
 
 
 
-# Demo accounts: one-shot API client, no direct database access.
+# Demo users/companies through the API; settlement accounts through PostgreSQL.
 FROM runtime AS demo-seed
 
 RUN mkdir -p /data && chown app:app /data

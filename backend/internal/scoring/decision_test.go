@@ -15,7 +15,8 @@ func decisionInput() ScoringInput {
 	yes, no := true, false
 	rate := int64(1200)
 	in := ScoringInput{
-		INN: "7705005410", Amount: 10000000, TermMonths: 12, Purpose: "working_capital",
+		RegistrySyncedAt: timeValue(decisionNow),
+		INN:              "7705005410", Amount: 10000000, TermMonths: 12, Purpose: "working_capital",
 		Product: &ScoringProduct{Code: "express", Active: true, Purposes: []string{"working_capital"}, MinAmount: 1000000, MaxAmount: 500000000, MinTerm: 3, MaxTerm: 36, MinBusinessAgeMonths: 6, CollateralMode: "not_supported", RepaymentType: "annuity", AnnualRateBasisPoints: &rate},
 		Checks:  ScoringChecks{RegistryCurrent: &yes, CreditCurrent: &yes, AccountActiveAndOwned: &yes, NoAnomalousIncome: &yes, CashPlanRequired: &no},
 		Overview: d.Overview{
@@ -66,7 +67,7 @@ func TestEvaluateApplication(t *testing.T) {
 		{"young business", func(in *ScoringInput) { in.Overview.Registry.Data.RegistrationDate = decisionNow.AddDate(0, -1, 0) }, DecisionAutoRejected, "business_too_young"},
 		{"missing product", func(in *ScoringInput) { in.Product = nil }, DecisionManualReview, "product_missing"},
 		{"missing rate", func(in *ScoringInput) { in.Product.AnnualRateBasisPoints = nil }, DecisionManualReview, "product_rate_missing"},
-		{"unknown freshness", func(in *ScoringInput) { in.Checks.RegistryCurrent = nil }, DecisionManualReview, "registry_freshness_unconfirmed"},
+		{"unknown freshness", func(in *ScoringInput) { in.RegistrySyncedAt = nil }, DecisionManualReview, "registry_freshness_unconfirmed"},
 		{"four months", func(in *ScoringInput) {
 			in.Overview.Financials.Data.MonthlyData = in.Overview.Financials.Data.MonthlyData[2:]
 		}, DecisionManualReview, ReasonFinancialHistoryUnderSixMonths},
@@ -74,7 +75,7 @@ func TestEvaluateApplication(t *testing.T) {
 			in.Overview.Financials.Data.MonthlyData = in.Overview.Financials.Data.MonthlyData[4:]
 		}, DecisionAutoRejected, ReasonFinancialHistoryInsufficient},
 		{"missing latest month", func(in *ScoringInput) { in.Overview.Financials.Data.MonthlyData[5].Month = "2026-03" }, DecisionManualReview, "latest_financial_month_missing"},
-		{"unknown anomalies", func(in *ScoringInput) { in.Checks.NoAnomalousIncome = nil }, DecisionManualReview, "income_anomalies_unconfirmed"},
+		{"anomalies calculated locally", func(in *ScoringInput) { in.Checks.NoAnomalousIncome = nil }, DecisionAutoApproved, ""},
 		{"income anomaly", func(in *ScoringInput) { no := false; in.Checks.NoAnomalousIncome = &no }, DecisionManualReview, "income_anomaly"},
 		{"unknown cash plan requirement", func(in *ScoringInput) { in.Checks.CashPlanRequired = nil }, DecisionManualReview, "cash_plan_requirement_unknown"},
 		{"required plan pending", func(in *ScoringInput) { yes := true; in.Checks.CashPlanRequired = &yes }, DecisionManualReview, "cash_plan_confirmation_missing"},

@@ -8,6 +8,89 @@
     },
     "basePath": "/api/v0",
     "paths": {
+        "/applications/{id}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Доступно клиенту компании в draft, info_requested, manual_review. Обязателен expected_revision. collateral заменяется целиком; его revision задаёт сервер. Оценки, заключения и хеши банка клиент менять не может. Конфликт версии — 409. Внутренние комментарии банка в ответ не включаются.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Изменить сумму и залог своей заявки",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "ID заявки",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Изменения",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/collateraldomain.PatchApplication"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/collateraldomain.CollateralApplication"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "consumes": [
@@ -754,6 +837,89 @@
                 }
             }
         },
+        "/underwriter/applications/{id}/collateral-review": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Только назначенный активный underwriter/admin в manual_review или info_requested. Неизменяемое заключение сохраняет версию заявки, версию и SHA-256 залога. Для accepted нужны положительная оценка и внутренний comment. Актуальность — 30 суток включительно. Изменение суммы кредита только пересчитывает покрытие 70%.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Записать банковскую проверку залога",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "ID заявки",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Заключение",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/collateraldomain.ReviewCollateral"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/collateraldomain.CollateralApplication"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/users": {
             "post": {
                 "description": "Заводит пользователя с ролью client и статусом active, сессию не открывает.",
@@ -985,10 +1151,179 @@
         }
     },
     "definitions": {
+        "collateraldomain.Collateral": {
+            "type": "object",
+            "required": [
+                "declared_value_kopecks",
+                "description",
+                "ownership",
+                "type"
+            ],
+            "properties": {
+                "declared_value_kopecks": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "description": {
+                    "type": "string"
+                },
+                "ownership": {
+                    "type": "string",
+                    "enum": [
+                        "existing",
+                        "acquired"
+                    ]
+                },
+                "revision": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "real_estate",
+                        "equipment",
+                        "vehicle"
+                    ]
+                }
+            }
+        },
+        "collateraldomain.CollateralApplication": {
+            "type": "object",
+            "properties": {
+                "collateral": {
+                    "$ref": "#/definitions/collateraldomain.Collateral"
+                },
+                "collateral_coverage_satisfied": {
+                    "type": "boolean"
+                },
+                "collateral_required": {
+                    "type": "boolean"
+                },
+                "collateral_review": {
+                    "$ref": "#/definitions/collateraldomain.CollateralReview"
+                },
+                "collateral_review_current": {
+                    "type": "boolean"
+                },
+                "company_id": {
+                    "type": "string"
+                },
+                "has_collateral": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "product_code": {
+                    "type": "string"
+                },
+                "requested_amount_kopecks": {
+                    "type": "integer"
+                },
+                "revision": {
+                    "type": "integer"
+                },
+                "status": {
+                    "$ref": "#/definitions/creditdomain.Status"
+                }
+            }
+        },
+        "collateraldomain.CollateralReview": {
+            "type": "object",
+            "properties": {
+                "accepted_value_kopecks": {
+                    "type": "integer"
+                },
+                "application_id": {
+                    "type": "string"
+                },
+                "collateral_hash": {
+                    "type": "string"
+                },
+                "collateral_revision": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "public_comment": {
+                    "type": "string"
+                },
+                "result": {
+                    "type": "string"
+                },
+                "reviewer": {
+                    "type": "string"
+                },
+                "revision": {
+                    "type": "integer"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "collateraldomain.PatchApplication": {
+            "type": "object",
+            "required": [
+                "expected_revision"
+            ],
+            "properties": {
+                "collateral": {
+                    "$ref": "#/definitions/collateraldomain.Collateral"
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "has_collateral": {
+                    "type": "boolean"
+                },
+                "requested_amount_kopecks": {
+                    "type": "integer"
+                }
+            }
+        },
+        "collateraldomain.ReviewCollateral": {
+            "type": "object",
+            "required": [
+                "comment",
+                "expected_revision",
+                "result"
+            ],
+            "properties": {
+                "accepted_value_kopecks": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "comment": {
+                    "type": "string"
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "public_comment": {
+                    "type": "string"
+                },
+                "result": {
+                    "type": "string",
+                    "enum": [
+                        "accepted",
+                        "needs_info",
+                        "rejected"
+                    ]
+                }
+            }
+        },
         "companydomain.CreditHistory": {
             "type": "object",
             "properties": {
                 "has_credit_history": {
+                    "description": "nil означает, что обязательное поле отсутствовало или было null.",
                     "type": "boolean"
                 },
                 "history_months": {
@@ -1481,6 +1816,73 @@
                     ]
                 }
             }
+        },
+        "creditdomain.Status": {
+            "type": "string",
+            "enum": [
+                "draft",
+                "submitted",
+                "validation",
+                "enrichment",
+                "scoring",
+                "manual_review",
+                "info_requested",
+                "approved",
+                "counter_offer",
+                "signing",
+                "issued",
+                "rejected",
+                "cancelled",
+                "expired"
+            ],
+            "x-enum-comments": {
+                "StatusApproved": "предложение на запрошенных условиях",
+                "StatusCancelled": "клиент отказался от предложения",
+                "StatusCounterOffer": "предложение на иных условиях",
+                "StatusDraft": "клиент заполняет, данные сохраняются по шагам",
+                "StatusEnrichment": "реестр и БКИ для версии заявки",
+                "StatusExpired": "предложение не подписано до valid_until",
+                "StatusInfoRequested": "клиент отвечает в той же заявке",
+                "StatusIssued": "выдача или активация лимита завершена",
+                "StatusManualReview": "у сотрудника: материалы, залог, решение",
+                "StatusRejected": "отказ сотрудника или stop-правила",
+                "StatusScoring": "вызов модели; без правил — ручной маршрут",
+                "StatusSigning": "договор подписан, ожидается выдача",
+                "StatusSubmitted": "версия зафиксирована, ждёт конвейера",
+                "StatusValidation": "проверка состава данных и условий продукта"
+            },
+            "x-enum-descriptions": [
+                "клиент заполняет, данные сохраняются по шагам",
+                "версия зафиксирована, ждёт конвейера",
+                "проверка состава данных и условий продукта",
+                "реестр и БКИ для версии заявки",
+                "вызов модели; без правил — ручной маршрут",
+                "у сотрудника: материалы, залог, решение",
+                "клиент отвечает в той же заявке",
+                "предложение на запрошенных условиях",
+                "предложение на иных условиях",
+                "договор подписан, ожидается выдача",
+                "выдача или активация лимита завершена",
+                "отказ сотрудника или stop-правила",
+                "клиент отказался от предложения",
+                "предложение не подписано до valid_until"
+            ],
+            "x-enum-varnames": [
+                "StatusDraft",
+                "StatusSubmitted",
+                "StatusValidation",
+                "StatusEnrichment",
+                "StatusScoring",
+                "StatusManualReview",
+                "StatusInfoRequested",
+                "StatusApproved",
+                "StatusCounterOffer",
+                "StatusSigning",
+                "StatusIssued",
+                "StatusRejected",
+                "StatusCancelled",
+                "StatusExpired"
+            ]
         },
         "dto.AuthResponse": {
             "type": "object",

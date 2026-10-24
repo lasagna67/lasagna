@@ -3,6 +3,8 @@ package scoring
 import (
 	"context"
 	"fmt"
+	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -194,4 +196,45 @@ func validateOverview(o companydomain.Overview, inn string, now time.Time) Valid
 		result.Status = StatusReady
 	}
 	return result
+}
+
+// NoAnomalousIncome checks for income strictly greater than three medians.
+// nil means fewer than three months, negative income or a zero median.
+func NoAnomalousIncome(months []companydomain.MonthlyData) *bool {
+	if len(months) < 3 {
+		return nil
+	}
+	income := make([]int64, len(months))
+	for i, month := range months {
+		if month.Income < 0 {
+			return nil
+		}
+		income[i] = month.Income
+	}
+	slices.Sort(income)
+	lower, upper := income[(len(income)-1)/2], income[len(income)/2]
+	if upper == 0 {
+		return nil
+	}
+	median := lower + (upper-lower)/2
+	clean := true
+	if median > math.MaxInt64/3 {
+		return &clean
+	}
+	threshold := 3 * median
+	// For a half-kopeck median, floor(3 * median) has one extra kopeck.
+	if (upper-lower)%2 != 0 && threshold < math.MaxInt64 {
+		threshold++
+	}
+	clean = income[len(income)-1] <= threshold
+	return &clean
+}
+
+// dataCurrent accepts data up to 30 days old, including the exact boundary.
+func dataCurrent(date *time.Time, now time.Time) *bool {
+	if date == nil || date.IsZero() {
+		return nil
+	}
+	current := !date.After(now) && !date.Before(now.Add(-30*24*time.Hour))
+	return &current
 }

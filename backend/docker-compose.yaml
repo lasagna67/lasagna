@@ -120,6 +120,8 @@ services:
     build:
       <<: *backend-build
       target: demo-seed
+    # Доступ к PostgreSQL нужен только для идемпотентного создания расчётных счетов.
+    env_file: ../.env.docker
     environment:
       DEMO_BACKEND_URL: http://backend:8080
       DEMO_REGISTRY_URL: http://registry-mock:8081
@@ -135,6 +137,8 @@ services:
       registry-mock:
         condition: service_healthy
       esign-mock:
+        condition: service_healthy
+      financials-mock:
         condition: service_healthy
     restart: "no"
 

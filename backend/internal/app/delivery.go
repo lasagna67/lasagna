@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v5"
 	authdomain "github.com/lasagna67/lasagna.git/internal/auth/domain"
 	authhandler "github.com/lasagna67/lasagna.git/internal/auth/handler"
+	collateralhandler "github.com/lasagna67/lasagna.git/internal/collateral/handler"
 	companyhandler "github.com/lasagna67/lasagna.git/internal/company/handler"
 	"github.com/lasagna67/lasagna.git/internal/config"
 	financialscsvhandler "github.com/lasagna67/lasagna.git/internal/financials-csv/handler"
@@ -37,8 +38,8 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 
 	uploads := financialscsvhandler.New(services.Financials, logger.Named("financials-csv"))
 	uploads.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
-	// Защищённые маршруты других модулей:
-	// api.Group("/applications", auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
+	collateral := collateralhandler.New(services.Applications, logger.Named("collateral"))
+	collateral.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient), auth.RequireRole(authdomain.RoleUnderwriter, authdomain.RoleAdmin))
 
 	return &Delivery{
 		server: srv,

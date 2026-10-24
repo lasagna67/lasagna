@@ -2,20 +2,24 @@ package app
 
 import (
 	authservice "github.com/lasagna67/lasagna.git/internal/auth/service"
+	collateralrepo "github.com/lasagna67/lasagna.git/internal/collateral/repo"
 	companyhttpjson "github.com/lasagna67/lasagna.git/internal/company/httpjson"
 	companyservice "github.com/lasagna67/lasagna.git/internal/company/service"
 	"github.com/lasagna67/lasagna.git/internal/config"
 	financialscsvservice "github.com/lasagna67/lasagna.git/internal/financials-csv/service"
+	"github.com/lasagna67/lasagna.git/internal/scoring"
 	userservice "github.com/lasagna67/lasagna.git/internal/user/service"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
 
 // Services holds the application services, wired from their repository ports.
 type Service struct {
-	Auth       *authservice.Service
-	User       *userservice.UserService
-	Company    *companyservice.CompanyService
-	Financials *financialscsvservice.Service
+	Auth         *authservice.Service
+	User         *userservice.UserService
+	Company      *companyservice.CompanyService
+	Financials   *financialscsvservice.Service
+	Applications *collateralrepo.Repo
+	Scoring      *scoring.Scorer
 }
 
 func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service, error) {
@@ -43,9 +47,11 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 	)
 
 	return &Service{
-		Auth:       auth,
-		User:       userservice.New(repo.Users, hasher),
-		Company:    company,
-		Financials: financialscsvservice.New(repo.Companies),
+		Auth:         auth,
+		User:         userservice.New(repo.Users, hasher),
+		Company:      company,
+		Financials:   financialscsvservice.New(repo.Companies),
+		Applications: repo.Applications,
+		Scoring:      repo.Scoring,
 	}, nil
 }

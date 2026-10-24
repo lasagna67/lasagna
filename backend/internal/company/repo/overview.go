@@ -62,6 +62,7 @@ func (r *CompanyRepo) SaveOverview(ctx context.Context, overview companydomain.O
 		return fmt.Errorf("encode overview financials: %w", err)
 	}
 	_, err = r.pool.Exec(ctx, `
+		WITH saved_overview AS (
 		INSERT INTO company_overviews (
 			company_id, registry_status, registry_data,
 			credit_history_status, credit_history_data,
@@ -90,7 +91,11 @@ func (r *CompanyRepo) SaveOverview(ctx context.Context, overview companydomain.O
 			financials_source_type = CASE
 				WHEN EXCLUDED.financials_data IS NOT NULL THEN EXCLUDED.financials_source_type
 				ELSE company_overviews.financials_source_type END,
-			saved_at = COALESCE(EXCLUDED.saved_at, company_overviews.saved_at)`,
+			saved_at = COALESCE(EXCLUDED.saved_at, company_overviews.saved_at)
+		RETURNING company_id)
+		UPDATE companies SET registry_synced_at=now()
+		WHERE id IN (SELECT company_id FROM saved_overview)
+			AND $2='ok' AND $3::jsonb IS NOT NULL`,
 		overview.CompanyID, overview.Registry.Status, registry,
 		overview.CreditHistory.Status, credit, overview.Financials.Status, financials,
 		overview.FinancialsSourceType,
