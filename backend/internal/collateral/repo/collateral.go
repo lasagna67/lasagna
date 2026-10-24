@@ -3,7 +3,6 @@ package collateralrepo
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,20 +19,16 @@ type Repo struct {
 
 func New(pool *pgxpool.Pool) *Repo { return &Repo{pool: pool} }
 
-// lockApplication сериализует правки и заключения. Авторизация проверяется по БД,
-// включая текущий статус пользователя и назначение, а не только по сессии.
-func lockApplication(ctx context.Context, tx pgx.Tx, id, user uuid.UUID, review bool, revision int64) (d.CollateralApplication, error) {
+// lockApplication сериализует заключения с правками заявки. Авторизация
+// проверяется по БД — назначение и текущий статус сотрудника, а не только сессия.
+func lockApplication(ctx context.Context, tx pgx.Tx, id, user uuid.UUID, revision int64) (d.CollateralApplication, error) {
 	var a d.CollateralApplication
 	err := tx.QueryRow(ctx, `SELECT a.id,a.company_id,a.revision,a.status,
 		COALESCE(a.requested_amount_kopecks,0),a.has_collateral,COALESCE(p.code,'')
 		FROM applications a LEFT JOIN credit_products p ON p.id=a.product_id
-		WHERE a.id=$1 AND (
-			($3::boolean AND a.assignee_id=$2 AND EXISTS (
-				SELECT 1 FROM users u WHERE u.id=$2 AND u.status='active' AND u.role IN ('underwriter','admin')))
-			OR (NOT $3::boolean AND EXISTS (
-				SELECT 1 FROM company_members m JOIN users u ON u.id=m.user_id
-				WHERE m.company_id=a.company_id AND m.user_id=$2 AND u.status='active' AND u.role='client')))
-		FOR UPDATE OF a`, id, user, review).Scan(&a.ID, &a.CompanyID, &a.Revision, &a.Status, &a.RequestedAmountKopecks, &a.HasCollateral, &a.ProductCode)
+		WHERE a.id=$1 AND a.assignee_id=$2 AND EXISTS (
+			SELECT 1 FROM users u WHERE u.id=$2 AND u.status='active' AND u.role IN ('underwriter','admin'))
+		FOR UPDATE OF a`, id, user).Scan(&a.ID, &a.CompanyID, &a.Revision, &a.Status, &a.RequestedAmountKopecks, &a.HasCollateral, &a.ProductCode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return a, e.ErrNotFound
 	}
@@ -43,11 +38,7 @@ func lockApplication(ctx context.Context, tx pgx.Tx, id, user uuid.UUID, review 
 	if a.Revision != revision {
 		return a, e.ErrRevisionConflict
 	}
-	if review {
-		if a.Status != applicationdomain.StatusManualReview && a.Status != applicationdomain.StatusInfoRequested {
-			return a, e.ErrInvalidState
-		}
-	} else if a.Status != applicationdomain.StatusDraft && a.Status != applicationdomain.StatusInfoRequested && a.Status != applicationdomain.StatusManualReview {
+	if a.Status != applicationdomain.StatusManualReview && a.Status != applicationdomain.StatusInfoRequested {
 		return a, e.ErrInvalidState
 	}
 	a.CollateralRequired = d.CollateralRequired(a.ProductCode, a.HasCollateral)
@@ -83,61 +74,13 @@ func loadCollateral(ctx context.Context, tx pgx.Tx, a *d.CollateralApplication) 
 	return nil
 }
 
-func (r *Repo) Patch(ctx context.Context, id, user uuid.UUID, p d.PatchApplication) (d.CollateralApplication, error) {
-	var result d.CollateralApplication
-	if err := p.Validate(); err != nil {
-		return result, err
-	}
-	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		a, err := lockApplication(ctx, tx, id, user, false, p.ExpectedRevision)
-		if err != nil {
-			return err
-		}
-		if p.HasCollateral != nil && !*p.HasCollateral && d.CollateralRequired(a.ProductCode, false) {
-			return fmt.Errorf("%w: collateral is mandatory for this product", e.ErrInvalidInput)
-		}
-		if c := p.Collateral; c != nil {
-			_, err = tx.Exec(ctx, `INSERT INTO application_collateral(application_id,type,ownership,description,declared_value_kopecks)
-				VALUES($1,$2,$3,$4,$5) ON CONFLICT(application_id) DO UPDATE SET
-				revision=application_collateral.revision+CASE WHEN
-					(application_collateral.type,application_collateral.ownership,application_collateral.description,application_collateral.declared_value_kopecks)
-					IS DISTINCT FROM (EXCLUDED.type,EXCLUDED.ownership,EXCLUDED.description,EXCLUDED.declared_value_kopecks) THEN 1 ELSE 0 END,
-				type=EXCLUDED.type,ownership=EXCLUDED.ownership,description=EXCLUDED.description,declared_value_kopecks=EXCLUDED.declared_value_kopecks`, id, c.Type, c.Ownership, c.Description, c.DeclaredValueKopecks)
-			if err != nil {
-				return err
-			}
-			a.HasCollateral = true
-		}
-		if p.HasCollateral != nil {
-			a.HasCollateral = *p.HasCollateral
-		}
-		if p.RequestedAmountKopecks != nil {
-			a.RequestedAmountKopecks = *p.RequestedAmountKopecks
-		}
-		err = tx.QueryRow(ctx, `UPDATE applications SET requested_amount_kopecks=COALESCE($2,requested_amount_kopecks),
-			has_collateral=$3,revision=revision+1
-			WHERE id=$1 RETURNING revision`, id, p.RequestedAmountKopecks, a.HasCollateral).Scan(&a.Revision)
-		if err != nil {
-			return err
-		}
-		// Выбор варианта с залогом мог измениться в этом PATCH.
-		a.CollateralRequired = d.CollateralRequired(a.ProductCode, a.HasCollateral)
-		if err := loadCollateral(ctx, tx, &a); err != nil {
-			return err
-		}
-		result = a
-		return nil
-	})
-	return result, err
-}
-
 func (r *Repo) Review(ctx context.Context, id, user uuid.UUID, p d.ReviewCollateral) (d.CollateralApplication, error) {
 	var result d.CollateralApplication
 	if err := p.Validate(); err != nil {
 		return result, err
 	}
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		a, err := lockApplication(ctx, tx, id, user, true, p.ExpectedRevision)
+		a, err := lockApplication(ctx, tx, id, user, p.ExpectedRevision)
 		if err != nil {
 			return err
 		}

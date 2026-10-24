@@ -34,7 +34,7 @@ type fakeRepo struct {
 	products      map[string]reviewdomain.Product
 	accounts      map[uuid.UUID]reviewdomain.Account
 	keys          map[string]string
-	notifications []reviewdomain.Notification
+	notifications []applicationdomain.Notification
 }
 
 func newFakeRepo() *fakeRepo {

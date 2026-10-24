@@ -167,13 +167,6 @@ definitions:
         example: ООО «Кедровый контур Демо»
         type: string
     type: object
-  applicationdto.CreateApplicationRequest:
-    properties:
-      company_id:
-        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
-        format: uuid
-        type: string
-    type: object
   applicationdto.ErrorBody:
     properties:
       code:
@@ -391,20 +384,6 @@ definitions:
         type: integer
       version:
         type: integer
-    type: object
-  collateraldomain.PatchApplication:
-    properties:
-      collateral:
-        $ref: '#/definitions/collateraldomain.Collateral'
-      expected_revision:
-        minimum: 1
-        type: integer
-      has_collateral:
-        type: boolean
-      requested_amount_kopecks:
-        type: integer
-    required:
-    - expected_revision
     type: object
   collateraldomain.ReviewCollateral:
     properties:
@@ -958,6 +937,100 @@ definitions:
         - admin
         example: client
         type: string
+    type: object
+  intakedto.CollateralRequest:
+    properties:
+      declared_value_kopecks:
+        example: 500000000
+        minimum: 1
+        type: integer
+      description:
+        example: Токарный станок
+        type: string
+      ownership:
+        enum:
+        - existing
+        - acquired
+        example: existing
+        type: string
+      type:
+        enum:
+        - real_estate
+        - equipment
+        - vehicle
+        example: equipment
+        type: string
+    type: object
+  intakedto.CreateApplicationRequest:
+    properties:
+      company_id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+    type: object
+  intakedto.NeedPeriodRequest:
+    properties:
+      unit:
+        enum:
+        - months
+        - days
+        - unknown
+        example: months
+        type: string
+      value:
+        example: 12
+        type: integer
+    type: object
+  intakedto.PatchApplicationRequest:
+    properties:
+      collateral:
+        $ref: '#/definitions/intakedto.CollateralRequest'
+      expected_revision:
+        example: 3
+        type: integer
+      request:
+        $ref: '#/definitions/intakedto.PatchRequestFields'
+    type: object
+  intakedto.PatchRequestFields:
+    properties:
+      amount_kopecks:
+        example: 300000000
+        type: integer
+      collateral_mode:
+        enum:
+        - none
+        - pledged
+        type: string
+      need_period:
+        $ref: '#/definitions/intakedto.NeedPeriodRequest'
+      product_code:
+        enum:
+        - express
+        - overdraft
+        - working_capital
+        - equipment
+        - start
+        type: string
+      purpose:
+        enum:
+        - working_capital
+        - cash_gap
+        - equipment
+        - business_start
+        - business_expansion
+        - other
+        type: string
+      purpose_description:
+        type: string
+      term_months:
+        example: 12
+        type: integer
+    type: object
+  intakedto.RevisionRequest:
+    properties:
+      expected_revision:
+        example: 3
+        type: integer
     type: object
   reviewdto.AnswerInfoRequest:
     properties:
@@ -1530,7 +1603,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/applicationdto.CreateApplicationRequest'
+          $ref: '#/definitions/intakedto.CreateApplicationRequest'
       produces:
       - application/json
       responses:
@@ -1571,12 +1644,14 @@ paths:
     patch:
       consumes:
       - application/json
-      description: Доступно клиенту компании в draft, info_requested, manual_review.
-        Обязателен expected_revision. collateral заменяется целиком; его revision
-        задаёт сервер. Оценки, заключения и хеши банка клиент менять не может. Конфликт
-        версии — 409. Внутренние комментарии банка в ответ не включаются.
+      description: |-
+        В draft — любые поля запроса и залог, в info_requested — только из editable_fields,
+        иначе 409 INVALID_STATE; поле вне editable_fields — 422 NOT_EDITABLE.
+        Непереданное поле не меняется, null очищает значение. need_period и collateral
+        заменяются целиком; collateral — только при collateral_mode = pledged.
+        Полноту и условия продукта проверяет submit.
       parameters:
-      - description: ID заявки
+      - description: Заявка
         format: uuid
         in: path
         name: id
@@ -1587,41 +1662,41 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/collateraldomain.PatchApplication'
+          $ref: '#/definitions/intakedto.PatchApplicationRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/collateraldomain.CollateralApplication'
+            $ref: '#/definitions/applicationdto.ApplicationResponse'
         "400":
-          description: Bad Request
+          description: 'INVALID_REQUEST: тело, неизвестное поле, нет изменений'
           schema:
-            $ref: '#/definitions/swagger.HTTPError'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
-            $ref: '#/definitions/swagger.HTTPError'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "403":
-          description: Forbidden
+          description: не клиент
           schema:
             $ref: '#/definitions/swagger.HTTPError'
         "404":
-          description: Not Found
+          description: NOT_FOUND
           schema:
-            $ref: '#/definitions/swagger.HTTPError'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "409":
-          description: Conflict
+          description: REVISION_CONFLICT, INVALID_STATE
           schema:
-            $ref: '#/definitions/swagger.HTTPError'
-        "500":
-          description: Internal Server Error
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "422":
+          description: VALIDATION_FAILED
           schema:
-            $ref: '#/definitions/swagger.HTTPError'
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Изменить сумму и залог своей заявки
+      summary: Изменить заявку
       tags:
       - applications
   /applications/{id}/contract:
@@ -1764,8 +1839,8 @@ paths:
       consumes:
       - application/json
       description: |-
-        После ответов на все запросы банка. Заявка та же, проверки повторяются.
-        Повтор с тем же Idempotency-Key и телом возвращает тот же результат.
+        info_requested → submitted после ответов на все запросы банка; запрос проверяется
+        как при отправке. Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.
       parameters:
       - description: Заявка
         format: uuid
@@ -1778,12 +1853,12 @@ paths:
         name: Idempotency-Key
         required: true
         type: string
-      - description: Версия заявки
+      - description: Ожидаемая revision
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/reviewdto.RevisionRequest'
+          $ref: '#/definitions/intakedto.RevisionRequest'
       produces:
       - application/json
       responses:
@@ -1795,6 +1870,14 @@ paths:
           description: INVALID_REQUEST
           schema:
             $ref: '#/definitions/applicationdto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: не клиент
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
         "404":
           description: NOT_FOUND
           schema:
@@ -1803,9 +1886,83 @@ paths:
           description: REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT
           schema:
             $ref: '#/definitions/applicationdto.ErrorResponse'
+        "422":
+          description: VALIDATION_FAILED
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "503":
+          description: 'SERVICE_UNAVAILABLE: конвейер'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
       summary: Отправить повторно
+      tags:
+      - applications
+  /applications/{id}/submit:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        draft → submitted → конвейер проверок. Неполный запрос или нарушение условий
+        продукта — 422 с полями, заявка остаётся draft. Повтор с тем же Idempotency-Key
+        и телом не создаёт второй отправки.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Ожидаемая revision
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/intakedto.RevisionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.ApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: не клиент
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "422":
+          description: VALIDATION_FAILED
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "503":
+          description: 'SERVICE_UNAVAILABLE: конвейер'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Отправить заявку
       tags:
       - applications
   /auth/login:

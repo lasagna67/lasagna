@@ -40,7 +40,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/applicationdto.CreateApplicationRequest"
+                            "$ref": "#/definitions/intakedto.CreateApplicationRequest"
                         }
                     }
                 ],
@@ -97,7 +97,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Доступно клиенту компании в draft, info_requested, manual_review. Обязателен expected_revision. collateral заменяется целиком; его revision задаёт сервер. Оценки, заключения и хеши банка клиент менять не может. Конфликт версии — 409. Внутренние комментарии банка в ответ не включаются.",
+                "description": "В draft — любые поля запроса и залог, в info_requested — только из editable_fields,\nиначе 409 INVALID_STATE; поле вне editable_fields — 422 NOT_EDITABLE.\nНепереданное поле не меняется, null очищает значение. need_period и collateral\nзаменяются целиком; collateral — только при collateral_mode = pledged.\nПолноту и условия продукта проверяет submit.",
                 "consumes": [
                     "application/json"
                 ],
@@ -107,12 +107,12 @@
                 "tags": [
                     "applications"
                 ],
-                "summary": "Изменить сумму и залог своей заявки",
+                "summary": "Изменить заявку",
                 "parameters": [
                     {
                         "type": "string",
                         "format": "uuid",
-                        "description": "ID заявки",
+                        "description": "Заявка",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -123,7 +123,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/collateraldomain.PatchApplication"
+                            "$ref": "#/definitions/intakedto.PatchApplicationRequest"
                         }
                     }
                 ],
@@ -131,43 +131,43 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/collateraldomain.CollateralApplication"
+                            "$ref": "#/definitions/applicationdto.ApplicationResponse"
                         }
                     },
                     "400": {
-                        "description": "Bad Request",
+                        "description": "INVALID_REQUEST: тело, неизвестное поле, нет изменений",
                         "schema": {
-                            "$ref": "#/definitions/swagger.HTTPError"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/swagger.HTTPError"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "403": {
-                        "description": "Forbidden",
+                        "description": "не клиент",
                         "schema": {
                             "$ref": "#/definitions/swagger.HTTPError"
                         }
                     },
                     "404": {
-                        "description": "Not Found",
+                        "description": "NOT_FOUND",
                         "schema": {
-                            "$ref": "#/definitions/swagger.HTTPError"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "REVISION_CONFLICT, INVALID_STATE",
                         "schema": {
-                            "$ref": "#/definitions/swagger.HTTPError"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "Internal Server Error",
+                    "422": {
+                        "description": "VALIDATION_FAILED",
                         "schema": {
-                            "$ref": "#/definitions/swagger.HTTPError"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -389,7 +389,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "После ответов на все запросы банка. Заявка та же, проверки повторяются.\nПовтор с тем же Idempotency-Key и телом возвращает тот же результат.",
+                "description": "info_requested → submitted после ответов на все запросы банка; запрос проверяется\nкак при отправке. Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.",
                 "consumes": [
                     "application/json"
                 ],
@@ -417,12 +417,12 @@
                         "required": true
                     },
                     {
-                        "description": "Версия заявки",
+                        "description": "Ожидаемая revision",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.RevisionRequest"
+                            "$ref": "#/definitions/intakedto.RevisionRequest"
                         }
                     }
                 ],
@@ -439,6 +439,18 @@
                             "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "не клиент",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
                     "404": {
                         "description": "NOT_FOUND",
                         "schema": {
@@ -447,6 +459,114 @@
                     },
                     "409": {
                         "description": "REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "SERVICE_UNAVAILABLE: конвейер",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/submit": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "draft → submitted → конвейер проверок. Неполный запрос или нарушение условий\nпродукта — 422 с полями, заявка остаётся draft. Повтор с тем же Idempotency-Key\nи телом не создаёт второй отправки.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Отправить заявку",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Ключ повтора, до 255 символов",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Ожидаемая revision",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/intakedto.RevisionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "не клиент",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "SERVICE_UNAVAILABLE: конвейер",
                         "schema": {
                             "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
@@ -2335,16 +2455,6 @@
                 }
             }
         },
-        "applicationdto.CreateApplicationRequest": {
-            "type": "object",
-            "properties": {
-                "company_id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
-                }
-            }
-        },
         "applicationdto.ErrorBody": {
             "type": "object",
             "properties": {
@@ -2648,27 +2758,6 @@
                     "type": "integer"
                 },
                 "version": {
-                    "type": "integer"
-                }
-            }
-        },
-        "collateraldomain.PatchApplication": {
-            "type": "object",
-            "required": [
-                "expected_revision"
-            ],
-            "properties": {
-                "collateral": {
-                    "$ref": "#/definitions/collateraldomain.Collateral"
-                },
-                "expected_revision": {
-                    "type": "integer",
-                    "minimum": 1
-                },
-                "has_collateral": {
-                    "type": "boolean"
-                },
-                "requested_amount_kopecks": {
                     "type": "integer"
                 }
             }
@@ -3445,6 +3534,136 @@
                         "admin"
                     ],
                     "example": "client"
+                }
+            }
+        },
+        "intakedto.CollateralRequest": {
+            "type": "object",
+            "properties": {
+                "declared_value_kopecks": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 500000000
+                },
+                "description": {
+                    "type": "string",
+                    "example": "Токарный станок"
+                },
+                "ownership": {
+                    "type": "string",
+                    "enum": [
+                        "existing",
+                        "acquired"
+                    ],
+                    "example": "existing"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "real_estate",
+                        "equipment",
+                        "vehicle"
+                    ],
+                    "example": "equipment"
+                }
+            }
+        },
+        "intakedto.CreateApplicationRequest": {
+            "type": "object",
+            "properties": {
+                "company_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                }
+            }
+        },
+        "intakedto.NeedPeriodRequest": {
+            "type": "object",
+            "properties": {
+                "unit": {
+                    "type": "string",
+                    "enum": [
+                        "months",
+                        "days",
+                        "unknown"
+                    ],
+                    "example": "months"
+                },
+                "value": {
+                    "type": "integer",
+                    "example": 12
+                }
+            }
+        },
+        "intakedto.PatchApplicationRequest": {
+            "type": "object",
+            "properties": {
+                "collateral": {
+                    "$ref": "#/definitions/intakedto.CollateralRequest"
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "request": {
+                    "$ref": "#/definitions/intakedto.PatchRequestFields"
+                }
+            }
+        },
+        "intakedto.PatchRequestFields": {
+            "type": "object",
+            "properties": {
+                "amount_kopecks": {
+                    "type": "integer",
+                    "example": 300000000
+                },
+                "collateral_mode": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "pledged"
+                    ]
+                },
+                "need_period": {
+                    "$ref": "#/definitions/intakedto.NeedPeriodRequest"
+                },
+                "product_code": {
+                    "type": "string",
+                    "enum": [
+                        "express",
+                        "overdraft",
+                        "working_capital",
+                        "equipment",
+                        "start"
+                    ]
+                },
+                "purpose": {
+                    "type": "string",
+                    "enum": [
+                        "working_capital",
+                        "cash_gap",
+                        "equipment",
+                        "business_start",
+                        "business_expansion",
+                        "other"
+                    ]
+                },
+                "purpose_description": {
+                    "type": "string"
+                },
+                "term_months": {
+                    "type": "integer",
+                    "example": 12
+                }
+            }
+        },
+        "intakedto.RevisionRequest": {
+            "type": "object",
+            "properties": {
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 3
                 }
             }
         },

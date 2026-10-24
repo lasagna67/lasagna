@@ -133,6 +133,45 @@ func InsertTransition(ctx context.Context, q Querier, applicationID uuid.UUID, t
 	return nil
 }
 
+// GetProduct — условия продукта каталога по коду, активного или нет; нет такого — nil.
+// ENUM-массив целей читается как text[], чтобы pgx не требовал регистрации его OID.
+func GetProduct(ctx context.Context, q Querier, code string) (*applicationdomain.Product, error) {
+	var p applicationdomain.Product
+	var purposes []string
+	var repayment, collateral string
+	err := q.QueryRow(ctx, `
+		SELECT code, is_active, purposes::text[], min_amount_kopecks, max_amount_kopecks,
+			min_term_months, max_term_months, repayment_type::text, max_drawdown_days, collateral_mode::text
+		FROM credit_products WHERE code = $1`, code,
+	).Scan(&p.Code, &p.Active, &purposes, &p.MinAmountKopecks, &p.MaxAmountKopecks,
+		&p.MinTermMonths, &p.MaxTermMonths, &repayment, &p.MaxDrawdownDays, &collateral)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("select credit product: %w", err)
+	}
+	for _, s := range purposes {
+		p.Purposes = append(p.Purposes, applicationdomain.Purpose(s))
+	}
+	p.Overdraft = repayment == "overdraft"
+	p.Collateral = applicationdomain.ProductCollateral(collateral)
+	return &p, nil
+}
+
+// InsertNotification пишет уведомление в ленту пользователя.
+func InsertNotification(ctx context.Context, q Querier, n applicationdomain.Notification) error {
+	_, err := q.Exec(ctx, `
+		INSERT INTO notifications (user_id, application_id, type, title, body)
+		VALUES ($1, $2, $3, $4, $5)`,
+		n.UserID, n.ApplicationID, n.Type, n.Title, n.Body,
+	)
+	if err != nil {
+		return fmt.Errorf("insert notification: %w", err)
+	}
+	return nil
+}
+
 // GetDetails читает заявку; lock — с блокировкой строки до конца транзакции.
 // Нет заявки — applicationerrors.ErrNotFound.
 func GetDetails(ctx context.Context, q Querier, id uuid.UUID, lock bool) (applicationdomain.ApplicationDetails, error) {

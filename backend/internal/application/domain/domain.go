@@ -16,13 +16,17 @@ type Status string
 const (
 	StatusDraft         Status = "draft"          // клиент заполняет, данные сохраняются по шагам
 	StatusSubmitted     Status = "submitted"      // версия зафиксирована, ждёт конвейера
+
 	StatusValidation    Status = "validation"     // проверка состава данных и условий продукта
 	StatusEnrichment    Status = "enrichment"     // реестр и БКИ для версии заявки
 	StatusScoring       Status = "scoring"        // вызов модели; без правил — ручной маршрут
+
 	StatusManualReview  Status = "manual_review"  // у сотрудника: материалы, залог, решение
 	StatusInfoRequested Status = "info_requested" // клиент отвечает в той же заявке
+
 	StatusApproved      Status = "approved"       // предложение на запрошенных условиях
 	StatusCounterOffer  Status = "counter_offer"  // предложение на иных условиях
+	
 	StatusSigning       Status = "signing"        // договор подписан, ожидается выдача
 	StatusIssued        Status = "issued"         // выдача или активация лимита завершена
 	StatusRejected      Status = "rejected"       // отказ сотрудника или stop-правила
@@ -58,6 +62,15 @@ const (
 	PurposeOther             Purpose = "other" // требует purpose_description
 )
 
+var purposes = []Purpose{
+	PurposeWorkingCapital, PurposeCashGap, PurposeEquipment,
+	PurposeBusinessStart, PurposeBusinessExpansion, PurposeOther,
+}
+
+func (p Purpose) Valid() bool {
+	return slices.Contains(purposes, p)
+}
+
 type NeedPeriodUnit string
 
 const (
@@ -66,6 +79,10 @@ const (
 	NeedPeriodUnknown NeedPeriodUnit = "unknown"
 )
 
+func (u NeedPeriodUnit) Valid() bool {
+	return u == NeedPeriodMonths || u == NeedPeriodDays || u == NeedPeriodUnknown
+}
+
 // CollateralMode — выбранный клиентом вариант обеспечения. В БД — has_collateral.
 type CollateralMode string
 
@@ -73,6 +90,10 @@ const (
 	CollateralNone    CollateralMode = "none"
 	CollateralPledged CollateralMode = "pledged"
 )
+
+func (m CollateralMode) Valid() bool {
+	return m == CollateralNone || m == CollateralPledged
+}
 
 // NeedPeriod — на сколько нужны деньги. Не подменяет срок договора TermMonths.
 type NeedPeriod struct {
@@ -169,6 +190,7 @@ type Operation string
 
 const (
 	OperationCreate   Operation = "create_application"
+	OperationSubmit   Operation = "submit_application"
 	OperationResubmit Operation = "resubmit_application"
 )
 
@@ -181,6 +203,24 @@ type IdempotencyKey struct {
 	ResourceID  *uuid.UUID // nil — операция создаёт ресурс
 	Key         string
 	RequestHash string
+}
+
+type NotificationType string
+
+const (
+	NotificationStatusChanged NotificationType = "status_changed"
+	NotificationInfoRequested NotificationType = "info_requested"
+	NotificationOfferReady    NotificationType = "offer_ready"
+)
+
+// Notification — запись в ленте уведомлений пользователя. Пишется в одной
+// транзакции с изменением заявки; доставку возьмёт модуль уведомлений.
+type Notification struct {
+	UserID        uuid.UUID
+	ApplicationID uuid.UUID
+	Type          NotificationType
+	Title         string
+	Body          string
 }
 
 // UpdateCommand — изменение заявки с optimistic locking. Key задан — повтор с
@@ -234,10 +274,16 @@ func (a *Application) transit(to Status, from ...Status) (Transition, error) {
 
 // Клиент:
 
-// Submit — отправка черновика. Полноту данных сервис проверяет до вызова:
-// синхронная ошибка возвращает 422 и оставляет draft.
-func (a *Application) Submit() (Transition, error) {
-	return a.transit(StatusSubmitted, StatusDraft)
+// Submit — отправка черновика. Полноту запроса и условия продукта сервис
+// проверяет до вызова (CheckSubmit): ошибка возвращает 422 и оставляет draft.
+// SubmittedAt — время первой отправки; повторная после уточнений его не меняет.
+func (a *Application) Submit(now time.Time) (Transition, error) {
+	tr, err := a.transit(StatusSubmitted, StatusDraft)
+	if err != nil {
+		return Transition{}, err
+	}
+	a.SubmittedAt = &now
+	return tr, nil
 }
 
 // Resubmit — повторная отправка после ответа на все открытые запросы банка.

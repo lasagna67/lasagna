@@ -63,6 +63,8 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		return nil, err
 	}
 	// Passthrough — пока конвейер проверок не подключён модулем scoring.
+	// Запускает его intake после отправки, повтор источников — review.
+	pipeline := reviewservice.NewPassthrough(repo.Review)
 	review := reviewservice.New(reviewservice.Deps{
 		Repo:      repo.Review,
 		Checks:    repo.ReviewChecks,
@@ -70,7 +72,13 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Companies: company,
 		Storage:   repo.Documents,
 		Contracts: contracts,
-		Pipeline:  reviewservice.NewPassthrough(repo.Review),
+		Pipeline:  pipeline,
+	})
+	intake := intakeservice.New(intakeservice.Deps{
+		Applications: repo.Applications,
+		Drafts:       repo.Drafts,
+		Companies:    company,
+		Pipeline:     pipeline,
 	})
 
 	return &Service{
@@ -80,7 +88,7 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Financials:     financialscsvservice.New(repo.Companies),
 		Collateral:     repo.Collateral,
 		Scoring:        repo.Scoring,
-		Intake:         intakeservice.New(repo.Applications, company),
+		Intake:         intake,
 		CreditProducts: products,
 		Review:         review,
 	}, nil

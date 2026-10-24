@@ -9,37 +9,6 @@ import (
 	e "github.com/lasagna67/lasagna.git/internal/application/errors"
 )
 
-type PatchApplication struct {
-	ExpectedRevision       int64       `json:"expected_revision" minimum:"1" binding:"required"`
-	RequestedAmountKopecks *int64      `json:"requested_amount_kopecks,omitempty"`
-	HasCollateral          *bool       `json:"has_collateral,omitempty"`
-	Collateral             *Collateral `json:"collateral,omitempty"`
-}
-
-func (p PatchApplication) Validate() error {
-	if p.ExpectedRevision <= 0 {
-		return fmt.Errorf("%w: expected_revision is required", e.ErrInvalidInput)
-	}
-	if p.RequestedAmountKopecks == nil && p.HasCollateral == nil && p.Collateral == nil {
-		return fmt.Errorf("%w: patch is empty", e.ErrInvalidInput)
-	}
-	if p.RequestedAmountKopecks != nil && *p.RequestedAmountKopecks <= 0 {
-		return fmt.Errorf("%w: amount must be positive", e.ErrInvalidInput)
-	}
-	if p.Collateral != nil {
-		if p.Collateral.Revision != 0 {
-			return fmt.Errorf("%w: collateral revision is managed by the server", e.ErrInvalidInput)
-		}
-		if err := p.Collateral.Validate(); err != nil {
-			return fmt.Errorf("%w: %s", e.ErrInvalidInput, err)
-		}
-		if p.HasCollateral != nil && !*p.HasCollateral {
-			return fmt.Errorf("%w: collateral conflicts with has_collateral=false", e.ErrInvalidInput)
-		}
-	}
-	return nil
-}
-
 type ReviewCollateral struct {
 	ExpectedRevision     int64  `json:"expected_revision" minimum:"1" binding:"required"`
 	Result               string `json:"result" enums:"accepted,needs_info,rejected" binding:"required"`

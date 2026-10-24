@@ -161,7 +161,7 @@ func TestInfoRequestRound(t *testing.T) {
 		tr, err := a.RequestInfo()
 		return reviewdomain.Change{
 			Transitions: []applicationdomain.Transition{tr}, Comment: &req.Message, InfoRequest: &req,
-			Notification: &reviewdomain.Notification{UserID: a.ApplicantID, ApplicationID: a.ID, Type: reviewdomain.NotificationInfoRequested, Title: "Нужны сведения", Body: req.Message},
+			Notification: &applicationdomain.Notification{UserID: a.ApplicantID, ApplicationID: a.ID, Type: applicationdomain.NotificationInfoRequested, Title: "Нужны сведения", Body: req.Message},
 		}, err
 	})
 	if err != nil {
