@@ -131,7 +131,7 @@ func (f *fakeRepo) List(_ context.Context, filter reviewdomain.Filter) ([]review
 	return items, nil
 }
 
-func (f *fakeRepo) Update(_ context.Context, cmd reviewdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (bool, error) {
+func (f *fakeRepo) Update(_ context.Context, cmd applicationdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	d, err := f.details(cmd.ID)

@@ -118,12 +118,12 @@ func TestUpdateChecksRevision(t *testing.T) {
 		_, err := reviewdomain.Take(a, f.reviewerID)
 		return reviewdomain.Change{}, err
 	}
-	_, err := repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 3, ActorID: &f.reviewerID}, take)
+	_, err := repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 3, ActorID: &f.reviewerID}, take)
 	var conflict *applicationerrors.RevisionConflictError
 	if !errors.As(err, &conflict) || conflict.Current != 4 {
 		t.Fatalf("stale update = %v; want RevisionConflictError{4}", err)
 	}
-	if _, err := repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, take); err != nil {
+	if _, err := repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, take); err != nil {
 		t.Fatal(err)
 	}
 	d, err := repo.GetDetails(ctx, id)
@@ -134,7 +134,7 @@ func TestUpdateChecksRevision(t *testing.T) {
 		t.Errorf("after take: revision %d, assignee %v", d.Revision, d.Assignee)
 	}
 	// Ошибка в fn откатывает всё.
-	_, err = repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 5}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
+	_, err = repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 5}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		a.AssigneeID = nil
 		return reviewdomain.Change{}, errors.New("boom")
 	})
@@ -157,7 +157,7 @@ func TestInfoRequestRound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
+	_, err = repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		tr, err := a.RequestInfo()
 		return reviewdomain.Change{
 			Transitions: []applicationdomain.Transition{tr}, Comment: &req.Message, InfoRequest: &req,
@@ -189,10 +189,10 @@ func TestInfoRequestRound(t *testing.T) {
 	answer := func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		return reviewdomain.Change{AnsweredRequest: &stored}, nil
 	}
-	if _, err := repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 5, ActorID: &f.applicantID}, answer); err != nil {
+	if _, err := repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 5, ActorID: &f.applicantID}, answer); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 6, ActorID: &f.applicantID}, answer); !errors.Is(err, applicationerrors.ErrInvalidState) {
+	if _, err := repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 6, ActorID: &f.applicantID}, answer); !errors.Is(err, applicationerrors.ErrInvalidState) {
 		t.Errorf("second answer = %v; want ErrInvalidState", err)
 	}
 	d, _ = repo.GetDetails(ctx, id)
@@ -206,7 +206,7 @@ func TestInfoRequestRound(t *testing.T) {
 		tr, err := a.Resubmit()
 		return reviewdomain.Change{Transitions: []applicationdomain.Transition{tr}}, err
 	}
-	cmd := reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 6, ActorID: &f.applicantID, Key: &key}
+	cmd := applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 6, ActorID: &f.applicantID, Key: &key}
 	if replayed, err := repo.Update(ctx, cmd, resubmit); err != nil || replayed {
 		t.Fatalf("resubmit = %v, replayed %v", err, replayed)
 	}
@@ -274,7 +274,7 @@ func TestDecisionWithContract(t *testing.T) {
 			MonthlyPaymentKopecks: ptr(int64(9367153)), BankAccountID: &f.accountID},
 	}
 	decision.Contract = &reviewdomain.Contract{ID: docID, Version: 1, OfferID: decision.ID}
-	_, err = repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
+	_, err = repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		tr, err := a.Approve()
 		return reviewdomain.Change{Transitions: []applicationdomain.Transition{tr}, Document: &doc, Decision: &decision}, err
 	})
@@ -316,7 +316,7 @@ func TestRejectedDecision(t *testing.T) {
 
 	rejected := reviewdomain.Decision{ID: uuid.New(), ApplicationID: id, Version: 1, Outcome: reviewdomain.OutcomeRejected,
 		ChangedFields: []string{}, ReasonCode: ptr("HIGH_DEBT_LOAD"), Reasons: []string{"Высокая нагрузка"}, DecidedBy: &f.reviewerID}
-	_, err := repo.Update(ctx, reviewdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
+	_, err := repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		tr, err := a.Reject()
 		return reviewdomain.Change{Transitions: []applicationdomain.Transition{tr}, Decision: &rejected}, err
 	})

@@ -14,7 +14,7 @@ import (
 // PipelineRepo — то, что нужно Passthrough от репозитория рассмотрения.
 type PipelineRepo interface {
 	GetDetails(ctx context.Context, id uuid.UUID) (reviewdomain.Details, error)
-	Update(ctx context.Context, cmd reviewdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (bool, error)
+	Update(ctx context.Context, cmd applicationdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (bool, error)
 }
 
 // Passthrough — временная замена конвейера, пока его не подключил модуль
@@ -36,7 +36,7 @@ func (p *Passthrough) Run(ctx context.Context, applicationID uuid.UUID) error {
 	if d.Status != applicationdomain.StatusSubmitted {
 		return nil
 	}
-	_, err = p.repo.Update(ctx, reviewdomain.UpdateCommand{ID: applicationID, ExpectedRevision: d.Revision}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
+	_, err = p.repo.Update(ctx, applicationdomain.UpdateCommand{ID: applicationID, ExpectedRevision: d.Revision}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		validation, err := a.StartValidation()
 		if err != nil {
 			return reviewdomain.Change{}, err

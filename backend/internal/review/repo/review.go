@@ -113,37 +113,19 @@ func (r *Repo) List(ctx context.Context, f reviewdomain.Filter) ([]reviewdomain.
 	return items, nil
 }
 
-// Update меняет заявку в одной транзакции: блокирует строку, сверяет revision,
-// применяет fn и пишет Change. С ключом идемпотентности повтор того же запроса
-// ничего не меняет и возвращает replayed == true — до сверки revision, потому
-// что первый запрос её уже увеличил.
-func (r *Repo) Update(ctx context.Context, cmd reviewdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (replayed bool, err error) {
-	err = pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		d, err := applicationrepo.GetDetails(ctx, tx, cmd.ID, true)
+// Update меняет заявку через applicationrepo.Update и в той же транзакции
+// пишет Change. Блокировка, revision, идемпотентность и история — там.
+func (r *Repo) Update(ctx context.Context, cmd applicationdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (replayed bool, err error) {
+	return applicationrepo.Update(ctx, r.pool, cmd, func(tx pgx.Tx, app *applicationdomain.Application) (applicationrepo.History, error) {
+		change, err := fn(app)
 		if err != nil {
-			return err
+			return applicationrepo.History{}, err
 		}
-		if cmd.Key != nil {
-			_, claimed, err := applicationrepo.ClaimKey(ctx, tx, *cmd.Key, cmd.ID)
-			if err != nil {
-				return err
-			}
-			if !claimed {
-				replayed = true
-				return nil
-			}
+		if err := apply(ctx, tx, change); err != nil {
+			return applicationrepo.History{}, err
 		}
-		if d.Revision != cmd.ExpectedRevision {
-			return &applicationerrors.RevisionConflictError{Current: d.Revision}
-		}
-		app := d.Application
-		change, err := fn(&app)
-		if err != nil {
-			return err
-		}
-		return apply(ctx, tx, app, change, cmd.ActorID)
+		return applicationrepo.History{Transitions: change.Transitions, Comment: change.Comment}, nil
 	})
-	return replayed, err
 }
 
 // InfoRequests — запросы банка по заявке, новые сверху.
@@ -228,9 +210,9 @@ func (r *Repo) Document(ctx context.Context, id uuid.UUID) (reviewdomain.Documen
 
 //============================================================================================
 
-// apply пишет Change и саму заявку: статус, ответственного и revision + 1.
-// Время событий — now() транзакции, общее для всех записей.
-func apply(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, c reviewdomain.Change, actorID *uuid.UUID) error {
+// apply пишет данные рассмотрения из Change. Переходы и саму заявку сохраняет
+// applicationrepo.Update.
+func apply(ctx context.Context, tx pgx.Tx, c reviewdomain.Change) error {
 	if c.Document != nil {
 		if err := insertDocument(ctx, tx, *c.Document); err != nil {
 			return err
@@ -265,15 +247,6 @@ func apply(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, c 
 			return fmt.Errorf("%w: info request is not open", applicationerrors.ErrInvalidState)
 		}
 	}
-	for i, tr := range c.Transitions {
-		var comment *string
-		if i == len(c.Transitions)-1 {
-			comment = c.Comment
-		}
-		if err := applicationrepo.InsertTransition(ctx, tx, app.ID, tr, actorID, comment); err != nil {
-			return err
-		}
-	}
 	if n := c.Notification; n != nil {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO notifications (user_id, application_id, type, title, body)
@@ -283,14 +256,6 @@ func apply(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, c 
 		if err != nil {
 			return fmt.Errorf("insert notification: %w", err)
 		}
-	}
-	_, err := tx.Exec(ctx, `
-		UPDATE applications SET status = $2, assignee_id = $3, revision = revision + 1
-		WHERE id = $1`,
-		app.ID, app.Status, app.AssigneeID,
-	)
-	if err != nil {
-		return fmt.Errorf("update application: %w", err)
 	}
 	return nil
 }

@@ -37,7 +37,7 @@ type Repo interface {
 	List(ctx context.Context, f reviewdomain.Filter) ([]reviewdomain.Details, error)
 	// Update в одной транзакции блокирует заявку, сверяет revision (иначе
 	// RevisionConflictError), вызывает fn и пишет Change. Повтор по ключу — replayed.
-	Update(ctx context.Context, cmd reviewdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (replayed bool, err error)
+	Update(ctx context.Context, cmd applicationdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (replayed bool, err error)
 	InfoRequests(ctx context.Context, applicationID uuid.UUID) ([]reviewdomain.InfoRequest, error)
 	InfoRequest(ctx context.Context, applicationID, requestID uuid.UUID) (reviewdomain.InfoRequest, error)
 	Product(ctx context.Context, code string) (reviewdomain.Product, error)
@@ -481,8 +481,8 @@ func (s *Service) DocumentContent(ctx context.Context, viewer reviewdomain.Viewe
 
 //============================================================================================
 
-func (s *Service) update(id uuid.UUID, expected int, actorID uuid.UUID) reviewdomain.UpdateCommand {
-	return reviewdomain.UpdateCommand{ID: id, ExpectedRevision: expected, ActorID: &actorID}
+func (s *Service) update(id uuid.UUID, expected int, actorID uuid.UUID) applicationdomain.UpdateCommand {
+	return applicationdomain.UpdateCommand{ID: id, ExpectedRevision: expected, ActorID: &actorID}
 }
 
 // staffDetails — заявка для сотрудника. Черновик — рабочая область клиента, его не видно.

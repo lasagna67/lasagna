@@ -413,15 +413,6 @@ type Change struct {
 	Notification    *Notification
 }
 
-// UpdateCommand — изменение заявки с optimistic locking. Key задан — повтор с
-// тем же ключом и телом не меняет заявку, а возвращает replayed.
-type UpdateCommand struct {
-	ID               uuid.UUID
-	ExpectedRevision int
-	ActorID          *uuid.UUID // nil — конвейер
-	Key              *applicationdomain.IdempotencyKey
-}
-
 //=================================================================================================
 // КАРТОЧКИ:
 
