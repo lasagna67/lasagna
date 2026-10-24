@@ -2,11 +2,14 @@ package app
 
 import (
 	authservice "github.com/lasagna67/lasagna.git/internal/auth/service"
+	collateralrepo "github.com/lasagna67/lasagna.git/internal/collateral/repo"
 	companyhttpjson "github.com/lasagna67/lasagna.git/internal/company/httpjson"
 	companyservice "github.com/lasagna67/lasagna.git/internal/company/service"
 	"github.com/lasagna67/lasagna.git/internal/config"
 	creditservice "github.com/lasagna67/lasagna.git/internal/credit/service"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
+	financialscsvservice "github.com/lasagna67/lasagna.git/internal/financials-csv/service"
+	"github.com/lasagna67/lasagna.git/internal/scoring"
 	userservice "github.com/lasagna67/lasagna.git/internal/user/service"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
@@ -16,6 +19,9 @@ type Service struct {
 	Auth           *authservice.Service
 	User           *userservice.UserService
 	Company        *companyservice.CompanyService
+	Financials     *financialscsvservice.Service
+	Collateral     *collateralrepo.Repo
+	Scoring        *scoring.Scorer
 	Credit         *creditservice.ApplicationService
 	CreditProducts *creditproducts.Service
 }
@@ -53,6 +59,9 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Auth:           auth,
 		User:           userservice.New(repo.Users, hasher),
 		Company:        company,
+		Financials:     financialscsvservice.New(repo.Companies),
+		Collateral:     repo.Collateral,
+		Scoring:        repo.Scoring,
 		Credit:         creditservice.New(repo.Applications, company),
 		CreditProducts: products,
 	}, nil

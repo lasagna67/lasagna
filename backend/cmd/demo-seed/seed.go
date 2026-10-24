@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	d "github.com/lasagna67/lasagna.git/internal/company/domain"
 )
 
 // profile связывает сценарий кабинета с существующим ИНН в моках.
@@ -54,11 +56,14 @@ type account struct {
 	OverviewURL string `json:"overview_url"`
 }
 
-// seeder заполняет кабинет через HTTP API; подключения к БД у него нет.
+// seeder создаёт пользователей и связи компаний через HTTP API.
+// ensureAccount идемпотентно дополняет компании синтетическими расчётными счетами.
 // baseURL используется внутри Docker, publicURL — в ссылках для frontend.
 type seeder struct {
 	client                                                   *http.Client
 	baseURL, registryURL, esignURL, publicURL, password, pin string
+	ensureAccount                                            func(context.Context, string) error
+	seedBalance                                              func(context.Context, string, int64) error
 }
 type statusError struct {
 	method, path string
@@ -193,6 +198,41 @@ func (s *seeder) seedAccount(ctx context.Context, p profile, cert certificate) (
 	}
 	if business.ID == "" || business.INN != p.INN {
 		return result, errors.New("company response does not match profile")
+	}
+	if p.Scenario != "terminated" {
+		if s.ensureAccount == nil {
+			return result, errors.New("settlement account seed is not configured")
+		}
+		if err := s.ensureAccount(ctx, business.ID); err != nil {
+			return result, fmt.Errorf("seed settlement account: %w", err)
+		}
+		var overview struct {
+			Financials d.SourceResult[d.FinancialReport] `json:"financials"`
+		}
+		if err := s.request(ctx, "GET", base+"/companies/"+business.ID+"/overview", login.Token, nil, &overview); err != nil {
+			return result, err
+		}
+		if overview.Financials.Status == "ok" || overview.Financials.Status == "not_found" {
+			if s.seedBalance == nil {
+				return result, errors.New("demo balance seed is not configured")
+			}
+			var balance int64
+			if overview.Financials.Status == "ok" {
+				report := overview.Financials.Data
+				if report == nil || report.INN != p.INN || report.Status != "ok" {
+					return result, errors.New("unexpected demo financial report")
+				}
+				balance, err = demoBalance(*report, time.Now())
+				if err != nil {
+					return result, err
+				}
+			}
+			if err := s.seedBalance(ctx, business.ID, balance); err != nil {
+				return result, err
+			}
+		} else {
+			slog.Warn("demo balance postponed: financials unavailable", "company_id", business.ID)
+		}
 	}
 	public := strings.TrimRight(s.publicURL, "/") + "/api/v0/companies/" + business.ID
 	return account{Key: p.Kind + "-" + p.Scenario, Scenario: scenarioLabels[p.Scenario], EntityType: business.EntityType, Name: business.Name, INN: p.INN, Email: email, UserID: login.User.ID, CompanyID: business.ID, CompanyURL: public, OverviewURL: public + "/overview"}, nil

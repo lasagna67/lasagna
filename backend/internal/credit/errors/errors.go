@@ -4,7 +4,11 @@ import "errors"
 
 var (
 	// ErrInvalidState — переход из текущего статуса запрещён (409 INVALID_STATE).
-	ErrInvalidState = errors.New("invalid application state")
+	ErrInvalidState      = errors.New("invalid application state")
+	ErrNotFound          = errors.New("application not found or access denied")
+	ErrRevisionConflict  = errors.New("application revision conflict")
+	ErrInvalidInput      = errors.New("invalid application input")
+	ErrCollateralMissing = errors.New("collateral is required")
 	// ErrCompanyNotFound — компании нет или пользователь не её участник (404 NOT_FOUND).
 	// Не различаются, чтобы не раскрывать, подключена ли чужая компания.
 	ErrCompanyNotFound = errors.New("company not found")

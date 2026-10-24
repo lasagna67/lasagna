@@ -14,70 +14,103 @@ type transportFunc func(*http.Request) (*http.Response, error)
 func (f transportFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestSeedAccount(t *testing.T) {
-	for _, existing := range []bool{false, true} {
-		t.Run(map[bool]string{false: "new", true: "existing"}[existing], func(t *testing.T) {
-			var calls []string
-			transport := transportFunc(func(r *http.Request) (*http.Response, error) {
-				calls = append(calls, r.Method+" "+r.URL.Path)
-				status, body := 200, `{}`
-				switch r.URL.Path {
-				case "/api/v0/users":
-					status = 201
-					if existing {
-						status = 409
-					}
-				case "/api/v0/auth/login":
-					body = `{"access_token":"secret-token","user":{"id":"user1","role":"client"}}`
-				case "/api/v0/companies":
-					if r.Method == "GET" {
-						body = `[]`
-						if existing {
-							body = `[{"id":"company1","inn":"7705005410","name":"Demo"}]`
-						}
-					} else {
-						body = `{"id":"company1","inn":"7705005410","name":"Demo"}`
+	for _, financialStatus := range []string{"ok", "not_found", "unavailable"} {
+		for _, existing := range []bool{false, true} {
+			t.Run(financialStatus+"/"+map[bool]string{false: "new", true: "existing"}[existing], func(t *testing.T) {
+				var calls []string
+				var accountCalls int
+				var balanceCalls int
+				transport := transportFunc(func(r *http.Request) (*http.Response, error) {
+					calls = append(calls, r.Method+" "+r.URL.Path)
+					status, body := 200, `{}`
+					switch r.URL.Path {
+					case "/api/v0/users":
 						status = 201
+						if existing {
+							status = 409
+						}
+					case "/api/v0/auth/login":
+						body = `{"access_token":"secret-token","user":{"id":"user1","role":"client"}}`
+					case "/api/v0/companies":
+						if r.Method == "GET" {
+							body = `[]`
+							if existing {
+								body = `[{"id":"company1","inn":"7705005410","name":"Demo"}]`
+							}
+						} else {
+							body = `{"id":"company1","inn":"7705005410","name":"Demo"}`
+							status = 201
+						}
+					case "/api/v0/companies/challenges":
+						body = `{"challenge_id":"challenge1","data":"statement\nexact"}`
+						status = 201
+					case "/v1/sign":
+						var request struct {
+							Data string `json:"data"`
+						}
+						if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+							t.Fatal(err)
+						}
+						if request.Data != "statement\nexact" {
+							t.Fatal("statement changed")
+						}
+						body = `{"signature":"signed"}`
+					case "/api/v0/auth/logout":
+						status = 204
+					case "/api/v0/companies/company1/overview":
+						body = `{"financials":{"status":"ok","data":{"inn":"7705005410","status":"ok","currency":"RUB","monthly_data":[{"month":"2026-09","income":100000,"expenses":60000}]}}}`
+						if financialStatus != "ok" {
+							body = `{"financials":{"status":"` + financialStatus + `","data":null}}`
+						}
+					default:
+						t.Fatalf("unexpected request %s", r.URL.Path)
 					}
-				case "/api/v0/companies/challenges":
-					body = `{"challenge_id":"challenge1","data":"statement\nexact"}`
-					status = 201
-				case "/v1/sign":
-					var request struct {
-						Data string `json:"data"`
+					if strings.HasPrefix(r.URL.Path, "/api/v0/companies") && r.Header.Get("Authorization") != "Bearer secret-token" {
+						t.Fatal("missing token")
 					}
-					if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-						t.Fatal(err)
+					return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+				})
+				s := seeder{client: &http.Client{Transport: transport}, baseURL: "http://backend", esignURL: "http://esign", password: "demo-password", pin: "12345678"}
+				s.ensureAccount = func(_ context.Context, companyID string) error {
+					if companyID != "company1" {
+						t.Fatalf("wrong account company: %s", companyID)
 					}
-					if request.Data != "statement\nexact" {
-						t.Fatal("statement changed")
-					}
-					body = `{"signature":"signed"}`
-				case "/api/v0/auth/logout":
-					status = 204
-				default:
-					t.Fatalf("unexpected request %s", r.URL.Path)
+					accountCalls++
+					return nil
 				}
-				if strings.HasPrefix(r.URL.Path, "/api/v0/companies") && r.Header.Get("Authorization") != "Bearer secret-token" {
-					t.Fatal("missing token")
+				s.seedBalance = func(_ context.Context, companyID string, balance int64) error {
+					balanceCalls++
+					if companyID != "company1" || (financialStatus == "ok" && (balance < 20000 || balance > 60000)) || (financialStatus == "not_found" && balance != 0) {
+						t.Fatalf("incorrect seeded balance: %s %d", companyID, balance)
+					}
+					return nil
 				}
-				return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+				result, err := s.seedAccount(context.Background(), profiles[0], certificate{Serial: "cert1"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if result.CompanyID != "company1" || result.Email != "demo.ooo.good@lasagna.test" {
+					t.Fatalf("unexpected result %+v", result)
+				}
+				if accountCalls != 1 {
+					t.Fatalf("account must be ensured for new and existing company, got %d calls", accountCalls)
+				}
+				wantBalanceCalls := 1
+				if financialStatus == "unavailable" {
+					wantBalanceCalls = 0
+				}
+				if balanceCalls != wantBalanceCalls {
+					t.Fatalf("balance seed calls: got %d, want %d", balanceCalls, wantBalanceCalls)
+				}
+				joined := strings.Join(calls, ";")
+				if strings.Contains(joined, "/v1/sign") == existing {
+					t.Fatal("existing company must not be signed again")
+				}
+				if calls[len(calls)-1] != "POST /api/v0/auth/logout" {
+					t.Fatal("session not closed")
+				}
 			})
-			s := seeder{client: &http.Client{Transport: transport}, baseURL: "http://backend", esignURL: "http://esign", password: "demo-password", pin: "12345678"}
-			result, err := s.seedAccount(context.Background(), profiles[0], certificate{Serial: "cert1"})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if result.CompanyID != "company1" || result.Email != "demo.ooo.good@lasagna.test" {
-				t.Fatalf("unexpected result %+v", result)
-			}
-			joined := strings.Join(calls, ";")
-			if strings.Contains(joined, "/v1/sign") == existing {
-				t.Fatal("existing company must not be signed again")
-			}
-			if calls[len(calls)-1] != "POST /api/v0/auth/logout" {
-				t.Fatal("session not closed")
-			}
-		})
+		}
 	}
 }
 

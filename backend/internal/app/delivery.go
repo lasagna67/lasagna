@@ -7,10 +7,12 @@ import (
 	"github.com/labstack/echo/v5"
 	authdomain "github.com/lasagna67/lasagna.git/internal/auth/domain"
 	authhandler "github.com/lasagna67/lasagna.git/internal/auth/handler"
+	collateralhandler "github.com/lasagna67/lasagna.git/internal/collateral/handler"
 	companyhandler "github.com/lasagna67/lasagna.git/internal/company/handler"
 	"github.com/lasagna67/lasagna.git/internal/config"
 	credithandler "github.com/lasagna67/lasagna.git/internal/credit/handler"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
+	financialscsvhandler "github.com/lasagna67/lasagna.git/internal/financials-csv/handler"
 	userhandler "github.com/lasagna67/lasagna.git/internal/user/handler"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 	"github.com/lasagna67/lasagna.git/pkg/server"
@@ -36,6 +38,10 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 	companies := companyhandler.New(services.Company, logger.Named("company"))
 	companies.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 
+	uploads := financialscsvhandler.New(services.Financials, logger.Named("financials-csv"))
+	uploads.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
+	collateral := collateralhandler.New(services.Collateral, logger.Named("collateral"))
+	collateral.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient), auth.RequireRole(authdomain.RoleUnderwriter, authdomain.RoleAdmin))
 	applications := credithandler.New(services.Credit, logger.Named("credit"))
 	applications.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 
