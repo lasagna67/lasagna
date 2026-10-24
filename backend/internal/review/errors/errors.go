@@ -1,5 +1,5 @@
 // Package reviewerrors — ошибки рассмотрения заявки. Общие для заявки ошибки
-// (INVALID_STATE, REVISION_CONFLICT, VALIDATION_FAILED) — в crediterrors.
+// (INVALID_STATE, REVISION_CONFLICT, VALIDATION_FAILED) — в applicationerrors.
 package reviewerrors
 
 import "errors"

@@ -1,4 +1,4 @@
-package creditrepo
+package applicationrepo
 
 import (
 	"context"
@@ -13,8 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 )
 
 // Интеграционные тесты идут против мигрированной БД из TEST_DATABASE_URL,
@@ -69,9 +69,9 @@ func seedMember(t *testing.T, pool *pgxpool.Pool) (companyID, userID uuid.UUID) 
 }
 
 // createKey — ключ создания; body заменяет тело запроса, хеш как у сервиса — 64 hex.
-func createKey(userID uuid.UUID, key, body string) creditdomain.IdempotencyKey {
+func createKey(userID uuid.UUID, key, body string) applicationdomain.IdempotencyKey {
 	sum := sha256.Sum256([]byte(body))
-	return creditdomain.IdempotencyKey{UserID: userID, Operation: creditdomain.OperationCreate, Key: key, RequestHash: hex.EncodeToString(sum[:])}
+	return applicationdomain.IdempotencyKey{UserID: userID, Operation: applicationdomain.OperationCreate, Key: key, RequestHash: hex.EncodeToString(sum[:])}
 }
 
 func TestCreate(t *testing.T) {
@@ -80,15 +80,15 @@ func TestCreate(t *testing.T) {
 	ctx := context.Background()
 	companyID, userID := seedMember(t, pool)
 
-	app, tr := creditdomain.NewDraft(uuid.New(), companyID, userID)
+	app, tr := applicationdomain.NewDraft(uuid.New(), companyID, userID)
 	got, err := repo.Create(ctx, app, tr, createKey(userID, "key-1", "body-1"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ID != app.ID || got.Status != creditdomain.StatusDraft || got.Revision != 1 || got.Number == 0 {
+	if got.ID != app.ID || got.Status != applicationdomain.StatusDraft || got.Revision != 1 || got.Number == 0 {
 		t.Errorf("created = %+v", got.Application)
 	}
-	if got.Request.NeedPeriod.Unit != creditdomain.NeedPeriodUnknown || got.Request.CollateralMode != creditdomain.CollateralNone ||
+	if got.Request.NeedPeriod.Unit != applicationdomain.NeedPeriodUnknown || got.Request.CollateralMode != applicationdomain.CollateralNone ||
 		got.Request.Purpose != nil || got.Request.ProductCode != nil {
 		t.Errorf("request = %+v", got.Request)
 	}
@@ -110,7 +110,7 @@ func TestCreate(t *testing.T) {
 	}
 
 	// Повтор с тем же ключом и телом — та же заявка; новая не создаётся.
-	again, _ := creditdomain.NewDraft(uuid.New(), companyID, userID)
+	again, _ := applicationdomain.NewDraft(uuid.New(), companyID, userID)
 	replay, err := repo.Create(ctx, again, tr, createKey(userID, "key-1", "body-1"))
 	if err != nil {
 		t.Fatal(err)
@@ -121,7 +121,7 @@ func TestCreate(t *testing.T) {
 
 	// Тот же ключ с другим телом — конфликт.
 	_, err = repo.Create(ctx, again, tr, createKey(userID, "key-1", "body-2"))
-	if !errors.Is(err, crediterrors.ErrIdempotencyConflict) {
+	if !errors.Is(err, applicationerrors.ErrIdempotencyConflict) {
 		t.Errorf("err = %v; want ErrIdempotencyConflict", err)
 	}
 }
@@ -138,7 +138,7 @@ func TestCreateConcurrentSameKey(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range n {
 		wg.Go(func() {
-			app, tr := creditdomain.NewDraft(uuid.New(), companyID, userID)
+			app, tr := applicationdomain.NewDraft(uuid.New(), companyID, userID)
 			got, err := repo.Create(context.Background(), app, tr, createKey(userID, "same-key", "body"))
 			ids[i], errs[i] = got.ID, err
 		})

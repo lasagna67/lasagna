@@ -1,5 +1,5 @@
 // Package reviewdto — запросы и ответы рассмотрения заявки. Заявка строится
-// creditdto; здесь — то, что добавляет рассмотрение, и раздельные ответы для
+// applicationdto; здесь — то, что добавляет рассмотрение, и раздельные ответы для
 // клиента и сотрудника: внутренние комментарии клиенту не попадают по типу.
 package reviewdto
 
@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationdto "github.com/lasagna67/lasagna.git/internal/application/dto"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	creditdto "github.com/lasagna67/lasagna.git/internal/credit/dto"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 	reviewdomain "github.com/lasagna67/lasagna.git/internal/review/domain"
 )
 
@@ -173,8 +173,8 @@ type InfoRequestResponse struct {
 }
 
 // NewApplication — заявка для клиента: залог с проверкой, предложение и договор.
-func NewApplication(d reviewdomain.Details) creditdto.ApplicationResponse {
-	resp := creditdto.NewApplicationResponse(d.ApplicationDetails)
+func NewApplication(d reviewdomain.Details) applicationdto.ApplicationResponse {
+	resp := applicationdto.NewApplicationResponse(d.ApplicationDetails)
 	if c := newCollateral(d); c != nil {
 		resp.Collateral = c
 	}
@@ -285,8 +285,8 @@ func NewInfoRequests(reqs []reviewdomain.InfoRequest) []InfoRequestResponse {
 
 // UnderwriterApplicationResponse — заявка в очереди: действия сотрудника и ответственный.
 type UnderwriterApplicationResponse struct {
-	creditdto.ApplicationResponse
-	Assignee *creditdto.ApplicantResponse `json:"assignee"`
+	applicationdto.ApplicationResponse
+	Assignee *applicationdto.ApplicantResponse `json:"assignee"`
 }
 
 type ApplicationPageResponse struct {
@@ -366,11 +366,11 @@ type EventResponse struct {
 // сейчас мешает одобрить заявку на запрошенных условиях.
 type ReviewApplicationResponse struct {
 	UnderwriterApplicationResponse
-	InfoRequests      []InfoRequestResponse           `json:"info_requests"`
-	CollateralReviews []StaffCollateralReviewResponse `json:"collateral_reviews"`
-	Decisions         []DecisionResponse              `json:"decisions"`
-	History           []EventResponse                 `json:"history"`
-	DecisionBlockers  []creditdto.FieldErrorResponse  `json:"decision_blockers"`
+	InfoRequests      []InfoRequestResponse               `json:"info_requests"`
+	CollateralReviews []StaffCollateralReviewResponse     `json:"collateral_reviews"`
+	Decisions         []DecisionResponse                  `json:"decisions"`
+	History           []EventResponse                     `json:"history"`
+	DecisionBlockers  []applicationdto.FieldErrorResponse `json:"decision_blockers"`
 }
 
 // NewUnderwriterApplication — заявка в очереди глазами сотрудника r.
@@ -382,7 +382,7 @@ func NewUnderwriterApplication(d reviewdomain.Details, r reviewdomain.Reviewer) 
 		resp.AvailableActions = append(resp.AvailableActions, string(a))
 	}
 	if d.Assignee != nil {
-		card := creditdto.NewApplicantResponse(*d.Assignee)
+		card := applicationdto.NewApplicantResponse(*d.Assignee)
 		resp.Assignee = &card
 	}
 	return resp
@@ -485,20 +485,20 @@ func newScoring(s reviewdomain.ScoringCheck) ScoringResponse {
 	}
 }
 
-func fieldErrors(fields []crediterrors.FieldError) []creditdto.FieldErrorResponse {
-	resp := make([]creditdto.FieldErrorResponse, 0, len(fields))
+func fieldErrors(fields []applicationerrors.FieldError) []applicationdto.FieldErrorResponse {
+	resp := make([]applicationdto.FieldErrorResponse, 0, len(fields))
 	for _, f := range fields {
-		resp = append(resp, creditdto.FieldErrorResponse{Field: f.Field, Code: f.Code, Message: f.Message})
+		resp = append(resp, applicationdto.FieldErrorResponse{Field: f.Field, Code: f.Code, Message: f.Message})
 	}
 	return resp
 }
 
 // ParseStatus — статус из query; пустая строка — без фильтра.
-func ParseStatus(s string) (*creditdomain.Status, bool) {
+func ParseStatus(s string) (*applicationdomain.Status, bool) {
 	if s == "" {
 		return nil, true
 	}
-	st := creditdomain.Status(s)
+	st := applicationdomain.Status(s)
 	return &st, st.Valid()
 }
 

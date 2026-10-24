@@ -40,7 +40,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/creditdto.CreateApplicationRequest"
+                            "$ref": "#/definitions/applicationdto.CreateApplicationRequest"
                         }
                     }
                 ],
@@ -48,13 +48,13 @@
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ApplicationResponse"
+                            "$ref": "#/definitions/applicationdto.ApplicationResponse"
                         }
                     },
                     "400": {
                         "description": "INVALID_REQUEST",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "401": {
@@ -72,19 +72,19 @@
                     "404": {
                         "description": "NOT_FOUND: нет компании или пользователь не её участник",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "IDEMPOTENCY_CONFLICT",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "VALIDATION_FAILED",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -208,7 +208,7 @@
                     "404": {
                         "description": "NOT_FOUND",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -257,7 +257,7 @@
                     "404": {
                         "description": "NOT_FOUND: нет заявки или она чужая",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -312,31 +312,31 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ApplicationResponse"
+                            "$ref": "#/definitions/applicationdto.ApplicationResponse"
                         }
                     },
                     "400": {
                         "description": "INVALID_REQUEST",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "NOT_FOUND",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "REVISION_CONFLICT, INVALID_STATE",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "VALIDATION_FAILED",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -376,7 +376,7 @@
                     "404": {
                         "description": "NOT_FOUND",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -430,25 +430,25 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ApplicationResponse"
+                            "$ref": "#/definitions/applicationdto.ApplicationResponse"
                         }
                     },
                     "400": {
                         "description": "INVALID_REQUEST",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "NOT_FOUND",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -1354,13 +1354,13 @@
                     "404": {
                         "description": "NOT_FOUND",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "SERVICE_UNAVAILABLE",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -1432,7 +1432,7 @@
                     "400": {
                         "description": "INVALID_REQUEST",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "401": {
@@ -1497,7 +1497,7 @@
                     "404": {
                         "description": "NOT_FOUND",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -1633,37 +1633,37 @@
                     "400": {
                         "description": "INVALID_REQUEST",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "FORBIDDEN: заявка у другого сотрудника",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "NOT_FOUND",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "REVISION_CONFLICT, INVALID_STATE",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "VALIDATION_FAILED: условия, проверки, залог",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "SERVICE_UNAVAILABLE: хранилище договоров",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -1716,31 +1716,31 @@
                     "400": {
                         "description": "INVALID_REQUEST",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "FORBIDDEN: заявка у другого сотрудника",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "NOT_FOUND",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "REVISION_CONFLICT, INVALID_STATE",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "VALIDATION_FAILED",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -1793,37 +1793,37 @@
                     "400": {
                         "description": "INVALID_REQUEST",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "FORBIDDEN: заявка у другого сотрудника",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "NOT_FOUND",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "REVISION_CONFLICT, INVALID_STATE",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "422": {
                         "description": "VALIDATION_FAILED",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "503": {
                         "description": "SERVICE_UNAVAILABLE",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -1876,19 +1876,19 @@
                     "400": {
                         "description": "INVALID_REQUEST",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "NOT_FOUND",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "REVISION_CONFLICT, INVALID_STATE",
                         "schema": {
-                            "$ref": "#/definitions/creditdto.ErrorResponse"
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
                     }
                 }
@@ -2125,6 +2125,418 @@
         }
     },
     "definitions": {
+        "applicationdomain.Status": {
+            "type": "string",
+            "enum": [
+                "draft",
+                "submitted",
+                "validation",
+                "enrichment",
+                "scoring",
+                "manual_review",
+                "info_requested",
+                "approved",
+                "counter_offer",
+                "signing",
+                "issued",
+                "rejected",
+                "cancelled",
+                "expired"
+            ],
+            "x-enum-comments": {
+                "StatusApproved": "предложение на запрошенных условиях",
+                "StatusCancelled": "клиент отказался от предложения",
+                "StatusCounterOffer": "предложение на иных условиях",
+                "StatusDraft": "клиент заполняет, данные сохраняются по шагам",
+                "StatusEnrichment": "реестр и БКИ для версии заявки",
+                "StatusExpired": "предложение не подписано до valid_until",
+                "StatusInfoRequested": "клиент отвечает в той же заявке",
+                "StatusIssued": "выдача или активация лимита завершена",
+                "StatusManualReview": "у сотрудника: материалы, залог, решение",
+                "StatusRejected": "отказ сотрудника или stop-правила",
+                "StatusScoring": "вызов модели; без правил — ручной маршрут",
+                "StatusSigning": "договор подписан, ожидается выдача",
+                "StatusSubmitted": "версия зафиксирована, ждёт конвейера",
+                "StatusValidation": "проверка состава данных и условий продукта"
+            },
+            "x-enum-descriptions": [
+                "клиент заполняет, данные сохраняются по шагам",
+                "версия зафиксирована, ждёт конвейера",
+                "проверка состава данных и условий продукта",
+                "реестр и БКИ для версии заявки",
+                "вызов модели; без правил — ручной маршрут",
+                "у сотрудника: материалы, залог, решение",
+                "клиент отвечает в той же заявке",
+                "предложение на запрошенных условиях",
+                "предложение на иных условиях",
+                "договор подписан, ожидается выдача",
+                "выдача или активация лимита завершена",
+                "отказ сотрудника или stop-правила",
+                "клиент отказался от предложения",
+                "предложение не подписано до valid_until"
+            ],
+            "x-enum-varnames": [
+                "StatusDraft",
+                "StatusSubmitted",
+                "StatusValidation",
+                "StatusEnrichment",
+                "StatusScoring",
+                "StatusManualReview",
+                "StatusInfoRequested",
+                "StatusApproved",
+                "StatusCounterOffer",
+                "StatusSigning",
+                "StatusIssued",
+                "StatusRejected",
+                "StatusCancelled",
+                "StatusExpired"
+            ]
+        },
+        "applicationdto.ApplicantResponse": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string",
+                    "example": "Кедрова Анна Викторовна"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                }
+            }
+        },
+        "applicationdto.ApplicationResponse": {
+            "type": "object",
+            "properties": {
+                "applicant": {
+                    "$ref": "#/definitions/applicationdto.ApplicantResponse"
+                },
+                "applicant_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                },
+                "available_actions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "edit",
+                        "fetch_financials",
+                        "submit"
+                    ]
+                },
+                "checks": {
+                    "type": "object"
+                },
+                "collateral": {
+                    "type": "object"
+                },
+                "company": {
+                    "$ref": "#/definitions/applicationdto.CompanyCardResponse"
+                },
+                "company_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                },
+                "contract": {
+                    "type": "object"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "editable_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "request.amount_kopecks",
+                        "request.product_code"
+                    ]
+                },
+                "financials": {
+                    "$ref": "#/definitions/applicationdto.FinancialStateResponse"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13"
+                },
+                "issue": {
+                    "type": "object"
+                },
+                "number": {
+                    "type": "integer",
+                    "example": 1000
+                },
+                "offer": {
+                    "type": "object"
+                },
+                "product_details": {
+                    "type": "object"
+                },
+                "request": {
+                    "$ref": "#/definitions/applicationdto.RequestResponse"
+                },
+                "revision": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "scoring": {
+                    "type": "object"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "draft",
+                        "submitted",
+                        "validation",
+                        "enrichment",
+                        "scoring",
+                        "manual_review",
+                        "info_requested",
+                        "approved",
+                        "counter_offer",
+                        "signing",
+                        "issued",
+                        "rejected",
+                        "cancelled",
+                        "expired"
+                    ],
+                    "example": "draft"
+                },
+                "submitted_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "applicationdto.CompanyCardResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                },
+                "inn": {
+                    "type": "string",
+                    "example": "7705005410"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "ООО «Кедровый контур Демо»"
+                }
+            }
+        },
+        "applicationdto.CreateApplicationRequest": {
+            "type": "object",
+            "properties": {
+                "company_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                }
+            }
+        },
+        "applicationdto.ErrorBody": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "enum": [
+                        "INVALID_REQUEST",
+                        "UNAUTHENTICATED",
+                        "FORBIDDEN",
+                        "NOT_FOUND",
+                        "REVISION_CONFLICT",
+                        "INVALID_STATE",
+                        "CSV_NOT_ALLOWED",
+                        "OFFER_CHANGED",
+                        "IDEMPOTENCY_CONFLICT",
+                        "VALIDATION_FAILED",
+                        "INVALID_CSV",
+                        "SERVICE_UNAVAILABLE",
+                        "INTERNAL_ERROR"
+                    ],
+                    "example": "VALIDATION_FAILED"
+                },
+                "current_revision": {
+                    "description": "Только при REVISION_CONFLICT: revision, с которой заявка сейчас.",
+                    "type": "integer"
+                },
+                "field_errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/applicationdto.FieldErrorResponse"
+                    }
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Исправьте поля"
+                }
+            }
+        },
+        "applicationdto.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "$ref": "#/definitions/applicationdto.ErrorBody"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "applicationdto.FieldErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "REQUIRED"
+                },
+                "field": {
+                    "type": "string",
+                    "example": "company_id"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Выберите компанию"
+                }
+            }
+        },
+        "applicationdto.FinancialStateResponse": {
+            "type": "object",
+            "properties": {
+                "allow_csv_upload": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "data_status": {
+                    "type": "string",
+                    "enum": [
+                        "missing",
+                        "ready",
+                        "no_history"
+                    ],
+                    "example": "missing"
+                },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/applicationdto.IssueResponse"
+                    }
+                },
+                "revision": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "snapshot": {
+                    "type": "object"
+                },
+                "source_status": {
+                    "type": "string",
+                    "enum": [
+                        "not_requested",
+                        "ok",
+                        "not_found",
+                        "unavailable",
+                        "invalid"
+                    ],
+                    "example": "not_requested"
+                },
+                "source_type": {
+                    "type": "string",
+                    "enum": [
+                        "automatic",
+                        "csv"
+                    ]
+                }
+            }
+        },
+        "applicationdto.IssueResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "field": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "applicationdto.NeedPeriodResponse": {
+            "type": "object",
+            "properties": {
+                "unit": {
+                    "type": "string",
+                    "enum": [
+                        "months",
+                        "days",
+                        "unknown"
+                    ],
+                    "example": "unknown"
+                },
+                "value": {
+                    "type": "integer"
+                }
+            }
+        },
+        "applicationdto.RequestResponse": {
+            "type": "object",
+            "properties": {
+                "amount_kopecks": {
+                    "type": "integer"
+                },
+                "collateral_mode": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "pledged"
+                    ],
+                    "example": "none"
+                },
+                "need_period": {
+                    "$ref": "#/definitions/applicationdto.NeedPeriodResponse"
+                },
+                "product_code": {
+                    "type": "string",
+                    "enum": [
+                        "express",
+                        "overdraft",
+                        "working_capital",
+                        "equipment",
+                        "start"
+                    ]
+                },
+                "purpose": {
+                    "type": "string",
+                    "enum": [
+                        "working_capital",
+                        "cash_gap",
+                        "equipment",
+                        "business_start",
+                        "business_expansion",
+                        "other"
+                    ]
+                },
+                "purpose_description": {
+                    "type": "string"
+                },
+                "term_months": {
+                    "type": "integer"
+                }
+            }
+        },
         "collateraldomain.Collateral": {
             "type": "object",
             "required": [
@@ -2198,7 +2610,7 @@
                     "type": "integer"
                 },
                 "status": {
-                    "$ref": "#/definitions/creditdomain.Status"
+                    "$ref": "#/definitions/applicationdomain.Status"
                 }
             }
         },
@@ -2791,418 +3203,6 @@
                 }
             }
         },
-        "creditdomain.Status": {
-            "type": "string",
-            "enum": [
-                "draft",
-                "submitted",
-                "validation",
-                "enrichment",
-                "scoring",
-                "manual_review",
-                "info_requested",
-                "approved",
-                "counter_offer",
-                "signing",
-                "issued",
-                "rejected",
-                "cancelled",
-                "expired"
-            ],
-            "x-enum-comments": {
-                "StatusApproved": "предложение на запрошенных условиях",
-                "StatusCancelled": "клиент отказался от предложения",
-                "StatusCounterOffer": "предложение на иных условиях",
-                "StatusDraft": "клиент заполняет, данные сохраняются по шагам",
-                "StatusEnrichment": "реестр и БКИ для версии заявки",
-                "StatusExpired": "предложение не подписано до valid_until",
-                "StatusInfoRequested": "клиент отвечает в той же заявке",
-                "StatusIssued": "выдача или активация лимита завершена",
-                "StatusManualReview": "у сотрудника: материалы, залог, решение",
-                "StatusRejected": "отказ сотрудника или stop-правила",
-                "StatusScoring": "вызов модели; без правил — ручной маршрут",
-                "StatusSigning": "договор подписан, ожидается выдача",
-                "StatusSubmitted": "версия зафиксирована, ждёт конвейера",
-                "StatusValidation": "проверка состава данных и условий продукта"
-            },
-            "x-enum-descriptions": [
-                "клиент заполняет, данные сохраняются по шагам",
-                "версия зафиксирована, ждёт конвейера",
-                "проверка состава данных и условий продукта",
-                "реестр и БКИ для версии заявки",
-                "вызов модели; без правил — ручной маршрут",
-                "у сотрудника: материалы, залог, решение",
-                "клиент отвечает в той же заявке",
-                "предложение на запрошенных условиях",
-                "предложение на иных условиях",
-                "договор подписан, ожидается выдача",
-                "выдача или активация лимита завершена",
-                "отказ сотрудника или stop-правила",
-                "клиент отказался от предложения",
-                "предложение не подписано до valid_until"
-            ],
-            "x-enum-varnames": [
-                "StatusDraft",
-                "StatusSubmitted",
-                "StatusValidation",
-                "StatusEnrichment",
-                "StatusScoring",
-                "StatusManualReview",
-                "StatusInfoRequested",
-                "StatusApproved",
-                "StatusCounterOffer",
-                "StatusSigning",
-                "StatusIssued",
-                "StatusRejected",
-                "StatusCancelled",
-                "StatusExpired"
-            ]
-        },
-        "creditdto.ApplicantResponse": {
-            "type": "object",
-            "properties": {
-                "display_name": {
-                    "type": "string",
-                    "example": "Кедрова Анна Викторовна"
-                },
-                "id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
-                }
-            }
-        },
-        "creditdto.ApplicationResponse": {
-            "type": "object",
-            "properties": {
-                "applicant": {
-                    "$ref": "#/definitions/creditdto.ApplicantResponse"
-                },
-                "applicant_id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
-                },
-                "available_actions": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "edit",
-                        "fetch_financials",
-                        "submit"
-                    ]
-                },
-                "checks": {
-                    "type": "object"
-                },
-                "collateral": {
-                    "type": "object"
-                },
-                "company": {
-                    "$ref": "#/definitions/creditdto.CompanyCardResponse"
-                },
-                "company_id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
-                },
-                "contract": {
-                    "type": "object"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "editable_fields": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "request.amount_kopecks",
-                        "request.product_code"
-                    ]
-                },
-                "financials": {
-                    "$ref": "#/definitions/creditdto.FinancialStateResponse"
-                },
-                "id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13"
-                },
-                "issue": {
-                    "type": "object"
-                },
-                "number": {
-                    "type": "integer",
-                    "example": 1000
-                },
-                "offer": {
-                    "type": "object"
-                },
-                "product_details": {
-                    "type": "object"
-                },
-                "request": {
-                    "$ref": "#/definitions/creditdto.RequestResponse"
-                },
-                "revision": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "scoring": {
-                    "type": "object"
-                },
-                "status": {
-                    "type": "string",
-                    "enum": [
-                        "draft",
-                        "submitted",
-                        "validation",
-                        "enrichment",
-                        "scoring",
-                        "manual_review",
-                        "info_requested",
-                        "approved",
-                        "counter_offer",
-                        "signing",
-                        "issued",
-                        "rejected",
-                        "cancelled",
-                        "expired"
-                    ],
-                    "example": "draft"
-                },
-                "submitted_at": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "creditdto.CompanyCardResponse": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
-                },
-                "inn": {
-                    "type": "string",
-                    "example": "7705005410"
-                },
-                "name": {
-                    "type": "string",
-                    "example": "ООО «Кедровый контур Демо»"
-                }
-            }
-        },
-        "creditdto.CreateApplicationRequest": {
-            "type": "object",
-            "properties": {
-                "company_id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
-                }
-            }
-        },
-        "creditdto.ErrorBody": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "enum": [
-                        "INVALID_REQUEST",
-                        "UNAUTHENTICATED",
-                        "FORBIDDEN",
-                        "NOT_FOUND",
-                        "REVISION_CONFLICT",
-                        "INVALID_STATE",
-                        "CSV_NOT_ALLOWED",
-                        "OFFER_CHANGED",
-                        "IDEMPOTENCY_CONFLICT",
-                        "VALIDATION_FAILED",
-                        "INVALID_CSV",
-                        "SERVICE_UNAVAILABLE",
-                        "INTERNAL_ERROR"
-                    ],
-                    "example": "VALIDATION_FAILED"
-                },
-                "current_revision": {
-                    "description": "Только при REVISION_CONFLICT: revision, с которой заявка сейчас.",
-                    "type": "integer"
-                },
-                "field_errors": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/creditdto.FieldErrorResponse"
-                    }
-                },
-                "message": {
-                    "type": "string",
-                    "example": "Исправьте поля"
-                }
-            }
-        },
-        "creditdto.ErrorResponse": {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "$ref": "#/definitions/creditdto.ErrorBody"
-                },
-                "request_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "creditdto.FieldErrorResponse": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "example": "REQUIRED"
-                },
-                "field": {
-                    "type": "string",
-                    "example": "company_id"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "Выберите компанию"
-                }
-            }
-        },
-        "creditdto.FinancialStateResponse": {
-            "type": "object",
-            "properties": {
-                "allow_csv_upload": {
-                    "type": "boolean",
-                    "example": false
-                },
-                "data_status": {
-                    "type": "string",
-                    "enum": [
-                        "missing",
-                        "ready",
-                        "no_history"
-                    ],
-                    "example": "missing"
-                },
-                "issues": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/creditdto.IssueResponse"
-                    }
-                },
-                "revision": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "snapshot": {
-                    "type": "object"
-                },
-                "source_status": {
-                    "type": "string",
-                    "enum": [
-                        "not_requested",
-                        "ok",
-                        "not_found",
-                        "unavailable",
-                        "invalid"
-                    ],
-                    "example": "not_requested"
-                },
-                "source_type": {
-                    "type": "string",
-                    "enum": [
-                        "automatic",
-                        "csv"
-                    ]
-                }
-            }
-        },
-        "creditdto.IssueResponse": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string"
-                },
-                "field": {
-                    "type": "string"
-                },
-                "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "creditdto.NeedPeriodResponse": {
-            "type": "object",
-            "properties": {
-                "unit": {
-                    "type": "string",
-                    "enum": [
-                        "months",
-                        "days",
-                        "unknown"
-                    ],
-                    "example": "unknown"
-                },
-                "value": {
-                    "type": "integer"
-                }
-            }
-        },
-        "creditdto.RequestResponse": {
-            "type": "object",
-            "properties": {
-                "amount_kopecks": {
-                    "type": "integer"
-                },
-                "collateral_mode": {
-                    "type": "string",
-                    "enum": [
-                        "none",
-                        "pledged"
-                    ],
-                    "example": "none"
-                },
-                "need_period": {
-                    "$ref": "#/definitions/creditdto.NeedPeriodResponse"
-                },
-                "product_code": {
-                    "type": "string",
-                    "enum": [
-                        "express",
-                        "overdraft",
-                        "working_capital",
-                        "equipment",
-                        "start"
-                    ]
-                },
-                "purpose": {
-                    "type": "string",
-                    "enum": [
-                        "working_capital",
-                        "cash_gap",
-                        "equipment",
-                        "business_start",
-                        "business_expansion",
-                        "other"
-                    ]
-                },
-                "purpose_description": {
-                    "type": "string"
-                },
-                "term_months": {
-                    "type": "integer"
-                }
-            }
-        },
         "creditproducts.CollateralMode": {
             "type": "string",
             "enum": [
@@ -3786,7 +3786,7 @@
             "type": "object",
             "properties": {
                 "applicant": {
-                    "$ref": "#/definitions/creditdto.ApplicantResponse"
+                    "$ref": "#/definitions/applicationdto.ApplicantResponse"
                 },
                 "applicant_id": {
                     "type": "string",
@@ -3794,7 +3794,7 @@
                     "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
                 },
                 "assignee": {
-                    "$ref": "#/definitions/creditdto.ApplicantResponse"
+                    "$ref": "#/definitions/applicationdto.ApplicantResponse"
                 },
                 "available_actions": {
                     "type": "array",
@@ -3820,7 +3820,7 @@
                     }
                 },
                 "company": {
-                    "$ref": "#/definitions/creditdto.CompanyCardResponse"
+                    "$ref": "#/definitions/applicationdto.CompanyCardResponse"
                 },
                 "company_id": {
                     "type": "string",
@@ -3836,7 +3836,7 @@
                 "decision_blockers": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/creditdto.FieldErrorResponse"
+                        "$ref": "#/definitions/applicationdto.FieldErrorResponse"
                     }
                 },
                 "decisions": {
@@ -3856,7 +3856,7 @@
                     ]
                 },
                 "financials": {
-                    "$ref": "#/definitions/creditdto.FinancialStateResponse"
+                    "$ref": "#/definitions/applicationdto.FinancialStateResponse"
                 },
                 "history": {
                     "type": "array",
@@ -3889,7 +3889,7 @@
                     "type": "object"
                 },
                 "request": {
-                    "$ref": "#/definitions/creditdto.RequestResponse"
+                    "$ref": "#/definitions/applicationdto.RequestResponse"
                 },
                 "revision": {
                     "type": "integer",
@@ -4015,7 +4015,7 @@
             "type": "object",
             "properties": {
                 "applicant": {
-                    "$ref": "#/definitions/creditdto.ApplicantResponse"
+                    "$ref": "#/definitions/applicationdto.ApplicantResponse"
                 },
                 "applicant_id": {
                     "type": "string",
@@ -4023,7 +4023,7 @@
                     "example": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
                 },
                 "assignee": {
-                    "$ref": "#/definitions/creditdto.ApplicantResponse"
+                    "$ref": "#/definitions/applicationdto.ApplicantResponse"
                 },
                 "available_actions": {
                     "type": "array",
@@ -4043,7 +4043,7 @@
                     "type": "object"
                 },
                 "company": {
-                    "$ref": "#/definitions/creditdto.CompanyCardResponse"
+                    "$ref": "#/definitions/applicationdto.CompanyCardResponse"
                 },
                 "company_id": {
                     "type": "string",
@@ -4067,7 +4067,7 @@
                     ]
                 },
                 "financials": {
-                    "$ref": "#/definitions/creditdto.FinancialStateResponse"
+                    "$ref": "#/definitions/applicationdto.FinancialStateResponse"
                 },
                 "id": {
                     "type": "string",
@@ -4088,7 +4088,7 @@
                     "type": "object"
                 },
                 "request": {
-                    "$ref": "#/definitions/creditdto.RequestResponse"
+                    "$ref": "#/definitions/applicationdto.RequestResponse"
                 },
                 "revision": {
                     "type": "integer",

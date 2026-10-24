@@ -6,15 +6,15 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	reviewdomain "github.com/lasagna67/lasagna.git/internal/review/domain"
 )
 
 // PipelineRepo — то, что нужно Passthrough от репозитория рассмотрения.
 type PipelineRepo interface {
 	GetDetails(ctx context.Context, id uuid.UUID) (reviewdomain.Details, error)
-	Update(ctx context.Context, cmd reviewdomain.UpdateCommand, fn func(*creditdomain.Application) (reviewdomain.Change, error)) (bool, error)
+	Update(ctx context.Context, cmd reviewdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (bool, error)
 }
 
 // Passthrough — временная замена конвейера, пока его не подключил модуль
@@ -33,10 +33,10 @@ func (p *Passthrough) Run(ctx context.Context, applicationID uuid.UUID) error {
 	if err != nil {
 		return fmt.Errorf("get application: %w", err)
 	}
-	if d.Status != creditdomain.StatusSubmitted {
+	if d.Status != applicationdomain.StatusSubmitted {
 		return nil
 	}
-	_, err = p.repo.Update(ctx, reviewdomain.UpdateCommand{ID: applicationID, ExpectedRevision: d.Revision}, func(a *creditdomain.Application) (reviewdomain.Change, error) {
+	_, err = p.repo.Update(ctx, reviewdomain.UpdateCommand{ID: applicationID, ExpectedRevision: d.Revision}, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		validation, err := a.StartValidation()
 		if err != nil {
 			return reviewdomain.Change{}, err
@@ -45,10 +45,10 @@ func (p *Passthrough) Run(ctx context.Context, applicationID uuid.UUID) error {
 		if err != nil {
 			return reviewdomain.Change{}, err
 		}
-		return reviewdomain.Change{Transitions: []creditdomain.Transition{validation, review}}, nil
+		return reviewdomain.Change{Transitions: []applicationdomain.Transition{validation, review}}, nil
 	})
 	// Заявку уже сдвинул параллельный запуск — работа сделана.
-	var conflict *crediterrors.RevisionConflictError
+	var conflict *applicationerrors.RevisionConflictError
 	if errors.As(err, &conflict) {
 		return nil
 	}
@@ -56,5 +56,5 @@ func (p *Passthrough) Run(ctx context.Context, applicationID uuid.UUID) error {
 }
 
 func (p *Passthrough) RetryChecks(context.Context, uuid.UUID, []reviewdomain.CheckSource) error {
-	return fmt.Errorf("%w: checks pipeline is not connected", crediterrors.ErrServiceUnavailable)
+	return fmt.Errorf("%w: checks pipeline is not connected", applicationerrors.ErrServiceUnavailable)
 }

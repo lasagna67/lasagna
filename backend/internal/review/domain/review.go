@@ -1,7 +1,7 @@
 // Package reviewdomain — рассмотрение заявки сотрудником банка: назначение,
 // запросы уточнений, проверка залога и решение с предложением.
 //
-// Заявка и её статусы — в creditdomain; переходы вызываются оттуда. Права
+// Заявка и её статусы — в applicationdomain; переходы вызываются оттуда. Права
 // проверяются здесь и повторно — на заблокированной в транзакции заявке.
 package reviewdomain
 
@@ -15,10 +15,10 @@ import (
 
 	"github.com/google/uuid"
 
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 	reviewerrors "github.com/lasagna67/lasagna.git/internal/review/errors"
 )
 
@@ -36,9 +36,9 @@ type Reviewer struct {
 
 // Take назначает заявку на сотрудника. Повтор тем же сотрудником ничего не
 // меняет (changed == false), заявка другого — ErrTakenByOther.
-func Take(a *creditdomain.Application, reviewerID uuid.UUID) (changed bool, err error) {
-	if a.Status != creditdomain.StatusManualReview {
-		return false, fmt.Errorf("%w: take in %s", crediterrors.ErrInvalidState, a.Status)
+func Take(a *applicationdomain.Application, reviewerID uuid.UUID) (changed bool, err error) {
+	if a.Status != applicationdomain.StatusManualReview {
+		return false, fmt.Errorf("%w: take in %s", applicationerrors.ErrInvalidState, a.Status)
 	}
 	switch {
 	case a.AssigneeID == nil:
@@ -53,7 +53,7 @@ func Take(a *creditdomain.Application, reviewerID uuid.UUID) (changed bool, err 
 
 // CanReview — менять рассмотрение и публиковать решение может назначенный
 // сотрудник или admin.
-func CanReview(a creditdomain.Application, r Reviewer) error {
+func CanReview(a applicationdomain.Application, r Reviewer) error {
 	if r.Admin || (a.AssigneeID != nil && *a.AssigneeID == r.ID) {
 		return nil
 	}
@@ -62,11 +62,11 @@ func CanReview(a creditdomain.Application, r Reviewer) error {
 
 // Actions — действия сотрудника в текущем статусе.
 // TODO: retry_issue — вместе с выдачей.
-func Actions(d Details, r Reviewer) []creditdomain.Action {
+func Actions(d Details, r Reviewer) []applicationdomain.Action {
 	a := d.Application
-	actions := []creditdomain.Action{}
-	if a.Status == creditdomain.StatusManualReview && a.AssigneeID == nil {
-		actions = append(actions, creditdomain.ActionTake)
+	actions := []applicationdomain.Action{}
+	if a.Status == applicationdomain.StatusManualReview && a.AssigneeID == nil {
+		actions = append(actions, applicationdomain.ActionTake)
 	}
 	if CanReview(a, r) != nil {
 		return actions
@@ -75,19 +75,19 @@ func Actions(d Details, r Reviewer) []creditdomain.Action {
 	// в manual_review и info_requested.
 	reviewCollateral := d.Collateral != nil && a.AssigneeID != nil && *a.AssigneeID == r.ID
 	switch a.Status {
-	case creditdomain.StatusManualReview:
-		actions = append(actions, creditdomain.ActionRequestInfo)
+	case applicationdomain.StatusManualReview:
+		actions = append(actions, applicationdomain.ActionRequestInfo)
 		if reviewCollateral {
-			actions = append(actions, creditdomain.ActionReviewCollateral)
+			actions = append(actions, applicationdomain.ActionReviewCollateral)
 		}
-		actions = append(actions, creditdomain.ActionDecide, creditdomain.ActionRetryChecks)
-	case creditdomain.StatusInfoRequested:
+		actions = append(actions, applicationdomain.ActionDecide, applicationdomain.ActionRetryChecks)
+	case applicationdomain.StatusInfoRequested:
 		if reviewCollateral {
-			actions = append(actions, creditdomain.ActionReviewCollateral)
+			actions = append(actions, applicationdomain.ActionReviewCollateral)
 		}
-	case creditdomain.StatusApproved, creditdomain.StatusCounterOffer:
+	case applicationdomain.StatusApproved, applicationdomain.StatusCounterOffer:
 		// Новая версия предложения до подписания.
-		actions = append(actions, creditdomain.ActionDecide)
+		actions = append(actions, applicationdomain.ActionDecide)
 	}
 	return actions
 }
@@ -122,25 +122,25 @@ type InfoRequest struct {
 // NewInfoRequest — запрос сотрудника. Поля — только из полей черновика:
 // компания, заявитель и банковские поля клиенту не открываются.
 func NewInfoRequest(id, applicationID, requestedBy uuid.UUID, message string, fields []string, now time.Time) (InfoRequest, error) {
-	var errs []crediterrors.FieldError
+	var errs []applicationerrors.FieldError
 	message = strings.TrimSpace(message)
 	switch {
 	case message == "":
-		errs = append(errs, crediterrors.FieldError{Field: "message", Code: "REQUIRED", Message: "Напишите, что нужно уточнить"})
+		errs = append(errs, applicationerrors.FieldError{Field: "message", Code: "REQUIRED", Message: "Напишите, что нужно уточнить"})
 	case utf8.RuneCountInString(message) > maxTextLen:
-		errs = append(errs, crediterrors.FieldError{Field: "message", Code: "TOO_LONG", Message: fmt.Sprintf("Не длиннее %d символов", maxTextLen)})
+		errs = append(errs, applicationerrors.FieldError{Field: "message", Code: "TOO_LONG", Message: fmt.Sprintf("Не длиннее %d символов", maxTextLen)})
 	}
-	allowed := creditdomain.DraftFields()
+	allowed := applicationdomain.DraftFields()
 	editable := make([]string, 0, len(fields))
 	for _, f := range fields {
 		if !slices.Contains(allowed, f) || slices.Contains(editable, f) {
-			errs = append(errs, crediterrors.FieldError{Field: "editable_fields", Code: "INVALID", Message: "Недопустимое поле: " + f})
+			errs = append(errs, applicationerrors.FieldError{Field: "editable_fields", Code: "INVALID", Message: "Недопустимое поле: " + f})
 			continue
 		}
 		editable = append(editable, f)
 	}
 	if errs != nil {
-		return InfoRequest{}, &crediterrors.ValidationError{Fields: errs}
+		return InfoRequest{}, &applicationerrors.ValidationError{Fields: errs}
 	}
 	return InfoRequest{
 		ID:             id,
@@ -156,14 +156,14 @@ func NewInfoRequest(id, applicationID, requestedBy uuid.UUID, message string, fi
 // Respond — ответ клиента на открытый запрос.
 func (r *InfoRequest) Respond(by uuid.UUID, answer string, now time.Time) error {
 	if r.Status != InfoRequestOpen {
-		return fmt.Errorf("%w: info request is %s", crediterrors.ErrInvalidState, r.Status)
+		return fmt.Errorf("%w: info request is %s", applicationerrors.ErrInvalidState, r.Status)
 	}
 	answer = strings.TrimSpace(answer)
 	switch {
 	case answer == "":
-		return &crediterrors.ValidationError{Fields: []crediterrors.FieldError{{Field: "answer", Code: "REQUIRED", Message: "Напишите ответ"}}}
+		return &applicationerrors.ValidationError{Fields: []applicationerrors.FieldError{{Field: "answer", Code: "REQUIRED", Message: "Напишите ответ"}}}
 	case utf8.RuneCountInString(answer) > maxTextLen:
-		return &crediterrors.ValidationError{Fields: []crediterrors.FieldError{{Field: "answer", Code: "TOO_LONG", Message: fmt.Sprintf("Не длиннее %d символов", maxTextLen)}}}
+		return &applicationerrors.ValidationError{Fields: []applicationerrors.FieldError{{Field: "answer", Code: "TOO_LONG", Message: fmt.Sprintf("Не длиннее %d символов", maxTextLen)}}}
 	}
 	r.Status = InfoRequestAnswered
 	r.Answer = &answer
@@ -263,29 +263,29 @@ type CheckSummary struct {
 // Blockers — что мешает положительному решению по продукту productCode.
 // Скоринг не блокирует: без настроенной модели решает сотрудник. reorganizing
 // тоже не блокирует — это повод для ручного рассмотрения, а не отказа.
-func (c CheckSummary) Blockers(productCode, companyINN string) []crediterrors.FieldError {
-	var errs []crediterrors.FieldError
+func (c CheckSummary) Blockers(productCode, companyINN string) []applicationerrors.FieldError {
+	var errs []applicationerrors.FieldError
 	reg := c.Registry
 	switch {
 	case reg.Status != SourceOK:
-		errs = append(errs, crediterrors.FieldError{Field: "checks.registry", Code: "CHECK_NOT_READY", Message: "Нет ответа реестра — повторите проверку"})
+		errs = append(errs, applicationerrors.FieldError{Field: "checks.registry", Code: "CHECK_NOT_READY", Message: "Нет ответа реестра — повторите проверку"})
 	case reg.INN == nil || *reg.INN != companyINN:
-		errs = append(errs, crediterrors.FieldError{Field: "checks.registry", Code: "INN_MISMATCH", Message: "ИНН в ответе реестра не совпадает с ИНН компании"})
+		errs = append(errs, applicationerrors.FieldError{Field: "checks.registry", Code: "INN_MISMATCH", Message: "ИНН в ответе реестра не совпадает с ИНН компании"})
 	case reg.CompanyState != nil && *reg.CompanyState == "terminated":
-		errs = append(errs, crediterrors.FieldError{Field: "checks.registry", Code: "BUSINESS_TERMINATED", Message: "Деятельность компании прекращена"})
+		errs = append(errs, applicationerrors.FieldError{Field: "checks.registry", Code: "BUSINESS_TERMINATED", Message: "Деятельность компании прекращена"})
 	}
 	if c.CreditBureau.Status != SourceOK {
-		errs = append(errs, crediterrors.FieldError{Field: "checks.credit_bureau", Code: "CHECK_NOT_READY", Message: "Нет отчёта БКИ — повторите проверку"})
+		errs = append(errs, applicationerrors.FieldError{Field: "checks.credit_bureau", Code: "CHECK_NOT_READY", Message: "Нет отчёта БКИ — повторите проверку"})
 	}
 	switch c.Financials.DataStatus {
 	case FinancialsReady:
 	case FinancialsNoHistory:
 		// Отсутствие истории у start компенсирует ручное рассмотрение проекта.
 		if productCode != productStart {
-			errs = append(errs, crediterrors.FieldError{Field: "financials", Code: "HISTORY_REQUIRED", Message: "Без финансовой истории допустим только продукт «Старт»"})
+			errs = append(errs, applicationerrors.FieldError{Field: "financials", Code: "HISTORY_REQUIRED", Message: "Без финансовой истории допустим только продукт «Старт»"})
 		}
 	default:
-		errs = append(errs, crediterrors.FieldError{Field: "financials", Code: "DATA_MISSING", Message: "Нет принятых финансовых данных"})
+		errs = append(errs, applicationerrors.FieldError{Field: "financials", Code: "DATA_MISSING", Message: "Нет принятых финансовых данных"})
 	}
 	return errs
 }
@@ -394,8 +394,8 @@ type Document struct {
 // Event — запись истории статусов. Comment виден клиенту.
 type Event struct {
 	ID        int64
-	From      *creditdomain.Status
-	To        creditdomain.Status
+	From      *applicationdomain.Status
+	To        applicationdomain.Status
 	ActorID   *uuid.UUID // nil — переход выполнил конвейер
 	Comment   *string
 	CreatedAt time.Time
@@ -404,7 +404,7 @@ type Event struct {
 // Change — что записать вместе с заявкой в одной транзакции. Статус и
 // ответственного repo берёт из самой заявки, revision увеличивает на 1.
 type Change struct {
-	Transitions     []creditdomain.Transition
+	Transitions     []applicationdomain.Transition
 	Comment         *string      // к последнему переходу, виден клиенту
 	InfoRequest     *InfoRequest // новый запрос банка
 	AnsweredRequest *InfoRequest // ответ клиента на запрос
@@ -419,7 +419,7 @@ type UpdateCommand struct {
 	ID               uuid.UUID
 	ExpectedRevision int
 	ActorID          *uuid.UUID // nil — конвейер
-	Key              *creditdomain.IdempotencyKey
+	Key              *applicationdomain.IdempotencyKey
 }
 
 //=================================================================================================
@@ -428,8 +428,8 @@ type UpdateCommand struct {
 // Details — заявка с тем, что добавляет рассмотрение: ответственный, залог с
 // последней проверкой (модуль collateral) и текущее предложение с договором.
 type Details struct {
-	creditdomain.ApplicationDetails
-	Assignee         *creditdomain.ApplicantCard // клиенту не показывается
+	applicationdomain.ApplicationDetails
+	Assignee         *applicationdomain.ApplicantCard // клиенту не показывается
 	Collateral       *collateraldomain.Collateral
 	CollateralReview *collateraldomain.CollateralReview
 	Offer            *Decision
@@ -445,7 +445,7 @@ type Review struct {
 	Decisions         []Decision
 	History           []Event
 	// DecisionBlockers — Blockers на момент чтения карточки.
-	DecisionBlockers []crediterrors.FieldError
+	DecisionBlockers []applicationerrors.FieldError
 }
 
 // AssigneeFilter — фильтр очереди по ответственному.
@@ -460,7 +460,7 @@ const (
 // Filter — очередь сотрудника. Черновики в неё не попадают.
 // After — курсор: номер последней заявки предыдущей страницы.
 type Filter struct {
-	Status     *creditdomain.Status
+	Status     *applicationdomain.Status
 	Assignee   AssigneeFilter
 	AssigneeID uuid.UUID
 	Limit      int

@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 )
 
 type RepaymentType string
@@ -164,7 +164,7 @@ type ContractData struct {
 	Number   int64
 	Version  int
 	Date     time.Time
-	Company  creditdomain.CompanyCard
+	Company  applicationdomain.CompanyCard
 	Terms    OfferTerms
 	Account  *Account
 	Schedule []Payment // разовый кредит; у овердрафта пусто
@@ -198,10 +198,10 @@ func Decide(id uuid.UUID, cmd DecideCommand, dc DecisionContext) (Decision, []Pa
 		CreatedAt:     dc.Now,
 	}
 
-	var errs []crediterrors.FieldError
+	var errs []applicationerrors.FieldError
 	d.Comment = trimmed(cmd.Comment)
 	if d.Comment != nil && utf8.RuneCountInString(*d.Comment) > maxTextLen {
-		errs = append(errs, crediterrors.FieldError{Field: fieldComment, Code: "TOO_LONG", Message: fmt.Sprintf("Не длиннее %d символов", maxTextLen)})
+		errs = append(errs, applicationerrors.FieldError{Field: fieldComment, Code: "TOO_LONG", Message: fmt.Sprintf("Не длиннее %d символов", maxTextLen)})
 	}
 	reasons, reasonErrs := clientReasons(cmd.Reasons)
 	d.Reasons = reasons
@@ -211,23 +211,23 @@ func Decide(id uuid.UUID, cmd DecideCommand, dc DecisionContext) (Decision, []Pa
 	switch cmd.Outcome {
 	case OutcomeRejected:
 		// Отклонить опубликованное предложение нельзя: клиент отвечает на него сам.
-		if a.Status != creditdomain.StatusManualReview {
-			return Decision{}, nil, fmt.Errorf("%w: reject in %s", crediterrors.ErrInvalidState, a.Status)
+		if a.Status != applicationdomain.StatusManualReview {
+			return Decision{}, nil, fmt.Errorf("%w: reject in %s", applicationerrors.ErrInvalidState, a.Status)
 		}
 		d.ReasonCode = trimmed(cmd.ReasonCode)
 		switch {
 		case d.ReasonCode == nil:
-			errs = append(errs, crediterrors.FieldError{Field: fieldReason, Code: "REQUIRED", Message: "Укажите код причины отказа"})
+			errs = append(errs, applicationerrors.FieldError{Field: fieldReason, Code: "REQUIRED", Message: "Укажите код причины отказа"})
 		case !reasonCodePattern.MatchString(*d.ReasonCode):
-			errs = append(errs, crediterrors.FieldError{Field: fieldReason, Code: "INVALID", Message: "Код причины — латиница в верхнем регистре, цифры и _"})
+			errs = append(errs, applicationerrors.FieldError{Field: fieldReason, Code: "INVALID", Message: "Код причины — латиница в верхнем регистре, цифры и _"})
 		}
 		if len(reasons) == 0 && len(reasonErrs) == 0 {
-			errs = append(errs, crediterrors.FieldError{Field: fieldReasons, Code: "REQUIRED", Message: "Объясните клиенту причину отказа"})
+			errs = append(errs, applicationerrors.FieldError{Field: fieldReasons, Code: "REQUIRED", Message: "Объясните клиенту причину отказа"})
 		}
 
 	case OutcomeApproved, OutcomeCounterOffer:
-		if !slices.Contains([]creditdomain.Status{creditdomain.StatusManualReview, creditdomain.StatusApproved, creditdomain.StatusCounterOffer}, a.Status) {
-			return Decision{}, nil, fmt.Errorf("%w: offer in %s", crediterrors.ErrInvalidState, a.Status)
+		if !slices.Contains([]applicationdomain.Status{applicationdomain.StatusManualReview, applicationdomain.StatusApproved, applicationdomain.StatusCounterOffer}, a.Status) {
+			return Decision{}, nil, fmt.Errorf("%w: offer in %s", applicationerrors.ErrInvalidState, a.Status)
 		}
 		terms, changed, sched, termErrs := offerTerms(cmd.Terms, dc)
 		errs = append(errs, termErrs...)
@@ -235,10 +235,10 @@ func Decide(id uuid.UUID, cmd DecideCommand, dc DecisionContext) (Decision, []Pa
 			d.ChangedFields = changed
 			switch {
 			case cmd.Outcome == OutcomeApproved && len(changed) > 0:
-				errs = append(errs, crediterrors.FieldError{Field: fieldOutcome, Code: "OUTCOME_MISMATCH",
+				errs = append(errs, applicationerrors.FieldError{Field: fieldOutcome, Code: "OUTCOME_MISMATCH",
 					Message: "Условия отличаются от запроса (" + strings.Join(changed, ", ") + ") — публикуйте counter_offer"})
 			case cmd.Outcome == OutcomeCounterOffer && len(changed) == 0:
-				errs = append(errs, crediterrors.FieldError{Field: fieldOutcome, Code: "OUTCOME_MISMATCH",
+				errs = append(errs, applicationerrors.FieldError{Field: fieldOutcome, Code: "OUTCOME_MISMATCH",
 					Message: "Условия совпадают с запросом — публикуйте approved"})
 			}
 		}
@@ -246,24 +246,24 @@ func Decide(id uuid.UUID, cmd DecideCommand, dc DecisionContext) (Decision, []Pa
 		schedule = sched
 
 	default:
-		errs = append(errs, crediterrors.FieldError{Field: fieldOutcome, Code: "INVALID", Message: "Выберите approved, counter_offer или rejected"})
+		errs = append(errs, applicationerrors.FieldError{Field: fieldOutcome, Code: "INVALID", Message: "Выберите approved, counter_offer или rejected"})
 	}
 
 	if errs != nil {
-		return Decision{}, nil, &crediterrors.ValidationError{Fields: errs}
+		return Decision{}, nil, &applicationerrors.ValidationError{Fields: errs}
 	}
 	return d, schedule, nil
 }
 
 // offerTerms проверяет условия положительного решения. changed == nil — продукт
 // не определён, сравнивать с запросом не с чем.
-func offerTerms(in *TermsInput, dc DecisionContext) (OfferTerms, []string, []Payment, []crediterrors.FieldError) {
+func offerTerms(in *TermsInput, dc DecisionContext) (OfferTerms, []string, []Payment, []applicationerrors.FieldError) {
 	if in == nil {
-		return OfferTerms{}, nil, nil, []crediterrors.FieldError{{Field: "terms", Code: "REQUIRED", Message: "Укажите условия предложения"}}
+		return OfferTerms{}, nil, nil, []applicationerrors.FieldError{{Field: "terms", Code: "REQUIRED", Message: "Укажите условия предложения"}}
 	}
-	var errs []crediterrors.FieldError
+	var errs []applicationerrors.FieldError
 	add := func(field, code, message string) {
-		errs = append(errs, crediterrors.FieldError{Field: field, Code: code, Message: message})
+		errs = append(errs, applicationerrors.FieldError{Field: field, Code: code, Message: message})
 	}
 	term := func(field, code, message string) { add(termsFieldPath+field, code, message) }
 
@@ -338,7 +338,7 @@ func offerTerms(in *TermsInput, dc DecisionContext) (OfferTerms, []string, []Pay
 			term("max_tranche_days", "REQUIRED", "Укажите срок транша")
 		case *v <= 0 || (p.MaxTrancheDays != nil && *v > *p.MaxTrancheDays):
 			term("max_tranche_days", "OUT_OF_RANGE", "Срок транша вне ограничений продукта")
-		case need.Unit != creditdomain.NeedPeriodDays || need.Value == nil:
+		case need.Unit != applicationdomain.NeedPeriodDays || need.Value == nil:
 			add("request.need_period", "DAYS_REQUIRED", "Для овердрафта нужен период использования в днях — запросите уточнение")
 		case *v < *need.Value:
 			term("max_tranche_days", "TRANCHE_TOO_SHORT", "Срок транша меньше заявленного периода использования")
@@ -363,7 +363,7 @@ func offerTerms(in *TermsInput, dc DecisionContext) (OfferTerms, []string, []Pay
 		t.BankAccountID = &acc.ID
 	}
 
-	t.CollateralRequired = a.Request.CollateralMode == creditdomain.CollateralPledged
+	t.CollateralRequired = a.Request.CollateralMode == applicationdomain.CollateralPledged
 	if in.CollateralRequired != nil {
 		t.CollateralRequired = *in.CollateralRequired
 	}
@@ -403,7 +403,7 @@ func offerTerms(in *TermsInput, dc DecisionContext) (OfferTerms, []string, []Pay
 		var err error
 		schedule, err = AnnuitySchedule(t.AmountKopecks, t.AnnualRateBps, *t.TermMonths)
 		if err != nil {
-			return t, changed, nil, []crediterrors.FieldError{{Field: "terms", Code: "NOT_CALCULABLE", Message: "Не удалось рассчитать график платежей"}}
+			return t, changed, nil, []applicationerrors.FieldError{{Field: "terms", Code: "NOT_CALCULABLE", Message: "Не удалось рассчитать график платежей"}}
 		}
 		payment := schedule[0].Payment
 		t.MonthlyPaymentKopecks = &payment
@@ -415,9 +415,9 @@ func offerTerms(in *TermsInput, dc DecisionContext) (OfferTerms, []string, []Pay
 // сведениям, проверка не старше срока модуля collateral и покрывает сумму
 // (CollateralCovers: не больше 70% принятой стоимости). amount 0 — сумма
 // ещё не известна, покрытие не проверяется.
-func collateralBlockers(c *collateraldomain.Collateral, review *collateraldomain.CollateralReview, amount int64, now time.Time) []crediterrors.FieldError {
-	block := func(code, message string) []crediterrors.FieldError {
-		return []crediterrors.FieldError{{Field: "collateral", Code: code, Message: message}}
+func collateralBlockers(c *collateraldomain.Collateral, review *collateraldomain.CollateralReview, amount int64, now time.Time) []applicationerrors.FieldError {
+	block := func(code, message string) []applicationerrors.FieldError {
+		return []applicationerrors.FieldError{{Field: "collateral", Code: code, Message: message}}
 	}
 	switch {
 	case c == nil:
@@ -441,13 +441,13 @@ const CollateralAccepted = "accepted"
 
 // Blockers — что сейчас мешает одобрить заявку на запрошенных условиях:
 // проверки и залог. Условия решения проверяет Decide.
-func (r Review) Blockers(now time.Time) []crediterrors.FieldError {
+func (r Review) Blockers(now time.Time) []applicationerrors.FieldError {
 	code := ""
 	if r.Request.ProductCode != nil {
 		code = *r.Request.ProductCode
 	}
 	errs := r.Checks.Blockers(code, r.Company.INN)
-	if r.Request.CollateralMode == creditdomain.CollateralPledged {
+	if r.Request.CollateralMode == applicationdomain.CollateralPledged {
 		var amount int64
 		if r.Request.AmountKopecks != nil {
 			amount = *r.Request.AmountKopecks
@@ -459,7 +459,7 @@ func (r Review) Blockers(now time.Time) []crediterrors.FieldError {
 
 // changedFields — чем условия отличаются от запроса. Ставка не входит: её
 // отличие от предварительного расчёта не делает предложение встречным.
-func changedFields(req creditdomain.Request, t OfferTerms, in *TermsInput) []string {
+func changedFields(req applicationdomain.Request, t OfferTerms, in *TermsInput) []string {
 	changed := []string{}
 	if req.ProductCode == nil || *req.ProductCode != t.ProductCode {
 		changed = append(changed, "product_code")
@@ -470,29 +470,29 @@ func changedFields(req creditdomain.Request, t OfferTerms, in *TermsInput) []str
 	if t.TermMonths != nil && (req.TermMonths == nil || *req.TermMonths != *t.TermMonths) {
 		changed = append(changed, "term_months")
 	}
-	if (req.CollateralMode == creditdomain.CollateralPledged) != t.CollateralRequired {
+	if (req.CollateralMode == applicationdomain.CollateralPledged) != t.CollateralRequired {
 		changed = append(changed, "collateral_mode")
 	}
 	return changed
 }
 
 // clientReasons — пояснения для клиента без пустых строк.
-func clientReasons(in []string) ([]string, []crediterrors.FieldError) {
+func clientReasons(in []string) ([]string, []applicationerrors.FieldError) {
 	reasons := make([]string, 0, len(in))
-	var errs []crediterrors.FieldError
+	var errs []applicationerrors.FieldError
 	for _, r := range in {
 		r = strings.TrimSpace(r)
 		switch {
 		case r == "":
-			errs = append(errs, crediterrors.FieldError{Field: fieldReasons, Code: "INVALID", Message: "Пустое пояснение"})
+			errs = append(errs, applicationerrors.FieldError{Field: fieldReasons, Code: "INVALID", Message: "Пустое пояснение"})
 		case utf8.RuneCountInString(r) > maxReasonLen:
-			errs = append(errs, crediterrors.FieldError{Field: fieldReasons, Code: "TOO_LONG", Message: fmt.Sprintf("Пояснение не длиннее %d символов", maxReasonLen)})
+			errs = append(errs, applicationerrors.FieldError{Field: fieldReasons, Code: "TOO_LONG", Message: fmt.Sprintf("Пояснение не длиннее %d символов", maxReasonLen)})
 		default:
 			reasons = append(reasons, r)
 		}
 	}
 	if len(in) > maxReasons {
-		errs = append(errs, crediterrors.FieldError{Field: fieldReasons, Code: "TOO_MANY", Message: fmt.Sprintf("Не больше %d пояснений", maxReasons)})
+		errs = append(errs, applicationerrors.FieldError{Field: fieldReasons, Code: "TOO_MANY", Message: fmt.Sprintf("Не больше %d пояснений", maxReasons)})
 	}
 	return reasons, errs
 }

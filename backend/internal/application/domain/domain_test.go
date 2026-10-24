@@ -1,4 +1,4 @@
-package creditdomain
+package applicationdomain
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 )
 
 // Каждый метод проверяется на всех статусах: из разрешённых — переход,
@@ -56,7 +56,7 @@ func TestTransitions(t *testing.T) {
 				}
 				continue
 			}
-			if !errors.Is(err, crediterrors.ErrInvalidState) || a.Status != s {
+			if !errors.Is(err, applicationerrors.ErrInvalidState) || a.Status != s {
 				t.Errorf("%s from %s = %v, status %s; want ErrInvalidState, status unchanged", tt.name, s, err, a.Status)
 			}
 		}
@@ -80,7 +80,7 @@ func TestTerminalStatusesHaveNoTransitions(t *testing.T) {
 			continue
 		}
 		for i, do := range methods {
-			if _, err := do(&Application{Status: s}); !errors.Is(err, crediterrors.ErrInvalidState) {
+			if _, err := do(&Application{Status: s}); !errors.Is(err, applicationerrors.ErrInvalidState) {
 				t.Errorf("method #%d from terminal %s: err = %v; want ErrInvalidState", i, s, err)
 			}
 		}
@@ -93,7 +93,7 @@ func TestExpireRequiresPastValidUntil(t *testing.T) {
 
 	for name, validUntil := range map[string]*time.Time{"nil": nil, "future": &future} {
 		a := &Application{Status: StatusApproved}
-		if _, err := a.Expire(validUntil, now); !errors.Is(err, crediterrors.ErrInvalidState) || a.Status != StatusApproved {
+		if _, err := a.Expire(validUntil, now); !errors.Is(err, applicationerrors.ErrInvalidState) || a.Status != StatusApproved {
 			t.Errorf("Expire with %s valid_until = %v, status %s; want ErrInvalidState, approved", name, err, a.Status)
 		}
 	}
@@ -179,7 +179,7 @@ func TestInfoRequestedRound(t *testing.T) {
 		!slices.Equal(actions, []Action{ActionEdit, ActionAnswerInfo}) {
 		t.Errorf("open round: fields %v, actions %v", fields, actions)
 	}
-	if _, err := a.Resubmit(); !errors.Is(err, crediterrors.ErrInfoRequestsOpen) || a.Status != StatusInfoRequested {
+	if _, err := a.Resubmit(); !errors.Is(err, applicationerrors.ErrInfoRequestsOpen) || a.Status != StatusInfoRequested {
 		t.Errorf("resubmit with open requests = %v; want ErrInfoRequestsOpen", err)
 	}
 

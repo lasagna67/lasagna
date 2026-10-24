@@ -1,4 +1,4 @@
-package creditrepo
+package applicationrepo
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 )
 
 // SelectDetails — заявка с карточками компании и заявителя; читается ScanDetails.
@@ -46,8 +46,8 @@ func NewApplicationRepo(pool *pgxpool.Pool) *ApplicationRepo {
 	return &ApplicationRepo{pool: pool}
 }
 
-func (r *ApplicationRepo) Create(ctx context.Context, app creditdomain.Application, tr creditdomain.Transition, key creditdomain.IdempotencyKey) (creditdomain.ApplicationDetails, error) {
-	var details creditdomain.ApplicationDetails
+func (r *ApplicationRepo) Create(ctx context.Context, app applicationdomain.Application, tr applicationdomain.Transition, key applicationdomain.IdempotencyKey) (applicationdomain.ApplicationDetails, error) {
+	var details applicationdomain.ApplicationDetails
 	err := pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		resultID, claimed, err := ClaimKey(ctx, tx, key, app.ID)
 		if err != nil {
@@ -59,7 +59,7 @@ func (r *ApplicationRepo) Create(ctx context.Context, app creditdomain.Applicati
 					need_period_unit, has_collateral)
 				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 				app.ID, app.CompanyID, app.ApplicantID, app.Status, app.Revision,
-				app.Request.NeedPeriod.Unit, app.Request.CollateralMode == creditdomain.CollateralPledged,
+				app.Request.NeedPeriod.Unit, app.Request.CollateralMode == applicationdomain.CollateralPledged,
 			)
 			if err != nil {
 				return fmt.Errorf("insert application: %w", err)
@@ -73,7 +73,7 @@ func (r *ApplicationRepo) Create(ctx context.Context, app creditdomain.Applicati
 		return err
 	})
 	if err != nil {
-		return creditdomain.ApplicationDetails{}, err
+		return applicationdomain.ApplicationDetails{}, err
 	}
 	return details, nil
 }
@@ -82,9 +82,9 @@ func (r *ApplicationRepo) Create(ctx context.Context, app creditdomain.Applicati
 
 // ClaimKey занимает ключ под resultID. Если ключ уже занят, claimed == false и
 // возвращается сохранённый тогда результат; другой запрос с тем же ключом —
-// crediterrors.ErrIdempotencyConflict. Параллельный запрос с тем же ключом
+// applicationerrors.ErrIdempotencyConflict. Параллельный запрос с тем же ключом
 // ждёт на уникальном индексе, пока первая транзакция не завершится.
-func ClaimKey(ctx context.Context, tx pgx.Tx, key creditdomain.IdempotencyKey, resultID uuid.UUID) (uuid.UUID, bool, error) {
+func ClaimKey(ctx context.Context, tx pgx.Tx, key applicationdomain.IdempotencyKey, resultID uuid.UUID) (uuid.UUID, bool, error) {
 	tag, err := tx.Exec(ctx, `
 		INSERT INTO idempotency_keys (user_id, operation, resource_id, idempotency_key, request_sha256, result_id)
 		VALUES ($1, $2, $3, $4, $5, $6)
@@ -110,15 +110,15 @@ func ClaimKey(ctx context.Context, tx pgx.Tx, key creditdomain.IdempotencyKey, r
 		return uuid.Nil, false, fmt.Errorf("select idempotency key: %w", err)
 	}
 	if storedHash != key.RequestHash {
-		return uuid.Nil, false, crediterrors.ErrIdempotencyConflict
+		return uuid.Nil, false, applicationerrors.ErrIdempotencyConflict
 	}
 	return storedID, false, nil
 }
 
 // InsertTransition пишет переход в историю. actorID == nil — переход
 // выполнил конвейер; пустой From — первая запись заявки. comment виден клиенту.
-func InsertTransition(ctx context.Context, q Querier, applicationID uuid.UUID, tr creditdomain.Transition, actorID *uuid.UUID, comment *string) error {
-	var from *creditdomain.Status
+func InsertTransition(ctx context.Context, q Querier, applicationID uuid.UUID, tr applicationdomain.Transition, actorID *uuid.UUID, comment *string) error {
+	var from *applicationdomain.Status
 	if tr.From != "" {
 		from = &tr.From
 	}
@@ -134,25 +134,25 @@ func InsertTransition(ctx context.Context, q Querier, applicationID uuid.UUID, t
 }
 
 // GetDetails читает заявку; lock — с блокировкой строки до конца транзакции.
-// Нет заявки — crediterrors.ErrNotFound.
-func GetDetails(ctx context.Context, q Querier, id uuid.UUID, lock bool) (creditdomain.ApplicationDetails, error) {
+// Нет заявки — applicationerrors.ErrNotFound.
+func GetDetails(ctx context.Context, q Querier, id uuid.UUID, lock bool) (applicationdomain.ApplicationDetails, error) {
 	sql := SelectDetails + ` WHERE a.id = $1`
 	if lock {
 		sql += ` FOR UPDATE OF a`
 	}
 	rows, err := q.Query(ctx, sql, id)
 	if err != nil {
-		return creditdomain.ApplicationDetails{}, fmt.Errorf("select application: %w", err)
+		return applicationdomain.ApplicationDetails{}, fmt.Errorf("select application: %w", err)
 	}
 	details, err := pgx.CollectExactlyOneRow(rows, ScanDetails)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return creditdomain.ApplicationDetails{}, crediterrors.ErrNotFound
+		return applicationdomain.ApplicationDetails{}, applicationerrors.ErrNotFound
 	}
 	if err != nil {
-		return creditdomain.ApplicationDetails{}, fmt.Errorf("scan application: %w", err)
+		return applicationdomain.ApplicationDetails{}, fmt.Errorf("scan application: %w", err)
 	}
 	if err := LoadInfoRound(ctx, q, &details.Application); err != nil {
-		return creditdomain.ApplicationDetails{}, err
+		return applicationdomain.ApplicationDetails{}, err
 	}
 	return details, nil
 }
@@ -160,9 +160,9 @@ func GetDetails(ctx context.Context, q Querier, id uuid.UUID, lock bool) (credit
 // LoadInfoRound заполняет a.Info в статусе info_requested: запросы, созданные
 // с последнего перехода в info_requested. Запрос и переход пишутся одной
 // транзакцией, поэтому их created_at совпадают.
-func LoadInfoRound(ctx context.Context, q Querier, a *creditdomain.Application) error {
-	a.Info = creditdomain.InfoRound{}
-	if a.Status != creditdomain.StatusInfoRequested {
+func LoadInfoRound(ctx context.Context, q Querier, a *applicationdomain.Application) error {
+	a.Info = applicationdomain.InfoRound{}
+	if a.Status != applicationdomain.StatusInfoRequested {
 		return nil
 	}
 	rows, err := q.Query(ctx, `
@@ -194,8 +194,8 @@ func LoadInfoRound(ctx context.Context, q Querier, a *creditdomain.Application) 
 	return nil
 }
 
-func ScanDetails(row pgx.CollectableRow) (creditdomain.ApplicationDetails, error) {
-	var d creditdomain.ApplicationDetails
+func ScanDetails(row pgx.CollectableRow) (applicationdomain.ApplicationDetails, error) {
+	var d applicationdomain.ApplicationDetails
 	var pledged bool
 	a, req := &d.Application, &d.Application.Request
 	err := row.Scan(
@@ -208,13 +208,13 @@ func ScanDetails(row pgx.CollectableRow) (creditdomain.ApplicationDetails, error
 		&d.Applicant.Email, &d.Applicant.FirstName, &d.Applicant.LastName, &d.Applicant.MiddleName,
 	)
 	if err != nil {
-		return creditdomain.ApplicationDetails{}, err
+		return applicationdomain.ApplicationDetails{}, err
 	}
 	d.Company.ID = a.CompanyID
 	d.Applicant.ID = a.ApplicantID
-	req.CollateralMode = creditdomain.CollateralNone
+	req.CollateralMode = applicationdomain.CollateralNone
 	if pledged {
-		req.CollateralMode = creditdomain.CollateralPledged
+		req.CollateralMode = applicationdomain.CollateralPledged
 	}
 	return d, nil
 }

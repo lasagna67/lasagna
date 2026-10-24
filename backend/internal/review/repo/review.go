@@ -1,5 +1,5 @@
 // Package reviewrepo — хранение рассмотрения заявки: запросы уточнений,
-// решения и договоры. Заявку читает creditrepo; залог, его проверки и счёт
+// решения и договоры. Заявку читает applicationrepo; залог, его проверки и счёт
 // компании пишут модули collateral и company, здесь они только читаются.
 package reviewrepo
 
@@ -13,10 +13,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	applicationrepo "github.com/lasagna67/lasagna.git/internal/application/repo"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
-	creditrepo "github.com/lasagna67/lasagna.git/internal/credit/repo"
 	reviewdomain "github.com/lasagna67/lasagna.git/internal/review/domain"
 	reviewerrors "github.com/lasagna67/lasagna.git/internal/review/errors"
 )
@@ -30,9 +30,9 @@ func New(pool *pgxpool.Pool) *Repo {
 }
 
 // GetDetails — заявка с ответственным, последней проверкой залога и текущим
-// предложением. Нет заявки — crediterrors.ErrNotFound.
+// предложением. Нет заявки — applicationerrors.ErrNotFound.
 func (r *Repo) GetDetails(ctx context.Context, id uuid.UUID) (reviewdomain.Details, error) {
-	app, err := creditrepo.GetDetails(ctx, r.pool, id, false)
+	app, err := applicationrepo.GetDetails(ctx, r.pool, id, false)
 	if err != nil {
 		return reviewdomain.Details{}, err
 	}
@@ -44,7 +44,7 @@ func (r *Repo) GetDetails(ctx context.Context, id uuid.UUID) (reviewdomain.Detai
 func (r *Repo) GetReview(ctx context.Context, id uuid.UUID) (reviewdomain.Review, error) {
 	var review reviewdomain.Review
 	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
-		app, err := creditrepo.GetDetails(ctx, tx, id, false)
+		app, err := applicationrepo.GetDetails(ctx, tx, id, false)
 		if err != nil {
 			return err
 		}
@@ -89,19 +89,19 @@ func (r *Repo) List(ctx context.Context, f reviewdomain.Filter) ([]reviewdomain.
 	if f.After != nil {
 		where = append(where, `a.number > `+arg(*f.After))
 	}
-	sql := creditrepo.SelectDetails + ` WHERE ` + strings.Join(where, ` AND `) + ` ORDER BY a.number LIMIT ` + arg(f.Limit)
+	sql := applicationrepo.SelectDetails + ` WHERE ` + strings.Join(where, ` AND `) + ` ORDER BY a.number LIMIT ` + arg(f.Limit)
 
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, fmt.Errorf("select review queue: %w", err)
 	}
-	apps, err := pgx.CollectRows(rows, creditrepo.ScanDetails)
+	apps, err := pgx.CollectRows(rows, applicationrepo.ScanDetails)
 	if err != nil {
 		return nil, fmt.Errorf("scan review queue: %w", err)
 	}
 	items := make([]reviewdomain.Details, 0, len(apps))
 	for _, app := range apps {
-		if err := creditrepo.LoadInfoRound(ctx, r.pool, &app.Application); err != nil {
+		if err := applicationrepo.LoadInfoRound(ctx, r.pool, &app.Application); err != nil {
 			return nil, err
 		}
 		d, err := withExtras(ctx, r.pool, app)
@@ -117,14 +117,14 @@ func (r *Repo) List(ctx context.Context, f reviewdomain.Filter) ([]reviewdomain.
 // применяет fn и пишет Change. С ключом идемпотентности повтор того же запроса
 // ничего не меняет и возвращает replayed == true — до сверки revision, потому
 // что первый запрос её уже увеличил.
-func (r *Repo) Update(ctx context.Context, cmd reviewdomain.UpdateCommand, fn func(*creditdomain.Application) (reviewdomain.Change, error)) (replayed bool, err error) {
+func (r *Repo) Update(ctx context.Context, cmd reviewdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (replayed bool, err error) {
 	err = pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
-		d, err := creditrepo.GetDetails(ctx, tx, cmd.ID, true)
+		d, err := applicationrepo.GetDetails(ctx, tx, cmd.ID, true)
 		if err != nil {
 			return err
 		}
 		if cmd.Key != nil {
-			_, claimed, err := creditrepo.ClaimKey(ctx, tx, *cmd.Key, cmd.ID)
+			_, claimed, err := applicationrepo.ClaimKey(ctx, tx, *cmd.Key, cmd.ID)
 			if err != nil {
 				return err
 			}
@@ -134,7 +134,7 @@ func (r *Repo) Update(ctx context.Context, cmd reviewdomain.UpdateCommand, fn fu
 			}
 		}
 		if d.Revision != cmd.ExpectedRevision {
-			return &crediterrors.RevisionConflictError{Current: d.Revision}
+			return &applicationerrors.RevisionConflictError{Current: d.Revision}
 		}
 		app := d.Application
 		change, err := fn(&app)
@@ -230,7 +230,7 @@ func (r *Repo) Document(ctx context.Context, id uuid.UUID) (reviewdomain.Documen
 
 // apply пишет Change и саму заявку: статус, ответственного и revision + 1.
 // Время событий — now() транзакции, общее для всех записей.
-func apply(ctx context.Context, tx pgx.Tx, app creditdomain.Application, c reviewdomain.Change, actorID *uuid.UUID) error {
+func apply(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, c reviewdomain.Change, actorID *uuid.UUID) error {
 	if c.Document != nil {
 		if err := insertDocument(ctx, tx, *c.Document); err != nil {
 			return err
@@ -262,7 +262,7 @@ func apply(ctx context.Context, tx pgx.Tx, app creditdomain.Application, c revie
 			return fmt.Errorf("answer info request: %w", err)
 		}
 		if tag.RowsAffected() != 1 {
-			return fmt.Errorf("%w: info request is not open", crediterrors.ErrInvalidState)
+			return fmt.Errorf("%w: info request is not open", applicationerrors.ErrInvalidState)
 		}
 	}
 	for i, tr := range c.Transitions {
@@ -270,7 +270,7 @@ func apply(ctx context.Context, tx pgx.Tx, app creditdomain.Application, c revie
 		if i == len(c.Transitions)-1 {
 			comment = c.Comment
 		}
-		if err := creditrepo.InsertTransition(ctx, tx, app.ID, tr, actorID, comment); err != nil {
+		if err := applicationrepo.InsertTransition(ctx, tx, app.ID, tr, actorID, comment); err != nil {
 			return err
 		}
 	}
@@ -339,10 +339,10 @@ func insertDecision(ctx context.Context, tx pgx.Tx, d reviewdomain.Decision) err
 
 // withExtras дополняет заявку ответственным, залогом с последней проверкой и
 // текущим предложением: последним решением, если оно положительное.
-func withExtras(ctx context.Context, q creditrepo.Querier, app creditdomain.ApplicationDetails) (reviewdomain.Details, error) {
+func withExtras(ctx context.Context, q applicationrepo.Querier, app applicationdomain.ApplicationDetails) (reviewdomain.Details, error) {
 	d := reviewdomain.Details{ApplicationDetails: app}
 	if app.AssigneeID != nil {
-		var card creditdomain.ApplicantCard
+		var card applicationdomain.ApplicantCard
 		err := q.QueryRow(ctx, `SELECT id, email, first_name, last_name, middle_name FROM users WHERE id = $1`, *app.AssigneeID).
 			Scan(&card.ID, &card.Email, &card.FirstName, &card.LastName, &card.MiddleName)
 		if err != nil {
@@ -383,7 +383,7 @@ const selectInfoRequests = `SELECT id, application_id, status, message, editable
 	requested_by, created_at, answer, answered_by, answered_at
 	FROM application_info_requests`
 
-func listInfoRequests(ctx context.Context, q creditrepo.Querier, applicationID uuid.UUID) ([]reviewdomain.InfoRequest, error) {
+func listInfoRequests(ctx context.Context, q applicationrepo.Querier, applicationID uuid.UUID) ([]reviewdomain.InfoRequest, error) {
 	rows, err := q.Query(ctx, selectInfoRequests+` WHERE application_id = $1 ORDER BY created_at DESC, id DESC`, applicationID)
 	if err != nil {
 		return nil, fmt.Errorf("select info requests: %w", err)
@@ -403,7 +403,7 @@ func scanInfoRequest(row pgx.CollectableRow) (reviewdomain.InfoRequest, error) {
 }
 
 // listCollateralReviews — проверки залога модуля collateral, новые версии сверху; limit 0 — все.
-func listCollateralReviews(ctx context.Context, q creditrepo.Querier, applicationID uuid.UUID, limit int) ([]collateraldomain.CollateralReview, error) {
+func listCollateralReviews(ctx context.Context, q applicationrepo.Querier, applicationID uuid.UUID, limit int) ([]collateraldomain.CollateralReview, error) {
 	rows, err := q.Query(ctx, `
 		SELECT id, application_id, revision, version, reviewer, created_at, collateral_hash, collateral_revision,
 			result, COALESCE(accepted_value_kopecks, 0), comment, COALESCE(public_comment, '')
@@ -426,7 +426,7 @@ func listCollateralReviews(ctx context.Context, q creditrepo.Querier, applicatio
 }
 
 // listDecisions — решения с договорами, новые версии сверху; limit 0 — все.
-func listDecisions(ctx context.Context, q creditrepo.Querier, applicationID uuid.UUID, limit int) ([]reviewdomain.Decision, error) {
+func listDecisions(ctx context.Context, q applicationrepo.Querier, applicationID uuid.UUID, limit int) ([]reviewdomain.Decision, error) {
 	rows, err := q.Query(ctx, `
 		SELECT d.id, d.application_id, d.version, d.outcome, d.decided_by,
 			d.product_id, p.code, p.name, d.amount_kopecks, d.term_months, d.annual_rate_bps, d.monthly_payment_kopecks,
@@ -490,7 +490,7 @@ func scanDecision(row pgx.CollectableRow) (reviewdomain.Decision, error) {
 	return d, nil
 }
 
-func listHistory(ctx context.Context, q creditrepo.Querier, applicationID uuid.UUID) ([]reviewdomain.Event, error) {
+func listHistory(ctx context.Context, q applicationrepo.Querier, applicationID uuid.UUID) ([]reviewdomain.Event, error) {
 	rows, err := q.Query(ctx, `
 		SELECT id, from_status, to_status, actor_id, comment, created_at
 		FROM application_status_history WHERE application_id = $1

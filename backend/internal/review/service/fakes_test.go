@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 	reviewdomain "github.com/lasagna67/lasagna.git/internal/review/domain"
 	reviewerrors "github.com/lasagna67/lasagna.git/internal/review/errors"
 )
@@ -23,7 +23,7 @@ import (
 // применяет Change целиком или ничего.
 type fakeRepo struct {
 	mu            sync.Mutex
-	apps          map[uuid.UUID]creditdomain.ApplicationDetails
+	apps          map[uuid.UUID]applicationdomain.ApplicationDetails
 	infos         map[uuid.UUID][]reviewdomain.InfoRequest // новые в конце
 	assets        map[uuid.UUID]collateraldomain.Collateral
 	collateral    map[uuid.UUID][]collateraldomain.CollateralReview // пишет модуль collateral
@@ -39,7 +39,7 @@ type fakeRepo struct {
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		apps:       map[uuid.UUID]creditdomain.ApplicationDetails{},
+		apps:       map[uuid.UUID]applicationdomain.ApplicationDetails{},
 		infos:      map[uuid.UUID][]reviewdomain.InfoRequest{},
 		assets:     map[uuid.UUID]collateraldomain.Collateral{},
 		collateral: map[uuid.UUID][]collateraldomain.CollateralReview{},
@@ -53,7 +53,7 @@ func newFakeRepo() *fakeRepo {
 	}
 }
 
-func (f *fakeRepo) add(d creditdomain.ApplicationDetails) {
+func (f *fakeRepo) add(d applicationdomain.ApplicationDetails) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.apps[d.ID] = d
@@ -62,10 +62,10 @@ func (f *fakeRepo) add(d creditdomain.ApplicationDetails) {
 func (f *fakeRepo) details(id uuid.UUID) (reviewdomain.Details, error) {
 	app, ok := f.apps[id]
 	if !ok {
-		return reviewdomain.Details{}, crediterrors.ErrNotFound
+		return reviewdomain.Details{}, applicationerrors.ErrNotFound
 	}
-	app.Info = creditdomain.InfoRound{}
-	if app.Status == creditdomain.StatusInfoRequested {
+	app.Info = applicationdomain.InfoRound{}
+	if app.Status == applicationdomain.StatusInfoRequested {
 		for _, r := range f.infos[id][f.roundStart[id]:] {
 			if r.Status == reviewdomain.InfoRequestOpen {
 				app.Info.Open++
@@ -75,7 +75,7 @@ func (f *fakeRepo) details(id uuid.UUID) (reviewdomain.Details, error) {
 	}
 	d := reviewdomain.Details{ApplicationDetails: app}
 	if app.AssigneeID != nil {
-		d.Assignee = &creditdomain.ApplicantCard{ID: *app.AssigneeID, Email: "underwriter@lasagna.test"}
+		d.Assignee = &applicationdomain.ApplicantCard{ID: *app.AssigneeID, Email: "underwriter@lasagna.test"}
 	}
 	if c, ok := f.assets[id]; ok {
 		d.Collateral = &c
@@ -118,7 +118,7 @@ func (f *fakeRepo) List(_ context.Context, filter reviewdomain.Filter) ([]review
 	defer f.mu.Unlock()
 	var items []reviewdomain.Details
 	for id, app := range f.apps {
-		if app.Status == creditdomain.StatusDraft || (filter.After != nil && app.Number <= *filter.After) {
+		if app.Status == applicationdomain.StatusDraft || (filter.After != nil && app.Number <= *filter.After) {
 			continue
 		}
 		d, _ := f.details(id)
@@ -131,7 +131,7 @@ func (f *fakeRepo) List(_ context.Context, filter reviewdomain.Filter) ([]review
 	return items, nil
 }
 
-func (f *fakeRepo) Update(_ context.Context, cmd reviewdomain.UpdateCommand, fn func(*creditdomain.Application) (reviewdomain.Change, error)) (bool, error) {
+func (f *fakeRepo) Update(_ context.Context, cmd reviewdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	d, err := f.details(cmd.ID)
@@ -143,13 +143,13 @@ func (f *fakeRepo) Update(_ context.Context, cmd reviewdomain.UpdateCommand, fn 
 		scope = k.UserID.String() + "|" + string(k.Operation) + "|" + k.ResourceID.String() + "|" + k.Key
 		if hash, ok := f.keys[scope]; ok {
 			if hash != k.RequestHash {
-				return false, crediterrors.ErrIdempotencyConflict
+				return false, applicationerrors.ErrIdempotencyConflict
 			}
 			return true, nil
 		}
 	}
 	if d.Revision != cmd.ExpectedRevision {
-		return false, &crediterrors.RevisionConflictError{Current: d.Revision}
+		return false, &applicationerrors.RevisionConflictError{Current: d.Revision}
 	}
 	app := d.Application
 	change, err := fn(&app)
@@ -161,7 +161,7 @@ func (f *fakeRepo) Update(_ context.Context, cmd reviewdomain.UpdateCommand, fn 
 	if c := change.AnsweredRequest; c != nil {
 		i := slices.IndexFunc(f.infos[id], func(r reviewdomain.InfoRequest) bool { return r.ID == c.ID })
 		if i < 0 || f.infos[id][i].Status != reviewdomain.InfoRequestOpen {
-			return false, crediterrors.ErrInvalidState
+			return false, applicationerrors.ErrInvalidState
 		}
 		f.infos[id][i] = *c
 	}
@@ -190,7 +190,7 @@ func (f *fakeRepo) Update(_ context.Context, cmd reviewdomain.UpdateCommand, fn 
 		f.keys[scope] = cmd.Key.RequestHash
 	}
 	app.Revision++
-	app.Info = creditdomain.InfoRound{}
+	app.Info = applicationdomain.InfoRound{}
 	d.Application = app
 	f.apps[id] = d.ApplicationDetails
 	return false, nil

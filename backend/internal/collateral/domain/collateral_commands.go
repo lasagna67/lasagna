@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	e "github.com/lasagna67/lasagna.git/internal/credit/errors"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	e "github.com/lasagna67/lasagna.git/internal/application/errors"
 )
 
 type PatchApplication struct {
@@ -65,16 +65,16 @@ func (p ReviewCollateral) Validate() error {
 }
 
 type CollateralApplication struct {
-	ID                     uuid.UUID           `json:"id"`
-	CompanyID              uuid.UUID           `json:"company_id"`
-	Revision               int64               `json:"revision"`
-	Status                 creditdomain.Status `json:"status"`
-	ProductCode            string              `json:"product_code"`
-	RequestedAmountKopecks int64               `json:"requested_amount_kopecks"`
-	HasCollateral          bool                `json:"has_collateral"`
-	CollateralRequired     bool                `json:"collateral_required"`
-	Collateral             *Collateral         `json:"collateral"`
-	Review                 *CollateralReview   `json:"collateral_review"`
-	ReviewCurrent          bool                `json:"collateral_review_current"`
-	CoverageSatisfied      bool                `json:"collateral_coverage_satisfied"`
+	ID                     uuid.UUID                `json:"id"`
+	CompanyID              uuid.UUID                `json:"company_id"`
+	Revision               int64                    `json:"revision"`
+	Status                 applicationdomain.Status `json:"status"`
+	ProductCode            string                   `json:"product_code"`
+	RequestedAmountKopecks int64                    `json:"requested_amount_kopecks"`
+	HasCollateral          bool                     `json:"has_collateral"`
+	CollateralRequired     bool                     `json:"collateral_required"`
+	Collateral             *Collateral              `json:"collateral"`
+	Review                 *CollateralReview        `json:"collateral_review"`
+	ReviewCurrent          bool                     `json:"collateral_review_current"`
+	CoverageSatisfied      bool                     `json:"collateral_coverage_satisfied"`
 }

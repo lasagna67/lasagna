@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	reviewdomain "github.com/lasagna67/lasagna.git/internal/review/domain"
 )
 
@@ -27,7 +27,7 @@ func TestRenderLoanWithLongSchedule(t *testing.T) {
 		Number:  1042,
 		Version: 2,
 		Date:    time.Date(2026, 10, 24, 21, 30, 0, 0, time.UTC), // в Москве уже 25.10
-		Company: creditdomain.CompanyCard{Name: "ООО «Кедровый контур Демо»", INN: "7705005410"},
+		Company: applicationdomain.CompanyCard{Name: "ООО «Кедровый контур Демо»", INN: "7705005410"},
 		Terms: reviewdomain.OfferTerms{
 			ProductName: "Оборудование и транспорт", AmountKopecks: 1000000000, TermMonths: ptr(120),
 			AnnualRateBps: 1850, MonthlyPaymentKopecks: ptr(schedule[0].Payment), CollateralRequired: true,
@@ -57,7 +57,7 @@ func TestRenderOverdraft(t *testing.T) {
 		Number:  1001,
 		Version: 1,
 		Date:    time.Now(),
-		Company: creditdomain.CompanyCard{Name: "ИП Иванов", INN: "770761836401"},
+		Company: applicationdomain.CompanyCard{Name: "ИП Иванов", INN: "770761836401"},
 		Terms: reviewdomain.OfferTerms{
 			ProductName: "Овердрафт", AmountKopecks: 100000000, AnnualRateBps: 2150,
 			AgreementTermMonths: ptr(12), MaxTrancheDays: ptr(60),

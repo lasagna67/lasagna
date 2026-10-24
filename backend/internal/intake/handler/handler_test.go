@@ -1,4 +1,4 @@
-package credithandler
+package intakehandler
 
 import (
 	"context"
@@ -13,9 +13,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	authdomain "github.com/lasagna67/lasagna.git/internal/auth/domain"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
 
@@ -27,22 +27,22 @@ var (
 // fakeService отдаёт err, если он задан, иначе черновик по команде.
 type fakeService struct {
 	err  error
-	last creditdomain.CreateCommand
+	last applicationdomain.CreateCommand
 }
 
-func (f *fakeService) Create(_ context.Context, cmd creditdomain.CreateCommand) (creditdomain.ApplicationDetails, error) {
+func (f *fakeService) Create(_ context.Context, cmd applicationdomain.CreateCommand) (applicationdomain.ApplicationDetails, error) {
 	f.last = cmd
 	if f.err != nil {
-		return creditdomain.ApplicationDetails{}, f.err
+		return applicationdomain.ApplicationDetails{}, f.err
 	}
-	app, _ := creditdomain.NewDraft(uuid.New(), cmd.CompanyID, cmd.ApplicantID)
+	app, _ := applicationdomain.NewDraft(uuid.New(), cmd.CompanyID, cmd.ApplicantID)
 	app.Number = 1000
 	app.CreatedAt, app.UpdatedAt = time.Now(), time.Now()
 	last := "Кедрова"
-	return creditdomain.ApplicationDetails{
+	return applicationdomain.ApplicationDetails{
 		Application: app,
-		Company:     creditdomain.CompanyCard{ID: cmd.CompanyID, Name: "ООО «Кедр»", INN: "7705005410"},
-		Applicant:   creditdomain.ApplicantCard{ID: cmd.ApplicantID, Email: "a@kedr.ru", LastName: &last},
+		Company:     applicationdomain.CompanyCard{ID: cmd.CompanyID, Name: "ООО «Кедр»", INN: "7705005410"},
+		Applicant:   applicationdomain.ApplicantCard{ID: cmd.ApplicantID, Email: "a@kedr.ru", LastName: &last},
 	}, nil
 }
 
@@ -91,7 +91,7 @@ func TestCreate(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201, body %s", rec.Code, rec.Body)
 	}
-	want := creditdomain.CreateCommand{CompanyID: companyID, ApplicantID: client.UserID, IdempotencyKey: "key-1"}
+	want := applicationdomain.CreateCommand{CompanyID: companyID, ApplicantID: client.UserID, IdempotencyKey: "key-1"}
 	if svc.last != want {
 		t.Errorf("command = %+v, want %+v", svc.last, want)
 	}
@@ -136,10 +136,10 @@ func TestCreateErrors(t *testing.T) {
 	}{
 		{"broken json", client, `{"company_id":`, nil, http.StatusBadRequest, "INVALID_REQUEST"},
 		{"company_id not uuid", client, `{"company_id":"42"}`, nil, http.StatusBadRequest, "INVALID_REQUEST"},
-		{"service request error", client, validBody, &crediterrors.RequestError{Message: "Передайте заголовок Idempotency-Key"}, http.StatusBadRequest, "INVALID_REQUEST"},
-		{"validation", client, `{}`, &crediterrors.ValidationError{Fields: []crediterrors.FieldError{{Field: "company_id", Code: "REQUIRED", Message: "Выберите компанию"}}}, http.StatusUnprocessableEntity, "VALIDATION_FAILED"},
-		{"not a member", client, validBody, crediterrors.ErrCompanyNotFound, http.StatusNotFound, "NOT_FOUND"},
-		{"idempotency conflict", client, validBody, crediterrors.ErrIdempotencyConflict, http.StatusConflict, "IDEMPOTENCY_CONFLICT"},
+		{"service request error", client, validBody, &applicationerrors.RequestError{Message: "Передайте заголовок Idempotency-Key"}, http.StatusBadRequest, "INVALID_REQUEST"},
+		{"validation", client, `{}`, &applicationerrors.ValidationError{Fields: []applicationerrors.FieldError{{Field: "company_id", Code: "REQUIRED", Message: "Выберите компанию"}}}, http.StatusUnprocessableEntity, "VALIDATION_FAILED"},
+		{"not a member", client, validBody, applicationerrors.ErrCompanyNotFound, http.StatusNotFound, "NOT_FOUND"},
+		{"idempotency conflict", client, validBody, applicationerrors.ErrIdempotencyConflict, http.StatusConflict, "IDEMPOTENCY_CONFLICT"},
 		{"unexpected", client, validBody, errors.New("db is down"), http.StatusInternalServerError, "INTERNAL_ERROR"},
 		{"underwriter", &authdomain.Claims{UserID: uuid.New(), Role: authdomain.RoleUnderwriter}, validBody, nil, http.StatusForbidden, ""},
 		{"no token", nil, validBody, nil, http.StatusUnauthorized, ""},

@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
-	creditdomain "github.com/lasagna67/lasagna.git/internal/credit/domain"
-	crediterrors "github.com/lasagna67/lasagna.git/internal/credit/errors"
 	reviewdomain "github.com/lasagna67/lasagna.git/internal/review/domain"
 	reviewerrors "github.com/lasagna67/lasagna.git/internal/review/errors"
 )
@@ -31,13 +31,13 @@ const (
 )
 
 type Repo interface {
-	// GetDetails и GetReview — нет заявки: crediterrors.ErrNotFound.
+	// GetDetails и GetReview — нет заявки: applicationerrors.ErrNotFound.
 	GetDetails(ctx context.Context, id uuid.UUID) (reviewdomain.Details, error)
 	GetReview(ctx context.Context, id uuid.UUID) (reviewdomain.Review, error)
 	List(ctx context.Context, f reviewdomain.Filter) ([]reviewdomain.Details, error)
 	// Update в одной транзакции блокирует заявку, сверяет revision (иначе
 	// RevisionConflictError), вызывает fn и пишет Change. Повтор по ключу — replayed.
-	Update(ctx context.Context, cmd reviewdomain.UpdateCommand, fn func(*creditdomain.Application) (reviewdomain.Change, error)) (replayed bool, err error)
+	Update(ctx context.Context, cmd reviewdomain.UpdateCommand, fn func(*applicationdomain.Application) (reviewdomain.Change, error)) (replayed bool, err error)
 	InfoRequests(ctx context.Context, applicationID uuid.UUID) ([]reviewdomain.InfoRequest, error)
 	InfoRequest(ctx context.Context, applicationID, requestID uuid.UUID) (reviewdomain.InfoRequest, error)
 	Product(ctx context.Context, code string) (reviewdomain.Product, error)
@@ -124,10 +124,10 @@ func (s *Service) List(ctx context.Context, f reviewdomain.Filter) (items []revi
 	case f.Limit == 0:
 		f.Limit = defaultLimit
 	case f.Limit < 0 || f.Limit > maxLimit:
-		return nil, nil, &crediterrors.RequestError{Message: fmt.Sprintf("limit — от 1 до %d", maxLimit)}
+		return nil, nil, &applicationerrors.RequestError{Message: fmt.Sprintf("limit — от 1 до %d", maxLimit)}
 	}
-	if f.Status != nil && (!f.Status.Valid() || *f.Status == creditdomain.StatusDraft) {
-		return nil, nil, &crediterrors.RequestError{Message: "Неизвестный статус заявки"}
+	if f.Status != nil && (!f.Status.Valid() || *f.Status == applicationdomain.StatusDraft) {
+		return nil, nil, &applicationerrors.RequestError{Message: "Неизвестный статус заявки"}
 	}
 	limit := f.Limit
 	f.Limit++ // лишняя строка — признак следующей страницы
@@ -149,8 +149,8 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (reviewdomain.Review, e
 	if err != nil {
 		return reviewdomain.Review{}, fmt.Errorf("get review: %w", err)
 	}
-	if review.Status == creditdomain.StatusDraft {
-		return reviewdomain.Review{}, crediterrors.ErrNotFound
+	if review.Status == applicationdomain.StatusDraft {
+		return reviewdomain.Review{}, applicationerrors.ErrNotFound
 	}
 	if review.Checks, err = s.checks.Summary(ctx, id); err != nil {
 		return reviewdomain.Review{}, fmt.Errorf("get checks: %w", err)
@@ -180,7 +180,7 @@ func (s *Service) Take(ctx context.Context, cmd reviewdomain.TakeCommand) (revie
 		return reviewdomain.Review{}, err
 	}
 	if changed {
-		_, err = s.repo.Update(ctx, s.update(cmd.ApplicationID, cmd.ExpectedRevision, cmd.Reviewer.ID), func(a *creditdomain.Application) (reviewdomain.Change, error) {
+		_, err = s.repo.Update(ctx, s.update(cmd.ApplicationID, cmd.ExpectedRevision, cmd.Reviewer.ID), func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 			_, err := reviewdomain.Take(a, cmd.Reviewer.ID)
 			return reviewdomain.Change{}, err
 		})
@@ -209,7 +209,7 @@ func (s *Service) RequestInfo(ctx context.Context, cmd reviewdomain.RequestInfoC
 		return reviewdomain.Review{}, err
 	}
 
-	_, err = s.repo.Update(ctx, s.update(cmd.ApplicationID, cmd.ExpectedRevision, cmd.Reviewer.ID), func(a *creditdomain.Application) (reviewdomain.Change, error) {
+	_, err = s.repo.Update(ctx, s.update(cmd.ApplicationID, cmd.ExpectedRevision, cmd.Reviewer.ID), func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		if err := reviewdomain.CanReview(*a, cmd.Reviewer); err != nil {
 			return reviewdomain.Change{}, err
 		}
@@ -218,7 +218,7 @@ func (s *Service) RequestInfo(ctx context.Context, cmd reviewdomain.RequestInfoC
 			return reviewdomain.Change{}, err
 		}
 		return reviewdomain.Change{
-			Transitions: []creditdomain.Transition{tr},
+			Transitions: []applicationdomain.Transition{tr},
 			Comment:     &req.Message,
 			InfoRequest: &req,
 			Notification: &reviewdomain.Notification{
@@ -250,7 +250,7 @@ func (s *Service) Decide(ctx context.Context, cmd reviewdomain.DecideCommand) (r
 	// Решение считается по прочитанной карточке; сверка revision в транзакции
 	// гарантирует, что карточка с тех пор не менялась.
 	if review.Revision != cmd.ExpectedRevision {
-		return reviewdomain.Review{}, &crediterrors.RevisionConflictError{Current: review.Revision}
+		return reviewdomain.Review{}, &applicationerrors.RevisionConflictError{Current: review.Revision}
 	}
 
 	now := s.now()
@@ -278,11 +278,11 @@ func (s *Service) Decide(ctx context.Context, cmd reviewdomain.DecideCommand) (r
 		}
 	}
 
-	_, err = s.repo.Update(ctx, s.update(cmd.ApplicationID, cmd.ExpectedRevision, cmd.Reviewer.ID), func(a *creditdomain.Application) (reviewdomain.Change, error) {
+	_, err = s.repo.Update(ctx, s.update(cmd.ApplicationID, cmd.ExpectedRevision, cmd.Reviewer.ID), func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		if err := reviewdomain.CanReview(*a, cmd.Reviewer); err != nil {
 			return reviewdomain.Change{}, err
 		}
-		var tr creditdomain.Transition
+		var tr applicationdomain.Transition
 		var err error
 		switch decision.Outcome {
 		case reviewdomain.OutcomeApproved:
@@ -296,7 +296,7 @@ func (s *Service) Decide(ctx context.Context, cmd reviewdomain.DecideCommand) (r
 			return reviewdomain.Change{}, err
 		}
 		change := reviewdomain.Change{
-			Transitions:  []creditdomain.Transition{tr},
+			Transitions:  []applicationdomain.Transition{tr},
 			Document:     doc,
 			Decision:     &decision,
 			Notification: decisionNotification(*a, decision),
@@ -323,11 +323,11 @@ func (s *Service) RetryChecks(ctx context.Context, cmd reviewdomain.RetryChecksC
 	if err := reviewdomain.CanReview(d.Application, cmd.Reviewer); err != nil {
 		return reviewdomain.Review{}, err
 	}
-	if d.Status != creditdomain.StatusManualReview {
-		return reviewdomain.Review{}, fmt.Errorf("%w: retry checks in %s", crediterrors.ErrInvalidState, d.Status)
+	if d.Status != applicationdomain.StatusManualReview {
+		return reviewdomain.Review{}, fmt.Errorf("%w: retry checks in %s", applicationerrors.ErrInvalidState, d.Status)
 	}
 	if d.Revision != cmd.ExpectedRevision {
-		return reviewdomain.Review{}, &crediterrors.RevisionConflictError{Current: d.Revision}
+		return reviewdomain.Review{}, &applicationerrors.RevisionConflictError{Current: d.Revision}
 	}
 	sources := make([]reviewdomain.CheckSource, 0, len(cmd.Sources))
 	for _, src := range cmd.Sources {
@@ -369,8 +369,8 @@ func (s *Service) AnswerInfo(ctx context.Context, cmd reviewdomain.AnswerInfoCom
 	if err != nil {
 		return reviewdomain.Details{}, err
 	}
-	if d.Status != creditdomain.StatusInfoRequested {
-		return reviewdomain.Details{}, fmt.Errorf("%w: answer in %s", crediterrors.ErrInvalidState, d.Status)
+	if d.Status != applicationdomain.StatusInfoRequested {
+		return reviewdomain.Details{}, fmt.Errorf("%w: answer in %s", applicationerrors.ErrInvalidState, d.Status)
 	}
 	req, err := s.repo.InfoRequest(ctx, cmd.ApplicationID, cmd.RequestID)
 	if err != nil {
@@ -380,9 +380,9 @@ func (s *Service) AnswerInfo(ctx context.Context, cmd reviewdomain.AnswerInfoCom
 		return reviewdomain.Details{}, err
 	}
 
-	_, err = s.repo.Update(ctx, s.update(cmd.ApplicationID, cmd.ExpectedRevision, cmd.UserID), func(a *creditdomain.Application) (reviewdomain.Change, error) {
-		if a.Status != creditdomain.StatusInfoRequested {
-			return reviewdomain.Change{}, fmt.Errorf("%w: answer in %s", crediterrors.ErrInvalidState, a.Status)
+	_, err = s.repo.Update(ctx, s.update(cmd.ApplicationID, cmd.ExpectedRevision, cmd.UserID), func(a *applicationdomain.Application) (reviewdomain.Change, error) {
+		if a.Status != applicationdomain.StatusInfoRequested {
+			return reviewdomain.Change{}, fmt.Errorf("%w: answer in %s", applicationerrors.ErrInvalidState, a.Status)
 		}
 		return reviewdomain.Change{AnsweredRequest: &req}, nil
 	})
@@ -404,19 +404,19 @@ func (s *Service) Resubmit(ctx context.Context, cmd reviewdomain.ResubmitCommand
 	}
 	id := cmd.ApplicationID
 	update := s.update(id, cmd.ExpectedRevision, cmd.UserID)
-	update.Key = &creditdomain.IdempotencyKey{
+	update.Key = &applicationdomain.IdempotencyKey{
 		UserID:      cmd.UserID,
-		Operation:   creditdomain.OperationResubmit,
+		Operation:   applicationdomain.OperationResubmit,
 		ResourceID:  &id,
 		Key:         cmd.IdempotencyKey,
 		RequestHash: requestHash(id.String(), fmt.Sprint(cmd.ExpectedRevision)),
 	}
-	_, err := s.repo.Update(ctx, update, func(a *creditdomain.Application) (reviewdomain.Change, error) {
+	_, err := s.repo.Update(ctx, update, func(a *applicationdomain.Application) (reviewdomain.Change, error) {
 		tr, err := a.Resubmit()
 		if err != nil {
 			return reviewdomain.Change{}, err
 		}
-		change := reviewdomain.Change{Transitions: []creditdomain.Transition{tr}}
+		change := reviewdomain.Change{Transitions: []applicationdomain.Transition{tr}}
 		if a.AssigneeID != nil {
 			change.Notification = &reviewdomain.Notification{
 				UserID:        *a.AssigneeID,
@@ -436,7 +436,7 @@ func (s *Service) Resubmit(ctx context.Context, cmd reviewdomain.ResubmitCommand
 	if err != nil {
 		return reviewdomain.Details{}, fmt.Errorf("get application: %w", err)
 	}
-	if d.Status == creditdomain.StatusSubmitted {
+	if d.Status == applicationdomain.StatusSubmitted {
 		if err := s.pipeline.Run(ctx, id); err != nil {
 			return reviewdomain.Details{}, fmt.Errorf("run pipeline: %w", err)
 		}
@@ -465,7 +465,7 @@ func (s *Service) DocumentContent(ctx context.Context, viewer reviewdomain.Viewe
 	}
 	if !viewer.Staff {
 		_, err := s.clientDetails(ctx, viewer.UserID, doc.ApplicationID)
-		if errors.Is(err, crediterrors.ErrNotFound) {
+		if errors.Is(err, applicationerrors.ErrNotFound) {
 			return reviewdomain.Document{}, nil, reviewerrors.ErrDocumentNotFound
 		}
 		if err != nil {
@@ -474,7 +474,7 @@ func (s *Service) DocumentContent(ctx context.Context, viewer reviewdomain.Viewe
 	}
 	body, err := s.storage.Get(ctx, doc.StorageKey)
 	if err != nil {
-		return reviewdomain.Document{}, nil, fmt.Errorf("read document: %w: %w", crediterrors.ErrServiceUnavailable, err)
+		return reviewdomain.Document{}, nil, fmt.Errorf("read document: %w: %w", applicationerrors.ErrServiceUnavailable, err)
 	}
 	return doc, body, nil
 }
@@ -491,8 +491,8 @@ func (s *Service) staffDetails(ctx context.Context, id uuid.UUID) (reviewdomain.
 	if err != nil {
 		return reviewdomain.Details{}, fmt.Errorf("get application: %w", err)
 	}
-	if d.Status == creditdomain.StatusDraft {
-		return reviewdomain.Details{}, crediterrors.ErrNotFound
+	if d.Status == applicationdomain.StatusDraft {
+		return reviewdomain.Details{}, applicationerrors.ErrNotFound
 	}
 	return d, nil
 }
@@ -506,7 +506,7 @@ func (s *Service) clientDetails(ctx context.Context, userID, id uuid.UUID) (revi
 	}
 	_, err = s.companies.Membership(ctx, d.CompanyID, userID)
 	if errors.Is(err, companyerrors.ErrCompanyNotFound) {
-		return reviewdomain.Details{}, crediterrors.ErrNotFound
+		return reviewdomain.Details{}, applicationerrors.ErrNotFound
 	}
 	if err != nil {
 		return reviewdomain.Details{}, fmt.Errorf("check membership: %w", err)
@@ -548,7 +548,7 @@ func (s *Service) loadTerms(ctx context.Context, cmd reviewdomain.DecideCommand,
 }
 
 // publishContract печатает договор и кладёт его в хранилище; решение получает ссылку на него.
-func (s *Service) publishContract(ctx context.Context, app creditdomain.ApplicationDetails, decision *reviewdomain.Decision, account *reviewdomain.Account, schedule []reviewdomain.Payment, now time.Time) (*reviewdomain.Document, error) {
+func (s *Service) publishContract(ctx context.Context, app applicationdomain.ApplicationDetails, decision *reviewdomain.Decision, account *reviewdomain.Account, schedule []reviewdomain.Payment, now time.Time) (*reviewdomain.Document, error) {
 	if decision.Terms.BankAccountID == nil {
 		account = nil
 	}
@@ -577,7 +577,7 @@ func (s *Service) publishContract(ctx context.Context, app creditdomain.Applicat
 	}
 	doc.StorageKey = fmt.Sprintf("applications/%s/contracts/%s.pdf", app.ID, doc.ID)
 	if err := s.storage.Put(ctx, doc.StorageKey, doc.ContentType, pdf); err != nil {
-		return nil, fmt.Errorf("upload contract: %w: %w", crediterrors.ErrServiceUnavailable, err)
+		return nil, fmt.Errorf("upload contract: %w: %w", applicationerrors.ErrServiceUnavailable, err)
 	}
 	decision.Contract = &reviewdomain.Contract{
 		ID:        doc.ID,
@@ -597,7 +597,7 @@ var changedLabels = map[string]string{
 	"collateral_mode": "обеспечение",
 }
 
-func decisionNotification(a creditdomain.Application, d reviewdomain.Decision) *reviewdomain.Notification {
+func decisionNotification(a applicationdomain.Application, d reviewdomain.Decision) *reviewdomain.Notification {
 	n := &reviewdomain.Notification{UserID: a.ApplicantID, ApplicationID: a.ID}
 	switch d.Outcome {
 	case reviewdomain.OutcomeApproved:
@@ -622,10 +622,10 @@ func decisionNotification(a creditdomain.Application, d reviewdomain.Decision) *
 
 func validateIdempotencyKey(key string) error {
 	if strings.TrimSpace(key) == "" {
-		return &crediterrors.RequestError{Message: "Передайте заголовок Idempotency-Key"}
+		return &applicationerrors.RequestError{Message: "Передайте заголовок Idempotency-Key"}
 	}
 	if len(key) > maxIdempotencyKeyLen {
-		return &crediterrors.RequestError{Message: "Idempotency-Key длиннее 255 символов"}
+		return &applicationerrors.RequestError{Message: "Idempotency-Key длиннее 255 символов"}
 	}
 	return nil
 }
@@ -641,7 +641,7 @@ func requestHash(parts ...string) string {
 }
 
 func invalid(field, code, message string) error {
-	return &crediterrors.ValidationError{Fields: []crediterrors.FieldError{
+	return &applicationerrors.ValidationError{Fields: []applicationerrors.FieldError{
 		{Field: field, Code: code, Message: message},
 	}}
 }

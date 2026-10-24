@@ -6,9 +6,9 @@ import (
 	companyhttpjson "github.com/lasagna67/lasagna.git/internal/company/httpjson"
 	companyservice "github.com/lasagna67/lasagna.git/internal/company/service"
 	"github.com/lasagna67/lasagna.git/internal/config"
-	creditservice "github.com/lasagna67/lasagna.git/internal/credit/service"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
 	financialscsvservice "github.com/lasagna67/lasagna.git/internal/financials-csv/service"
+	intakeservice "github.com/lasagna67/lasagna.git/internal/intake/service"
 	reviewcontract "github.com/lasagna67/lasagna.git/internal/review/contract"
 	reviewservice "github.com/lasagna67/lasagna.git/internal/review/service"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
@@ -24,7 +24,7 @@ type Service struct {
 	Financials     *financialscsvservice.Service
 	Collateral     *collateralrepo.Repo
 	Scoring        *scoring.Scorer
-	Credit         *creditservice.ApplicationService
+	Intake         *intakeservice.ApplicationService
 	CreditProducts *creditproducts.Service
 	Review         *reviewservice.Service
 }
@@ -80,7 +80,7 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Financials:     financialscsvservice.New(repo.Companies),
 		Collateral:     repo.Collateral,
 		Scoring:        repo.Scoring,
-		Credit:         creditservice.New(repo.Applications, company),
+		Intake:         intakeservice.New(repo.Applications, company),
 		CreditProducts: products,
 		Review:         review,
 	}, nil

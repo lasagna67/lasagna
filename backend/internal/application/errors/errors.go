@@ -1,4 +1,4 @@
-package crediterrors
+package applicationerrors
 
 import (
 	"errors"

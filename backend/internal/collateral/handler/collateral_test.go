@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
+	ce "github.com/lasagna67/lasagna.git/internal/application/errors"
 	auth "github.com/lasagna67/lasagna.git/internal/auth/domain"
 	d "github.com/lasagna67/lasagna.git/internal/collateral/domain"
-	ce "github.com/lasagna67/lasagna.git/internal/credit/errors"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
 
