@@ -46,6 +46,9 @@ func TestUpload(t *testing.T) {
 	if r.saved[0].Registry.Data != nil || r.saved[0].CreditHistory.Data != nil {
 		t.Fatal("upload must only write financials")
 	}
+	if r.saved[0].FinancialsSourceType != "csv" {
+		t.Fatalf("CSV source not saved: %q", r.saved[0].FinancialsSourceType)
+	}
 }
 
 func TestUploadErrors(t *testing.T) {

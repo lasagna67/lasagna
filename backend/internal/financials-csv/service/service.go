@@ -35,7 +35,11 @@ func (s *Service) Upload(ctx context.Context, companyID, userID uuid.UUID, input
 	}
 	report.BusinessID = companyID.String()
 	// CompanyRepo.SaveOverview записывает отчёт в company_overviews.financials_data.
-	if err := s.repo.SaveOverview(ctx, d.Overview{CompanyID: companyID, Financials: d.SourceResult[d.FinancialReport]{Status: "ok", Data: &report}}); err != nil {
+	if err := s.repo.SaveOverview(ctx, d.Overview{
+		CompanyID:            companyID,
+		Financials:           d.SourceResult[d.FinancialReport]{Status: "ok", Data: &report},
+		FinancialsSourceType: "csv",
+	}); err != nil {
 		return d.FinancialReport{}, fmt.Errorf("save uploaded financials: %w", err)
 	}
 	return report, nil

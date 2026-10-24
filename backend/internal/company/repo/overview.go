@@ -18,7 +18,7 @@ func (r *CompanyRepo) GetOverview(ctx context.Context, companyID uuid.UUID) (com
 	result, err := scanOverview(r.pool.QueryRow(ctx, `
 		SELECT company_id, COALESCE(registry_status, ''), registry_data,
 			COALESCE(credit_history_status, ''), credit_history_data,
-			COALESCE(financials_status, ''), financials_data
+			COALESCE(financials_status, ''), financials_data, financials_source_type
 		FROM company_overviews WHERE company_id = $1`, companyID))
 	if err != nil {
 		return companydomain.Overview{}, fmt.Errorf("get company overview: %w", err)
@@ -30,7 +30,7 @@ func scanOverview(row pgx.Row) (companydomain.Overview, error) {
 	var result companydomain.Overview
 	err := row.Scan(&result.CompanyID, &result.Registry.Status, &result.Registry.Data,
 		&result.CreditHistory.Status, &result.CreditHistory.Data,
-		&result.Financials.Status, &result.Financials.Data)
+		&result.Financials.Status, &result.Financials.Data, &result.FinancialsSourceType)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return companydomain.Overview{}, companyerrors.ErrOverviewNotFound
 	}
@@ -65,9 +65,10 @@ func (r *CompanyRepo) SaveOverview(ctx context.Context, overview companydomain.O
 		INSERT INTO company_overviews (
 			company_id, registry_status, registry_data,
 			credit_history_status, credit_history_data,
-			financials_status, financials_data, saved_at
+			financials_status, financials_data, financials_source_type, saved_at
 		)
 		VALUES ($1, NULLIF($2, ''), $3, NULLIF($4, ''), $5, NULLIF($6, ''), $7,
+			COALESCE(NULLIF($8, ''), 'auto'),
 			CASE WHEN $3::jsonb IS NOT NULL OR $5::jsonb IS NOT NULL OR $7::jsonb IS NOT NULL
 				THEN now() END)
 		ON CONFLICT (company_id) DO UPDATE SET
@@ -86,9 +87,13 @@ func (r *CompanyRepo) SaveOverview(ctx context.Context, overview companydomain.O
 					THEN company_overviews.financials_status
 				ELSE COALESCE(EXCLUDED.financials_status, company_overviews.financials_status) END,
 			financials_data = COALESCE(EXCLUDED.financials_data, company_overviews.financials_data),
+			financials_source_type = CASE
+				WHEN EXCLUDED.financials_data IS NOT NULL THEN EXCLUDED.financials_source_type
+				ELSE company_overviews.financials_source_type END,
 			saved_at = COALESCE(EXCLUDED.saved_at, company_overviews.saved_at)`,
 		overview.CompanyID, overview.Registry.Status, registry,
 		overview.CreditHistory.Status, credit, overview.Financials.Status, financials,
+		overview.FinancialsSourceType,
 	)
 	if err != nil {
 		return fmt.Errorf("save company overview: %w", err)

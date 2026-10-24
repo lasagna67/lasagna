@@ -10,10 +10,11 @@ type SourceResult[T any] struct {
 }
 
 type Overview struct {
-	CompanyID     uuid.UUID
-	Registry      SourceResult[RegistryCard]
-	CreditHistory SourceResult[CreditReport]
-	Financials    SourceResult[FinancialReport]
+	CompanyID            uuid.UUID
+	Registry             SourceResult[RegistryCard]
+	CreditHistory        SourceResult[CreditReport]
+	Financials           SourceResult[FinancialReport]
+	FinancialsSourceType string // csv или auto
 }
 
 type CreditReport struct {
@@ -25,7 +26,8 @@ type CreditReport struct {
 }
 
 type CreditHistory struct {
-	HasCreditHistory bool   `json:"has_credit_history"`
+	// nil означает, что обязательное поле отсутствовало или было null.
+	HasCreditHistory *bool  `json:"has_credit_history"`
 	HistoryMonths    int    `json:"history_months"`
 	Loans            []Loan `json:"loans"`
 }

@@ -33,7 +33,7 @@ func (r overviewRowStub) Scan(dest ...any) error {
 	if r.err != nil {
 		return r.err
 	}
-	oids := []uint32{pgtype.UUIDOID, pgtype.TextOID, pgtype.JSONBOID, pgtype.TextOID, pgtype.JSONBOID, pgtype.TextOID, pgtype.JSONBOID}
+	oids := []uint32{pgtype.UUIDOID, pgtype.TextOID, pgtype.JSONBOID, pgtype.TextOID, pgtype.JSONBOID, pgtype.TextOID, pgtype.JSONBOID, pgtype.TextOID}
 	codec := pgtype.NewMap()
 	for i, value := range r.values {
 		if err := codec.Scan(oids[i], pgtype.TextFormatCode, value, dest[i]); err != nil {
@@ -53,9 +53,9 @@ func TestScanOverview(t *testing.T) {
 		{"full", []byte(`{"INN":"7705005410","Head":{"INN":"770586906621"}}`), []byte(`{"inn":"7705005410","report":{"loans":[{"amount":9007199254740993}]}}`), []byte(`{"inn":"7705005410","monthly_data":[{"month":"2026-09","income":9007199254740993}]}`)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			row := overviewRowStub{values: [][]byte{[]byte(id.String()), []byte("ok"), tc.registry, []byte("ok"), tc.credit, []byte("ok"), tc.financials}}
+			row := overviewRowStub{values: [][]byte{[]byte(id.String()), []byte("ok"), tc.registry, []byte("ok"), tc.credit, []byte("ok"), tc.financials, []byte("auto")}}
 			got, err := scanOverview(row)
-			if err != nil || got.CompanyID != id {
+			if err != nil || got.CompanyID != id || got.FinancialsSourceType != "auto" {
 				t.Fatalf("scan failed: %+v %v", got, err)
 			}
 			if tc.registry == nil {
@@ -104,8 +104,9 @@ func TestOverviewJSONFullData(t *testing.T) {
 		t.Fatalf("registry data lost: %s", data)
 	}
 
+	hasCreditHistory := true
 	credit := companydomain.CreditReport{BusinessID: "business", INN: registry.INN, Status: "ok", ReportDate: "2026-10-23",
-		Report: companydomain.CreditHistory{HasCreditHistory: true, HistoryMonths: 12, Loans: []companydomain.Loan{{LoanID: "loan", Amount: 9007199254740993, OverdueDays: 0}}}}
+		Report: companydomain.CreditHistory{HasCreditHistory: &hasCreditHistory, HistoryMonths: 12, Loans: []companydomain.Loan{{LoanID: "loan", Amount: 9007199254740993, OverdueDays: 0}}}}
 	data, err = overviewJSON(&credit)
 	if err != nil {
 		t.Fatal(err)
