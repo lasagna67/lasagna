@@ -749,6 +749,119 @@
                 }
             }
         },
+        "/credit-products": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает активные продукты, для которых не выявлено нарушений формальных условий. Все query-параметры необязательны: при неполных данных eligibility=needs_details, при полной проверке — eligible. Неподходящие продукты исключаются. Без параметров возвращается активный каталог с причинами недостающих данных; при отсутствии вариантов — []. Это предварительная проверка, а не кредитное решение.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "credit-products"
+                ],
+                "summary": "Подбор кредитных продуктов",
+                "parameters": [
+                    {
+                        "enum": [
+                            "working_capital",
+                            "cash_gap",
+                            "equipment",
+                            "business_start",
+                            "business_launch",
+                            "business_expansion",
+                            "refinancing",
+                            "other"
+                        ],
+                        "type": "string",
+                        "description": "Цель кредитования",
+                        "name": "purpose",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Пояснение для цели other",
+                        "name": "purpose_description",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "Сумма в копейках",
+                        "name": "amount_kopecks",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Срок аннуитетного кредита в месяцах; для овердрафта не используется",
+                        "name": "term_months",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Период отдельного транша овердрафта в днях; для аннуитетного кредита не используется",
+                        "name": "need_period_days",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "format": "date",
+                        "description": "Дата регистрации бизнеса: YYYY-MM-DD; возраст рассчитывается по дате Europe/Moscow",
+                        "name": "registration_date",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "not_supported",
+                            "optional",
+                            "required"
+                        ],
+                        "type": "string",
+                        "description": "required — с залогом, not_supported — без залога, optional — выбор ещё не сделан",
+                        "name": "collateral_mode",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/creditproducts.ProductSuggestion"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректный формат параметров или неизвестное значение перечисления",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/users": {
             "post": {
                 "description": "Заводит пользователя с ролью client и статусом active, сессию не открывает.",
@@ -1817,6 +1930,200 @@
                     "type": "integer"
                 }
             }
+        },
+        "creditproducts.CollateralMode": {
+            "type": "string",
+            "enum": [
+                "not_supported",
+                "optional",
+                "required"
+            ],
+            "x-enum-varnames": [
+                "CollateralNotSupported",
+                "CollateralOptional",
+                "CollateralRequired"
+            ]
+        },
+        "creditproducts.CreditProduct": {
+            "type": "object",
+            "properties": {
+                "base_rate": {
+                    "description": "nil — ставка не задана; её нельзя подменять нулём при расчёте платежа.",
+                    "type": "number",
+                    "example": 24
+                },
+                "code": {
+                    "type": "string",
+                    "example": "start"
+                },
+                "collateral_mode": {
+                    "enum": [
+                        "not_supported",
+                        "optional",
+                        "required"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/creditproducts.CollateralMode"
+                        }
+                    ]
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "max_amount_kopecks": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 300000000
+                },
+                "max_drawdown_days": {
+                    "description": "Для овердрафта — 60 дней на отдельный транш, для остальных продуктов — nil.",
+                    "type": "integer",
+                    "example": 60
+                },
+                "max_term_months": {
+                    "type": "integer",
+                    "example": 36
+                },
+                "min_amount_kopecks": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 10000000
+                },
+                "min_business_age_months": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "min_term_months": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Инвестиционный кредит «Старт»"
+                },
+                "purposes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/creditproducts.CreditPurpose"
+                    }
+                },
+                "repayment_type": {
+                    "enum": [
+                        "annuity",
+                        "overdraft"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/creditproducts.RepaymentType"
+                        }
+                    ]
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "creditproducts.CreditPurpose": {
+            "type": "string",
+            "enum": [
+                "working_capital",
+                "cash_gap",
+                "equipment",
+                "business_start",
+                "business_launch",
+                "business_expansion",
+                "refinancing",
+                "other"
+            ],
+            "x-enum-comments": {
+                "PurposeBusinessLaunch": "Старая цель для обратной совместимости."
+            },
+            "x-enum-descriptions": [
+                "",
+                "",
+                "",
+                "",
+                "Старая цель для обратной совместимости.",
+                "",
+                "",
+                ""
+            ],
+            "x-enum-varnames": [
+                "PurposeWorkingCapital",
+                "PurposeCashGap",
+                "PurposeEquipment",
+                "PurposeBusinessStart",
+                "PurposeBusinessLaunch",
+                "PurposeBusinessExpansion",
+                "PurposeRefinancing",
+                "PurposeOther"
+            ]
+        },
+        "creditproducts.Eligibility": {
+            "type": "string",
+            "enum": [
+                "eligible",
+                "needs_details",
+                "ineligible"
+            ],
+            "x-enum-varnames": [
+                "Eligible",
+                "NeedsDetails",
+                "Ineligible"
+            ]
+        },
+        "creditproducts.ProductSuggestion": {
+            "type": "object",
+            "properties": {
+                "eligibility": {
+                    "$ref": "#/definitions/creditproducts.Eligibility"
+                },
+                "product": {
+                    "$ref": "#/definitions/creditproducts.CreditProduct"
+                },
+                "product_code": {
+                    "type": "string"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/creditproducts.Reason"
+                    }
+                }
+            }
+        },
+        "creditproducts.Reason": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "creditproducts.RepaymentType": {
+            "type": "string",
+            "enum": [
+                "annuity",
+                "overdraft"
+            ],
+            "x-enum-varnames": [
+                "RepaymentAnnuity",
+                "RepaymentOverdraft"
+            ]
         },
         "dto.AuthResponse": {
             "type": "object",
