@@ -2,9 +2,12 @@ package scoring
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"math/bits"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -198,8 +201,8 @@ func validateOverview(o companydomain.Overview, inn string, now time.Time) Valid
 	return result
 }
 
-// NoAnomalousIncome checks for income strictly greater than three medians.
-// nil means fewer than three months, negative income or a zero median.
+// NoAnomalousIncome проверяет наличие поступлений, строго превышающих утроенную медиану.
+// nil означает историю короче трёх месяцев, отрицательные поступления или нулевую медиану.
 func NoAnomalousIncome(months []companydomain.MonthlyData) *bool {
 	if len(months) < 3 {
 		return nil
@@ -222,7 +225,7 @@ func NoAnomalousIncome(months []companydomain.MonthlyData) *bool {
 		return &clean
 	}
 	threshold := 3 * median
-	// For a half-kopeck median, floor(3 * median) has one extra kopeck.
+	// Если дробная часть медианы равна половине копейки, floor(3 * median) даёт дополнительную копейку.
 	if (upper-lower)%2 != 0 && threshold < math.MaxInt64 {
 		threshold++
 	}
@@ -230,11 +233,183 @@ func NoAnomalousIncome(months []companydomain.MonthlyData) *bool {
 	return &clean
 }
 
-// dataCurrent accepts data up to 30 days old, including the exact boundary.
-func dataCurrent(date *time.Time, now time.Time) *bool {
+// dataCurrent проверяет актуальность источника, включая точную границу допустимого возраста.
+func dataCurrent(date *time.Time, now time.Time, maxAge time.Duration) *bool {
 	if date == nil || date.IsZero() {
 		return nil
 	}
-	current := !date.After(now) && !date.Before(now.Add(-30*24*time.Hour))
+	current := !date.After(now) && !date.Before(now.Add(-maxAge))
 	return &current
+}
+
+// Срок актуальности задаётся моделью; отсутствие или некорректная дата — неизвестная актуальность.
+func creditReportCurrent(report *companydomain.CreditReport, now time.Time, maxAge time.Duration) *bool {
+	if report == nil {
+		return nil
+	}
+	day := businessDay(now)
+	date, err := time.ParseInLocation(time.DateOnly, report.ReportDate, day.Location())
+	if err != nil {
+		return nil
+	}
+	return dataCurrent(&date, day, maxAge)
+}
+
+// registrySnapshot проверяет источник и принадлежность данных компании.
+// Дополнительные требования к статусу и регистрации остаются в моделях.
+func registrySnapshot(in ScoringInput, now time.Time, maxAge time.Duration) (*companydomain.RegistryCard, bool) {
+	r := in.Overview.Registry
+	if r.Status != "ok" || r.Data == nil || in.INN == "" || r.Data.INN != in.INN {
+		return nil, false
+	}
+	fresh := dataCurrent(in.RegistrySyncedAt, now, maxAge)
+	return r.Data, fresh != nil && *fresh
+}
+
+// При чтении нормализованных снимков из JSON отличаем явно переданный ноль
+// от отсутствующей суммы. При вызове из Go значения передаёт вызывающий код.
+func (in *OverdraftInput) UnmarshalJSON(data []byte) error {
+	type input OverdraftInput
+	var decoded input
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields struct {
+		Overview struct {
+			Financials struct {
+				Data *struct {
+					Months []map[string]json.RawMessage `json:"monthly_data"`
+				}
+			}
+			CreditHistory struct {
+				Data *struct {
+					Report struct {
+						Loans []map[string]json.RawMessage `json:"loans"`
+					} `json:"report"`
+				}
+			}
+		}
+	}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	check := func(row map[string]json.RawMessage, names ...string) error {
+		for _, name := range names {
+			if value := strings.TrimSpace(string(row[name])); value == "" || value == "null" {
+				return fmt.Errorf("missing required monetary field %s", name)
+			}
+		}
+		return nil
+	}
+	if report := fields.Overview.Financials.Data; report != nil {
+		for _, row := range report.Months {
+			if err := check(row, "income", "expenses", "taxes", "owner_withdrawals"); err != nil {
+				return err
+			}
+		}
+	}
+	if report := fields.Overview.CreditHistory.Data; report != nil {
+		for _, row := range report.Report.Loans {
+			if string(row["status"]) == `"active"` {
+				if err := check(row, "monthly_payment", "outstanding_amount", "overdue_amount"); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	*in = OverdraftInput(decoded)
+	return nil
+}
+
+func overdraftMonths(in OverdraftInput, day time.Time) ([]companydomain.MonthlyData, string) {
+	r := in.Overview.Financials
+	if r.Status != "ok" || r.Data == nil {
+		return nil, "FINANCIALS_UNAVAILABLE"
+	}
+	if r.Data.Status != "ok" || in.INN == "" || r.Data.INN != in.INN || r.Data.Currency != "RUB" {
+		return nil, "FINANCIALS_INVALID"
+	}
+	monthStart := time.Date(day.Year(), day.Month(), 1, 0, 0, 0, 0, day.Location())
+	start, end := monthStart.AddDate(0, -6, 0).Format("2006-01"), monthStart.Format("2006-01")
+	months := []companydomain.MonthlyData{}
+	seen := map[string]bool{}
+	for _, m := range r.Data.MonthlyData {
+		if _, err := time.Parse("2006-01", m.Month); err != nil {
+			return nil, "FINANCIALS_INVALID"
+		}
+		if m.Month < start || m.Month >= end {
+			continue
+		}
+		if seen[m.Month] || m.Income < 0 || m.Expenses < 0 || m.Taxes < 0 || m.OwnerWithdrawals < 0 {
+			return nil, "FINANCIALS_INVALID"
+		}
+		seen[m.Month] = true
+		months = append(months, m)
+	}
+	sort.Slice(months, func(i, j int) bool { return months[i].Month < months[j].Month })
+	return months, ""
+}
+
+// Корректность проверяется отдельно от актуальности: устаревшие данные пригодны
+// для предварительного расчёта, но не для положительной публикации или автоотказа.
+func overdraftCredit(in OverdraftInput, day time.Time) (*companydomain.CreditReport, int64, string) {
+	return validatedCreditDebt(in.Overview.CreditHistory, in.INN, day)
+}
+
+func validatedCreditDebt(r companydomain.SourceResult[companydomain.CreditReport], inn string, day time.Time) (*companydomain.CreditReport, int64, string) {
+	if r.Status != "ok" || r.Data == nil {
+		return nil, 0, "BKI_UNAVAILABLE"
+	}
+	c := r.Data
+	date, err := time.ParseInLocation(time.DateOnly, c.ReportDate, day.Location())
+	if c.Status != "ok" || inn == "" || c.INN != inn || err != nil || date.After(day) || c.Report.HasCreditHistory == nil || c.Report.HistoryMonths < 0 || c.Report.Loans == nil {
+		return nil, 0, "BKI_INVALID"
+	}
+	seen := map[string]bool{}
+	obligationsUsable := true
+	for _, loan := range c.Report.Loans {
+		if strings.TrimSpace(loan.LoanID) == "" || seen[loan.LoanID] || loan.MonthlyPayment < 0 || loan.OutstandingAmount < 0 || loan.OverdueAmount < 0 || loan.OverdueDays < 0 {
+			return nil, 0, "BKI_INVALID"
+		}
+		seen[loan.LoanID] = true
+		if loan.Status != "active" && loan.Status != "closed" {
+			return nil, 0, "BKI_INVALID"
+		}
+		if loan.Status == "active" {
+			if !*c.Report.HasCreditHistory {
+				return nil, 0, "BKI_INVALID"
+			}
+			if loan.Currency != "RUB" || !slices.Contains([]string{"business_loan", "equipment_loan", "consumer_loan", "mortgage", "auto_loan"}, loan.LoanType) || (loan.OutstandingAmount > 0 && loan.MonthlyPayment == 0) {
+				obligationsUsable = false
+			}
+		}
+	}
+	if !*c.Report.HasCreditHistory && (c.Report.HistoryMonths != 0 || len(c.Report.Loans) != 0) {
+		return nil, 0, "BKI_INVALID"
+	}
+	if !obligationsUsable {
+		return c, 0, "BKI_OBLIGATIONS_INSUFFICIENT"
+	}
+	debt, err := ActiveMonthlyDebt(c.Report.Loans)
+	if err != nil {
+		return c, 0, "CALCULATION_FAILED"
+	}
+	return c, debt, ""
+}
+
+func overdraftOneOff(months []companydomain.MonthlyData) bool {
+	incomes := make([]int64, len(months))
+	for i, m := range months {
+		incomes[i] = m.Income
+	}
+	slices.Sort(incomes)
+	lower, upper := incomes[(len(incomes)-1)/2], incomes[len(incomes)/2]
+	// Удвоенная медиана чётного ряда равна точной сумме двух центральных значений.
+	sum, carry := bits.Add64(uint64(lower), uint64(upper), 0)
+	return carry == 0 && uint64(incomes[len(incomes)-1]) > sum
+}
+
+func businessDay(now time.Time) time.Time {
+	t := now.In(time.FixedZone("Europe/Moscow", 3*60*60))
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }

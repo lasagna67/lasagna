@@ -54,7 +54,7 @@ func TestDatabaseScorer(t *testing.T) {
 		}
 		return got
 	}
-	// Caller-supplied true must not hide a missing or foreign account.
+	// Переданный вызывающим кодом true не должен скрывать отсутствие счёта или его принадлежность другой компании.
 	exec(`INSERT INTO company_accounts(company_id) VALUES($1)`, foreignCompany)
 	check("account_check_missing", true)
 	exec(`INSERT INTO company_accounts(company_id,status) VALUES($1,'inactive')`, company)
@@ -100,7 +100,7 @@ func TestDatabaseScorer(t *testing.T) {
 	exec(`UPDATE companies SET registry_synced_at=$2 WHERE id=$1`, company, decisionNow.Add(-31*24*time.Hour))
 	check("registry_outdated", true)
 
-	// Only a successful registry refresh advances its synchronization timestamp.
+	// Время синхронизации реестра обновляется только после успешного получения данных.
 	repo := companyrepo.NewCompanyRepo(pool)
 	overview := in.Overview
 	overview.Registry.Data = nil

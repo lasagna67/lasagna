@@ -1,6 +1,8 @@
 package scoring
 
 import (
+	"fmt"
+	"math"
 	"slices"
 	"sort"
 	"time"
@@ -8,85 +10,10 @@ import (
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 )
 
-type DecisionState string
-
-const (
-	DecisionManualReview DecisionState = "manual_review"
-	DecisionAutoApproved DecisionState = "auto_approved"
-	DecisionAutoRejected DecisionState = "auto_rejected"
-)
-
-// ScoringInput заполняется вызывающим кодом. EvaluateApplication не обращается к БД.
-type ScoringInput struct {
-	INN              string
-	Overview         companydomain.Overview
-	Product          *ScoringProduct
-	Purpose          string
-	Amount           int64
-	TermMonths       int
-	HasCollateral    bool
-	Checks           ScoringChecks
-	RegistrySyncedAt *time.Time
-}
-
-type ScoringProduct struct {
-	Code                  string
-	Active                bool
-	Purposes              []string
-	MinAmount, MaxAmount  int64
-	MinTerm, MaxTerm      int
-	MinBusinessAgeMonths  int
-	CollateralMode        string // none/not_supported, optional, required
-	RepaymentType         string // annuity или overdraft
-	AnnualRateBasisPoints *int64 // 2400 = 24%; nil — ставка неизвестна
-}
-
-// nil — проверка не выполнена. Актуальность рассчитывается по датам данных.
-// Аномалии также проверяются по месячным данным; внешний false учитывается дополнительно.
-type ScoringChecks struct {
-	RegistryCurrent, CreditCurrent                        *bool
-	AccountActiveAndOwned                                 *bool
-	CollateralAccepted, CollateralSufficient              *bool
-	CashPlanRequired, CashPlanConfirmed, CashPlanAccepted *bool
-	NoAnomalousIncome                                     *bool
-}
-
-type MonthlyFlow struct {
-	Month string `json:"month"`
-	Value int64  `json:"value"`
-}
-
-// nil в метрике означает, что рассчитать её не удалось, а не нулевое значение.
-type DecisionMetrics struct {
-	Status            string        `json:"status"`
-	Score             *int          `json:"score"`
-	C                 *int64        `json:"c"`
-	Cs                *int64        `json:"cs"`
-	D                 *int64        `json:"d"`
-	Pmax              *int64        `json:"pmax"`
-	K                 *float64      `json:"k"`
-	Ks                *float64      `json:"ks"`
-	G                 *float64      `json:"g"`
-	F                 []MonthlyFlow `json:"f"`
-	S                 []MonthlyFlow `json:"s"`
-	Schedule          []Payment     `json:"schedule"`
-	PositiveMonths    int           `json:"positive_months"`
-	PositiveLastSix   int           `json:"positive_last_six"`
-	PositiveLastThree int           `json:"positive_last_three"`
-	CompleteLastSix   bool          `json:"complete_last_six"`
-}
-
-type ScoringDecision struct {
-	State      DecisionState    `json:"state"`
-	Metrics    DecisionMetrics  `json:"metrics"`
-	Reasons    []string         `json:"reasons"`
-	Validation ValidationResult `json:"validation"`
-}
-
-// EvaluateApplication рассчитывает метрики и выбирает маршрут. manual_review не является
+// EvaluateAnnuity рассчитывает метрики и выбирает маршрут. manual_review не является
 // одобрением сотрудника: положительное решение требует всех обязательных подтверждений.
 // Явные нарушения имеют приоритет над CSV и отсутствующими данными.
-func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
+func EvaluateAnnuity(in ScoringInput, now time.Time) ScoringDecision {
 	now = now.In(time.FixedZone("Europe/Moscow", 3*60*60))
 	result := ScoringDecision{State: DecisionManualReview, Reasons: []string{}}
 	add := func(reason string, reject bool) {
@@ -195,22 +122,13 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 					}
 				}
 			}
+			m.G = annuityIncomeTrend(months)
 			if len(months) >= 6 {
 				m.CompleteLastSix = true
-				var oldIncome, recentIncome float64
 				for i, month := range months[len(months)-6:] {
 					if month.Month != monthStart.AddDate(0, i-6, 0).Format("2006-01") {
 						m.CompleteLastSix = false
 					}
-					if i < 3 {
-						oldIncome += float64(month.Income)
-					} else {
-						recentIncome += float64(month.Income)
-					}
-				}
-				if oldIncome > 0 {
-					g := recentIncome / oldIncome
-					m.G = &g
 				}
 			}
 		}
@@ -266,17 +184,13 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 			add(failed, reject)
 		}
 	}
-	in.Checks.RegistryCurrent = dataCurrent(in.RegistrySyncedAt, now)
-	in.Checks.CreditCurrent = nil
+	registryCurrent := dataCurrent(in.RegistrySyncedAt, now, 30*24*time.Hour)
+	var creditCurrent *bool
 	if credit != nil && in.Overview.CreditHistory.Status == "ok" && credit.Status == "ok" {
-		if date, err := time.ParseInLocation("2006-01-02", credit.ReportDate, now.Location()); err == nil {
-			// report_date has no time component: compare calendar dates in Moscow.
-			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-			in.Checks.CreditCurrent = dataCurrent(&date, today)
-		}
+		creditCurrent = creditReportCurrent(credit, now, 30*24*time.Hour)
 	}
-	check(in.Checks.RegistryCurrent, "registry_freshness_unconfirmed", "registry_outdated", false)
-	check(in.Checks.CreditCurrent, "credit_freshness_unconfirmed", "credit_outdated", false)
+	check(registryCurrent, "registry_freshness_unconfirmed", "registry_outdated", false)
+	check(creditCurrent, "credit_freshness_unconfirmed", "credit_outdated", false)
 	check(in.Checks.AccountActiveAndOwned, "account_check_missing", "account_not_active_or_not_owned", true)
 	if in.HasCollateral || (in.Product != nil && in.Product.CollateralMode == "required") {
 		if !in.HasCollateral {
@@ -297,7 +211,7 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 	} else if in.Overview.FinancialsSourceType != "auto" {
 		add("financials_source_unknown", false)
 	}
-	lastMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).AddDate(0, -1, 0).Format("2006-01")
+	lastMonth := monthStart.AddDate(0, -1, 0).Format("2006-01")
 	latestPresent := false
 	if financials := in.Overview.Financials.Data; financials != nil {
 		for _, month := range financials.MonthlyData {
@@ -309,6 +223,18 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 	if !latestPresent {
 		add("latest_financial_month_missing", false)
 	}
+
+	// Условия ручного положительного решения уже проверены. CSV, короткая
+	// пригодная история и принятый обязательный план требуют только ручного маршрута.
+	result.PositiveBlockers = []string{}
+	for _, reason := range result.Reasons {
+		switch reason {
+		case ReasonFinancialHistoryUnderSixMonths, "financials_from_csv", "cash_plan_required":
+		default:
+			result.PositiveBlockers = append(result.PositiveBlockers, reason)
+		}
+	}
+	result.CanPublish = m.Status == "completed" && result.State != DecisionAutoRejected && len(result.PositiveBlockers) == 0
 
 	// Более строгие условия только для автоматического одобрения.
 	if in.Product != nil && ((in.Product.Code != "express" && in.Product.Code != "working_capital") || in.HasCollateral || in.Product.CollateralMode == "required") {
@@ -335,7 +261,7 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 		add("income_trend_below_0_8", false)
 	}
 	noAnomalies := NoAnomalousIncome(months)
-	// A confirmed external anomaly also blocks automatic approval.
+	// Аномалия, подтверждённая внешней проверкой, также блокирует автоматическое одобрение.
 	if in.Checks.NoAnomalousIncome != nil && !*in.Checks.NoAnomalousIncome {
 		noAnomalies = in.Checks.NoAnomalousIncome
 	}
@@ -350,34 +276,17 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 // k — коэффициент покрытия; history — БКИ; months — финансовые данные.
 // Динамика считается по шести последним месяцам; при меньшей истории — 0 баллов.
 func CalculateScore(k float64, history companydomain.CreditHistory, months []companydomain.MonthlyData) (int, error) {
-	positiveMonths := 0
+	positive := 0
 	for _, month := range months {
 		flow, err := MonthlyFreeCashFlow(month)
 		if err != nil {
 			return 0, err
 		}
 		if flow > 0 {
-			positiveMonths++
+			positive++
 		}
 	}
-	var g *float64
-	if len(months) >= 6 {
-		ordered := append([]companydomain.MonthlyData(nil), months...)
-		sort.Slice(ordered, func(i, j int) bool { return ordered[i].Month < ordered[j].Month })
-		var oldIncome, recentIncome float64
-		for i, month := range ordered[len(ordered)-6:] {
-			if i < 3 {
-				oldIncome += float64(month.Income)
-			} else {
-				recentIncome += float64(month.Income)
-			}
-		}
-		if oldIncome > 0 {
-			growth := recentIncome / oldIncome
-			g = &growth
-		}
-	}
-	return scorePoints(k, history, positiveMonths, len(months), g), nil
+	return scorePoints(k, history, positive, len(months), annuityIncomeTrend(months)), nil
 }
 
 // scorePoints применяет таблицы баллов к уже рассчитанным показателям.
@@ -391,32 +300,8 @@ func scorePoints(k float64, history companydomain.CreditHistory, positiveMonths,
 	case k >= 1.2:
 		paymentScore = 200
 	}
-	historyScore := 0
-	if history.HasCreditHistory != nil {
-		switch {
-		case !*history.HasCreditHistory:
-			historyScore = 150
-		case history.HistoryMonths >= 12:
-			historyScore = 300
-		case history.HistoryMonths >= 1:
-			historyScore = 200
-		}
-	}
-	for _, loan := range history.Loans {
-		if loan.Status == "active" && (loan.OverdueAmount > 0 || loan.OverdueDays > 0) {
-			historyScore = 0
-			break
-		}
-	}
-	stabilityScore := 0
-	if totalMonths > 0 {
-		switch {
-		case positiveMonths*6 >= totalMonths*5:
-			stabilityScore = 200
-		case positiveMonths*3 >= totalMonths*2:
-			stabilityScore = 100
-		}
-	}
+	historyScore := historyPoints(history)
+	stabilityScore := stabilityPoints(positiveMonths, totalMonths)
 	trendScore := 0
 	if g != nil {
 		switch {
@@ -474,4 +359,105 @@ func checkProduct(in ScoringInput, now time.Time) (failed, pending []string) {
 		pending = append(pending, "repayment_calculation_unavailable")
 	}
 	return failed, pending
+}
+
+// BuildAnnuitySchedule строит график с ежемесячным начислением процентов.
+// amount — копейки; annualRateBasisPoints — сотые процента годовых (2400 = 24%).
+// Сумма, ставка и срок передаются аргументами.
+// Проценты и регулярный платёж округляются до ближайшей копейки, половины вверх.
+// Последний платёж погашает весь остаток. Даты и дневное начисление здесь не используются.
+func BuildAnnuitySchedule(amount, annualRateBasisPoints int64, termMonths int) ([]Payment, error) {
+	if amount <= 0 || annualRateBasisPoints < 0 || termMonths <= 0 {
+		return nil, fmt.Errorf("amount and term must be positive; rate must be nonnegative")
+	}
+	rate := float64(annualRateBasisPoints) / 120000
+	regular := float64(amount) / float64(termMonths)
+	if annualRateBasisPoints > 0 {
+		// Та же аннуитетная формула, устойчивая при малой ставке.
+		regular = float64(amount) * rate / -math.Expm1(-float64(termMonths)*math.Log1p(rate))
+	}
+	regularPayment, err := roundCash(regular)
+	if err != nil {
+		return nil, err
+	}
+	balance := amount
+	schedule := make([]Payment, 0, termMonths)
+	for month := 1; month <= termMonths; month++ {
+		interest, err := roundCash(float64(balance) * rate)
+		if err != nil {
+			return nil, err
+		}
+		principal := regularPayment - interest
+		if principal < 0 {
+			return nil, fmt.Errorf("rounded payment does not cover interest")
+		}
+		if month == termMonths || principal > balance {
+			principal = balance
+		}
+		payment, err := addCash(principal, interest)
+		if err != nil {
+			return nil, err
+		}
+		balance -= principal
+		schedule = append(schedule, Payment{Month: month, Payment: payment, Interest: interest, Principal: principal, Balance: balance})
+	}
+	return schedule, nil
+}
+
+// MaximumPayment возвращает Pmax из полного графика, включая последний платёж.
+func MaximumPayment(schedule []Payment) (int64, error) {
+	if len(schedule) == 0 {
+		return 0, fmt.Errorf("repayment schedule is empty")
+	}
+	var maximum int64
+	for _, row := range schedule {
+		if row.Payment < 0 {
+			return 0, fmt.Errorf("negative scheduled payment")
+		}
+		if row.Payment > maximum {
+			maximum = row.Payment
+		}
+	}
+	return maximum, nil
+}
+
+// CoverageRatios возвращает K=C/(D+Pmax), Ks=Cs/(D+Pmax).
+func CoverageRatios(c, cs, debt, pmax int64) (k, ks float64, err error) {
+	if c < 0 || cs < 0 || debt < 0 || pmax < 0 || (debt == 0 && pmax == 0) {
+		return 0, 0, fmt.Errorf("coverage amounts must be nonnegative and total payment must be positive")
+	}
+	denominator := float64(debt) + float64(pmax)
+	return float64(c) / denominator, float64(cs) / denominator, nil
+}
+
+// roundCash применяется только к неотрицательным суммам процентов/платежей.
+func roundCash(value float64) (int64, error) {
+	rounded := math.Round(value)
+	if math.IsNaN(rounded) || rounded < 0 || rounded >= float64(math.MaxInt64) {
+		return 0, fmt.Errorf("cash amount overflows int64")
+	}
+	return int64(rounded), nil
+}
+
+// annuityIncomeTrend сравнивает три последних месяца с тремя предыдущими.
+// У овердрафта своё правило окна, поэтому оно остаётся в его модели.
+func annuityIncomeTrend(months []companydomain.MonthlyData) *float64 {
+	if len(months) < 6 {
+		return nil
+	}
+	ordered := append([]companydomain.MonthlyData(nil), months...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Month < ordered[j].Month })
+	var oldIncome, recentIncome float64
+	for i, month := range ordered[len(ordered)-6:] {
+		if i < 3 {
+			oldIncome += float64(month.Income)
+		} else {
+			recentIncome += float64(month.Income)
+		}
+	}
+	if oldIncome <= 0 {
+		return nil
+	}
+	g := recentIncome / oldIncome
+	return &g
 }
