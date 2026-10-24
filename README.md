@@ -43,4 +43,4 @@ docker compose cp demo-seed:/data/demo-businesses.json ../docs/demo-businesses.j
 docker compose run --rm --no-deps staff-seed
 ```
 
-Сотрудник работает с очередью `/api/v0/underwriter/applications`, договоры к предложениям лежат в бакете MinIO `documents`. Подробнее — [backend/internal/review/.md](backend/internal/review/.md).
+Сотрудник работает с очередью `/api/v0/underwriter/applications`, договоры к предложениям лежат в бакете MinIO `documents`. Подробнее — [backend/internal/underwriting/.md](backend/internal/underwriting/.md).

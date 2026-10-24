@@ -1032,25 +1032,7 @@ definitions:
         example: 3
         type: integer
     type: object
-  reviewdto.AnswerInfoRequest:
-    properties:
-      answer:
-        example: Счёт поставщика приложили, стоимость 3 млн
-        type: string
-      expected_revision:
-        example: 6
-        type: integer
-    type: object
-  reviewdto.ApplicationPageResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/reviewdto.UnderwriterApplicationResponse'
-        type: array
-      next_cursor:
-        type: string
-    type: object
-  reviewdto.ContractResponse:
+  offerdto.ContractResponse:
     properties:
       content_sha256:
         type: string
@@ -1077,107 +1059,7 @@ definitions:
         example: 1
         type: integer
     type: object
-  reviewdto.DecisionRequest:
-    properties:
-      comment:
-        description: внутренний, клиенту не показывается
-        type: string
-      expected_revision:
-        example: 5
-        type: integer
-      outcome:
-        enum:
-        - approved
-        - counter_offer
-        - rejected
-        example: approved
-        type: string
-      reason_code:
-        example: HIGH_DEBT_LOAD
-        type: string
-      reasons:
-        items:
-          type: string
-        type: array
-      terms:
-        $ref: '#/definitions/reviewdto.TermsRequest'
-    type: object
-  reviewdto.DecisionResponse:
-    properties:
-      comment:
-        type: string
-      contract:
-        $ref: '#/definitions/reviewdto.ContractResponse'
-      created_at:
-        type: string
-      decided_by:
-        format: uuid
-        type: string
-      id:
-        format: uuid
-        type: string
-      offer:
-        $ref: '#/definitions/reviewdto.OfferResponse'
-      outcome:
-        enum:
-        - approved
-        - counter_offer
-        - rejected
-        type: string
-      reason_code:
-        type: string
-      reasons:
-        items:
-          type: string
-        type: array
-      version:
-        type: integer
-    type: object
-  reviewdto.EventResponse:
-    properties:
-      actor_id:
-        format: uuid
-        type: string
-      created_at:
-        type: string
-      from_status:
-        type: string
-      id:
-        type: integer
-      message:
-        type: string
-      to_status:
-        type: string
-      type:
-        enum:
-        - status_changed
-        type: string
-    type: object
-  reviewdto.InfoRequestResponse:
-    properties:
-      answer:
-        type: string
-      answered_at:
-        type: string
-      editable_fields:
-        items:
-          type: string
-        type: array
-      id:
-        format: uuid
-        type: string
-      message:
-        type: string
-      requested_at:
-        type: string
-      status:
-        enum:
-        - open
-        - answered
-        - cancelled
-        type: string
-    type: object
-  reviewdto.OfferResponse:
+  offerdto.OfferResponse:
     properties:
       agreement_term_months:
         type: integer
@@ -1232,7 +1114,131 @@ definitions:
         example: 1
         type: integer
     type: object
-  reviewdto.RequestInfoRequest:
+  swagger.HTTPError:
+    properties:
+      message:
+        example: Неверный email или пароль
+        type: string
+    type: object
+  underwritingdto.AnswerInfoRequest:
+    properties:
+      answer:
+        example: Счёт поставщика приложили, стоимость 3 млн
+        type: string
+      expected_revision:
+        example: 6
+        type: integer
+    type: object
+  underwritingdto.ApplicationPageResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/underwritingdto.UnderwriterApplicationResponse'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  underwritingdto.DecisionRequest:
+    properties:
+      comment:
+        description: внутренний, клиенту не показывается
+        type: string
+      expected_revision:
+        example: 5
+        type: integer
+      outcome:
+        enum:
+        - approved
+        - counter_offer
+        - rejected
+        example: approved
+        type: string
+      reason_code:
+        example: HIGH_DEBT_LOAD
+        type: string
+      reasons:
+        items:
+          type: string
+        type: array
+      terms:
+        $ref: '#/definitions/underwritingdto.TermsRequest'
+    type: object
+  underwritingdto.DecisionResponse:
+    properties:
+      comment:
+        type: string
+      contract:
+        $ref: '#/definitions/offerdto.ContractResponse'
+      created_at:
+        type: string
+      decided_by:
+        format: uuid
+        type: string
+      id:
+        format: uuid
+        type: string
+      offer:
+        $ref: '#/definitions/offerdto.OfferResponse'
+      outcome:
+        enum:
+        - approved
+        - counter_offer
+        - rejected
+        type: string
+      reason_code:
+        type: string
+      reasons:
+        items:
+          type: string
+        type: array
+      version:
+        type: integer
+    type: object
+  underwritingdto.EventResponse:
+    properties:
+      actor_id:
+        format: uuid
+        type: string
+      created_at:
+        type: string
+      from_status:
+        type: string
+      id:
+        type: integer
+      message:
+        type: string
+      to_status:
+        type: string
+      type:
+        enum:
+        - status_changed
+        type: string
+    type: object
+  underwritingdto.InfoRequestResponse:
+    properties:
+      answer:
+        type: string
+      answered_at:
+        type: string
+      editable_fields:
+        items:
+          type: string
+        type: array
+      id:
+        format: uuid
+        type: string
+      message:
+        type: string
+      requested_at:
+        type: string
+      status:
+        enum:
+        - open
+        - answered
+        - cancelled
+        type: string
+    type: object
+  underwritingdto.RequestInfoRequest:
     properties:
       editable_fields:
         example:
@@ -1248,7 +1254,7 @@ definitions:
         example: Уточните стоимость оборудования и приложите счёт поставщика
         type: string
     type: object
-  reviewdto.RetryChecksRequest:
+  underwritingdto.RetryChecksRequest:
     properties:
       expected_revision:
         example: 5
@@ -1264,7 +1270,7 @@ definitions:
           type: string
         type: array
     type: object
-  reviewdto.ReviewApplicationResponse:
+  underwritingdto.ReviewApplicationResponse:
     properties:
       applicant:
         $ref: '#/definitions/applicationdto.ApplicantResponse'
@@ -1288,7 +1294,7 @@ definitions:
         type: object
       collateral_reviews:
         items:
-          $ref: '#/definitions/reviewdto.StaffCollateralReviewResponse'
+          $ref: '#/definitions/underwritingdto.StaffCollateralReviewResponse'
         type: array
       company:
         $ref: '#/definitions/applicationdto.CompanyCardResponse'
@@ -1306,7 +1312,7 @@ definitions:
         type: array
       decisions:
         items:
-          $ref: '#/definitions/reviewdto.DecisionResponse'
+          $ref: '#/definitions/underwritingdto.DecisionResponse'
         type: array
       editable_fields:
         example:
@@ -1319,7 +1325,7 @@ definitions:
         $ref: '#/definitions/applicationdto.FinancialStateResponse'
       history:
         items:
-          $ref: '#/definitions/reviewdto.EventResponse'
+          $ref: '#/definitions/underwritingdto.EventResponse'
         type: array
       id:
         example: 3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13
@@ -1327,7 +1333,7 @@ definitions:
         type: string
       info_requests:
         items:
-          $ref: '#/definitions/reviewdto.InfoRequestResponse'
+          $ref: '#/definitions/underwritingdto.InfoRequestResponse'
         type: array
       issue:
         type: object
@@ -1368,13 +1374,13 @@ definitions:
       updated_at:
         type: string
     type: object
-  reviewdto.RevisionRequest:
+  underwritingdto.RevisionRequest:
     properties:
       expected_revision:
         example: 5
         type: integer
     type: object
-  reviewdto.StaffCollateralReviewResponse:
+  underwritingdto.StaffCollateralReviewResponse:
     properties:
       accepted_value_kopecks:
         type: integer
@@ -1401,7 +1407,7 @@ definitions:
       version:
         type: integer
     type: object
-  reviewdto.TermsRequest:
+  underwritingdto.TermsRequest:
     properties:
       agreement_term_months:
         type: integer
@@ -1427,7 +1433,7 @@ definitions:
       valid_until:
         type: string
     type: object
-  reviewdto.UnderwriterApplicationResponse:
+  underwritingdto.UnderwriterApplicationResponse:
     properties:
       applicant:
         $ref: '#/definitions/applicationdto.ApplicantResponse'
@@ -1509,12 +1515,6 @@ definitions:
       submitted_at:
         type: string
       updated_at:
-        type: string
-    type: object
-  swagger.HTTPError:
-    properties:
-      message:
-        example: Неверный email или пароль
         type: string
     type: object
   userdto.CreateClientRequest:
@@ -1715,7 +1715,7 @@ paths:
         "200":
           description: null — договора нет
           schema:
-            $ref: '#/definitions/reviewdto.ContractResponse'
+            $ref: '#/definitions/offerdto.ContractResponse'
         "404":
           description: NOT_FOUND
           schema:
@@ -1741,7 +1741,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/reviewdto.InfoRequestResponse'
+              $ref: '#/definitions/underwritingdto.InfoRequestResponse'
             type: array
         "401":
           description: Unauthorized
@@ -1780,7 +1780,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/reviewdto.AnswerInfoRequest'
+          $ref: '#/definitions/underwritingdto.AnswerInfoRequest'
       produces:
       - application/json
       responses:
@@ -1824,7 +1824,7 @@ paths:
         "200":
           description: null — предложения нет
           schema:
-            $ref: '#/definitions/reviewdto.OfferResponse'
+            $ref: '#/definitions/offerdto.OfferResponse'
         "404":
           description: NOT_FOUND
           schema:
@@ -2626,7 +2626,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ApplicationPageResponse'
+            $ref: '#/definitions/underwritingdto.ApplicationPageResponse'
         "400":
           description: INVALID_REQUEST
           schema:
@@ -2662,7 +2662,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
         "401":
           description: Unauthorized
           schema:
@@ -2759,14 +2759,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/reviewdto.DecisionRequest'
+          $ref: '#/definitions/underwritingdto.DecisionRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
         "400":
           description: INVALID_REQUEST
           schema:
@@ -2815,14 +2815,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/reviewdto.RequestInfoRequest'
+          $ref: '#/definitions/underwritingdto.RequestInfoRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
         "400":
           description: INVALID_REQUEST
           schema:
@@ -2867,14 +2867,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/reviewdto.RetryChecksRequest'
+          $ref: '#/definitions/underwritingdto.RetryChecksRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
         "400":
           description: INVALID_REQUEST
           schema:
@@ -2923,14 +2923,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/reviewdto.RevisionRequest'
+          $ref: '#/definitions/underwritingdto.RevisionRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
         "400":
           description: INVALID_REQUEST
           schema:

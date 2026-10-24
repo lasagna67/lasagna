@@ -202,7 +202,7 @@
                     "200": {
                         "description": "null — договора нет",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ContractResponse"
+                            "$ref": "#/definitions/offerdto.ContractResponse"
                         }
                     },
                     "404": {
@@ -244,7 +244,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/reviewdto.InfoRequestResponse"
+                                "$ref": "#/definitions/underwritingdto.InfoRequestResponse"
                             }
                         }
                     },
@@ -304,7 +304,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.AnswerInfoRequest"
+                            "$ref": "#/definitions/underwritingdto.AnswerInfoRequest"
                         }
                     }
                 ],
@@ -370,7 +370,7 @@
                     "200": {
                         "description": "null — предложения нет",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.OfferResponse"
+                            "$ref": "#/definitions/offerdto.OfferResponse"
                         }
                     },
                     "404": {
@@ -1546,7 +1546,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ApplicationPageResponse"
+                            "$ref": "#/definitions/underwritingdto.ApplicationPageResponse"
                         }
                     },
                     "400": {
@@ -1599,7 +1599,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
                         }
                     },
                     "401": {
@@ -1739,7 +1739,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.DecisionRequest"
+                            "$ref": "#/definitions/underwritingdto.DecisionRequest"
                         }
                     }
                 ],
@@ -1747,7 +1747,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
                         }
                     },
                     "400": {
@@ -1822,7 +1822,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.RequestInfoRequest"
+                            "$ref": "#/definitions/underwritingdto.RequestInfoRequest"
                         }
                     }
                 ],
@@ -1830,7 +1830,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
                         }
                     },
                     "400": {
@@ -1899,7 +1899,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.RetryChecksRequest"
+                            "$ref": "#/definitions/underwritingdto.RetryChecksRequest"
                         }
                     }
                 ],
@@ -1907,7 +1907,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
                         }
                     },
                     "400": {
@@ -1982,7 +1982,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.RevisionRequest"
+                            "$ref": "#/definitions/underwritingdto.RevisionRequest"
                         }
                     }
                 ],
@@ -1990,7 +1990,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
                         }
                     },
                     "400": {
@@ -3667,34 +3667,7 @@
                 }
             }
         },
-        "reviewdto.AnswerInfoRequest": {
-            "type": "object",
-            "properties": {
-                "answer": {
-                    "type": "string",
-                    "example": "Счёт поставщика приложили, стоимость 3 млн"
-                },
-                "expected_revision": {
-                    "type": "integer",
-                    "example": 6
-                }
-            }
-        },
-        "reviewdto.ApplicationPageResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/reviewdto.UnderwriterApplicationResponse"
-                    }
-                },
-                "next_cursor": {
-                    "type": "string"
-                }
-            }
-        },
-        "reviewdto.ContractResponse": {
+        "offerdto.ContractResponse": {
             "type": "object",
             "properties": {
                 "content_sha256": {
@@ -3732,152 +3705,7 @@
                 }
             }
         },
-        "reviewdto.DecisionRequest": {
-            "type": "object",
-            "properties": {
-                "comment": {
-                    "description": "внутренний, клиенту не показывается",
-                    "type": "string"
-                },
-                "expected_revision": {
-                    "type": "integer",
-                    "example": 5
-                },
-                "outcome": {
-                    "type": "string",
-                    "enum": [
-                        "approved",
-                        "counter_offer",
-                        "rejected"
-                    ],
-                    "example": "approved"
-                },
-                "reason_code": {
-                    "type": "string",
-                    "example": "HIGH_DEBT_LOAD"
-                },
-                "reasons": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "terms": {
-                    "$ref": "#/definitions/reviewdto.TermsRequest"
-                }
-            }
-        },
-        "reviewdto.DecisionResponse": {
-            "type": "object",
-            "properties": {
-                "comment": {
-                    "type": "string"
-                },
-                "contract": {
-                    "$ref": "#/definitions/reviewdto.ContractResponse"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "decided_by": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "offer": {
-                    "$ref": "#/definitions/reviewdto.OfferResponse"
-                },
-                "outcome": {
-                    "type": "string",
-                    "enum": [
-                        "approved",
-                        "counter_offer",
-                        "rejected"
-                    ]
-                },
-                "reason_code": {
-                    "type": "string"
-                },
-                "reasons": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "version": {
-                    "type": "integer"
-                }
-            }
-        },
-        "reviewdto.EventResponse": {
-            "type": "object",
-            "properties": {
-                "actor_id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "from_status": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "to_status": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "status_changed"
-                    ]
-                }
-            }
-        },
-        "reviewdto.InfoRequestResponse": {
-            "type": "object",
-            "properties": {
-                "answer": {
-                    "type": "string"
-                },
-                "answered_at": {
-                    "type": "string"
-                },
-                "editable_fields": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "requested_at": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string",
-                    "enum": [
-                        "open",
-                        "answered",
-                        "cancelled"
-                    ]
-                }
-            }
-        },
-        "reviewdto.OfferResponse": {
+        "offerdto.OfferResponse": {
             "type": "object",
             "properties": {
                 "agreement_term_months": {
@@ -3955,7 +3783,188 @@
                 }
             }
         },
-        "reviewdto.RequestInfoRequest": {
+        "swagger.HTTPError": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "Неверный email или пароль"
+                }
+            }
+        },
+        "underwritingdto.AnswerInfoRequest": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string",
+                    "example": "Счёт поставщика приложили, стоимость 3 млн"
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 6
+                }
+            }
+        },
+        "underwritingdto.ApplicationPageResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/underwritingdto.UnderwriterApplicationResponse"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "underwritingdto.DecisionRequest": {
+            "type": "object",
+            "properties": {
+                "comment": {
+                    "description": "внутренний, клиенту не показывается",
+                    "type": "string"
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "outcome": {
+                    "type": "string",
+                    "enum": [
+                        "approved",
+                        "counter_offer",
+                        "rejected"
+                    ],
+                    "example": "approved"
+                },
+                "reason_code": {
+                    "type": "string",
+                    "example": "HIGH_DEBT_LOAD"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "terms": {
+                    "$ref": "#/definitions/underwritingdto.TermsRequest"
+                }
+            }
+        },
+        "underwritingdto.DecisionResponse": {
+            "type": "object",
+            "properties": {
+                "comment": {
+                    "type": "string"
+                },
+                "contract": {
+                    "$ref": "#/definitions/offerdto.ContractResponse"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "decided_by": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "offer": {
+                    "$ref": "#/definitions/offerdto.OfferResponse"
+                },
+                "outcome": {
+                    "type": "string",
+                    "enum": [
+                        "approved",
+                        "counter_offer",
+                        "rejected"
+                    ]
+                },
+                "reason_code": {
+                    "type": "string"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "underwritingdto.EventResponse": {
+            "type": "object",
+            "properties": {
+                "actor_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "from_status": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "to_status": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "status_changed"
+                    ]
+                }
+            }
+        },
+        "underwritingdto.InfoRequestResponse": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                },
+                "answered_at": {
+                    "type": "string"
+                },
+                "editable_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "requested_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "open",
+                        "answered",
+                        "cancelled"
+                    ]
+                }
+            }
+        },
+        "underwritingdto.RequestInfoRequest": {
             "type": "object",
             "properties": {
                 "editable_fields": {
@@ -3978,7 +3987,7 @@
                 }
             }
         },
-        "reviewdto.RetryChecksRequest": {
+        "underwritingdto.RetryChecksRequest": {
             "type": "object",
             "properties": {
                 "expected_revision": {
@@ -4001,7 +4010,7 @@
                 }
             }
         },
-        "reviewdto.ReviewApplicationResponse": {
+        "underwritingdto.ReviewApplicationResponse": {
             "type": "object",
             "properties": {
                 "applicant": {
@@ -4035,7 +4044,7 @@
                 "collateral_reviews": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/reviewdto.StaffCollateralReviewResponse"
+                        "$ref": "#/definitions/underwritingdto.StaffCollateralReviewResponse"
                     }
                 },
                 "company": {
@@ -4061,7 +4070,7 @@
                 "decisions": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/reviewdto.DecisionResponse"
+                        "$ref": "#/definitions/underwritingdto.DecisionResponse"
                     }
                 },
                 "editable_fields": {
@@ -4080,7 +4089,7 @@
                 "history": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/reviewdto.EventResponse"
+                        "$ref": "#/definitions/underwritingdto.EventResponse"
                     }
                 },
                 "id": {
@@ -4091,7 +4100,7 @@
                 "info_requests": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/reviewdto.InfoRequestResponse"
+                        "$ref": "#/definitions/underwritingdto.InfoRequestResponse"
                     }
                 },
                 "issue": {
@@ -4145,7 +4154,7 @@
                 }
             }
         },
-        "reviewdto.RevisionRequest": {
+        "underwritingdto.RevisionRequest": {
             "type": "object",
             "properties": {
                 "expected_revision": {
@@ -4154,7 +4163,7 @@
                 }
             }
         },
-        "reviewdto.StaffCollateralReviewResponse": {
+        "underwritingdto.StaffCollateralReviewResponse": {
             "type": "object",
             "properties": {
                 "accepted_value_kopecks": {
@@ -4193,7 +4202,7 @@
                 }
             }
         },
-        "reviewdto.TermsRequest": {
+        "underwritingdto.TermsRequest": {
             "type": "object",
             "properties": {
                 "agreement_term_months": {
@@ -4230,7 +4239,7 @@
                 }
             }
         },
-        "reviewdto.UnderwriterApplicationResponse": {
+        "underwritingdto.UnderwriterApplicationResponse": {
             "type": "object",
             "properties": {
                 "applicant": {
@@ -4341,15 +4350,6 @@
                 },
                 "updated_at": {
                     "type": "string"
-                }
-            }
-        },
-        "swagger.HTTPError": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "example": "Неверный email или пароль"
                 }
             }
         },

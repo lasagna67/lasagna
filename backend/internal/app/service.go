@@ -7,11 +7,13 @@ import (
 	companyservice "github.com/lasagna67/lasagna.git/internal/company/service"
 	"github.com/lasagna67/lasagna.git/internal/config"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
+	documentservice "github.com/lasagna67/lasagna.git/internal/document/service"
 	financialscsvservice "github.com/lasagna67/lasagna.git/internal/financials-csv/service"
 	intakeservice "github.com/lasagna67/lasagna.git/internal/intake/service"
-	reviewcontract "github.com/lasagna67/lasagna.git/internal/review/contract"
-	reviewservice "github.com/lasagna67/lasagna.git/internal/review/service"
+	offercontract "github.com/lasagna67/lasagna.git/internal/offer/contract"
+	offerservice "github.com/lasagna67/lasagna.git/internal/offer/service"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
+	underwritingservice "github.com/lasagna67/lasagna.git/internal/underwriting/service"
 	userservice "github.com/lasagna67/lasagna.git/internal/user/service"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 )
@@ -26,7 +28,9 @@ type Service struct {
 	Scoring        *scoring.Scorer
 	Intake         *intakeservice.ApplicationService
 	CreditProducts *creditproducts.Service
-	Review         *reviewservice.Service
+	Underwriting   *underwritingservice.Service
+	Offer          *offerservice.Service
+	Document       *documentservice.Service
 }
 
 func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service, error) {
@@ -58,19 +62,19 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		return nil, err
 	}
 
-	contracts, err := reviewcontract.New()
+	contracts, err := offercontract.New()
 	if err != nil {
 		return nil, err
 	}
 	// Passthrough — пока конвейер проверок не подключён модулем scoring.
-	// Запускает его intake после отправки, повтор источников — review.
-	pipeline := reviewservice.NewPassthrough(repo.Review)
-	review := reviewservice.New(reviewservice.Deps{
-		Repo:      repo.Review,
-		Checks:    repo.ReviewChecks,
+	// Запускает его intake после отправки, повтор источников — underwriting.
+	pipeline := underwritingservice.NewPassthrough(repo.Underwriting)
+	underwriting := underwritingservice.New(underwritingservice.Deps{
+		Repo:      repo.Underwriting,
+		Checks:    repo.Checks,
 		Overviews: repo.Companies,
 		Companies: company,
-		Storage:   repo.Documents,
+		Storage:   repo.Files,
 		Contracts: contracts,
 		Pipeline:  pipeline,
 	})
@@ -90,6 +94,8 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Scoring:        repo.Scoring,
 		Intake:         intake,
 		CreditProducts: products,
-		Review:         review,
+		Underwriting:   underwriting,
+		Offer:          offerservice.New(repo.Offers, company),
+		Document:       documentservice.New(repo.Documents, repo.Files, company),
 	}, nil
 }

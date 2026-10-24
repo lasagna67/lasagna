@@ -11,9 +11,11 @@ import (
 	companyhandler "github.com/lasagna67/lasagna.git/internal/company/handler"
 	"github.com/lasagna67/lasagna.git/internal/config"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
+	documenthandler "github.com/lasagna67/lasagna.git/internal/document/handler"
 	financialscsvhandler "github.com/lasagna67/lasagna.git/internal/financials-csv/handler"
 	intakehandler "github.com/lasagna67/lasagna.git/internal/intake/handler"
-	reviewhandler "github.com/lasagna67/lasagna.git/internal/review/handler"
+	offerhandler "github.com/lasagna67/lasagna.git/internal/offer/handler"
+	underwritinghandler "github.com/lasagna67/lasagna.git/internal/underwriting/handler"
 	userhandler "github.com/lasagna67/lasagna.git/internal/user/handler"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
 	"github.com/lasagna67/lasagna.git/pkg/server"
@@ -49,11 +51,17 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 	products := creditproducts.NewHandler(services.CreditProducts, logger.Named("credit-products"))
 	products.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 
-	review := reviewhandler.New(services.Review, logger.Named("review"))
-	review.RegisterRoutes(api, auth.Authenticate,
+	underwriting := underwritinghandler.New(services.Underwriting, logger.Named("underwriting"))
+	underwriting.RegisterRoutes(api, auth.Authenticate,
 		auth.RequireRole(authdomain.RoleClient),
 		auth.RequireRole(authdomain.RoleUnderwriter, authdomain.RoleAdmin),
 	)
+
+	offers := offerhandler.New(services.Offer, logger.Named("offer"))
+	offers.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
+
+	documents := documenthandler.New(services.Document, logger.Named("document"))
+	documents.RegisterRoutes(api, auth.Authenticate)
 
 	return &Delivery{
 		server: srv,

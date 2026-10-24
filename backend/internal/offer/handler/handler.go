@@ -1,0 +1,137 @@
+package offerhandler
+
+import (
+	"context"
+	"errors"
+	"net/http"
+
+	"github.com/google/uuid"
+	"github.com/labstack/echo/v5"
+	applicationdto "github.com/lasagna67/lasagna.git/internal/application/dto"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	authdomain "github.com/lasagna67/lasagna.git/internal/auth/domain"
+	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
+	offerdto "github.com/lasagna67/lasagna.git/internal/offer/dto"
+	"github.com/lasagna67/lasagna.git/pkg/logger"
+)
+
+type Service interface {
+	Offer(ctx context.Context, userID, applicationID uuid.UUID) (*offerdomain.Decision, error)
+}
+
+type Handler struct {
+	service Service
+	logger  *logger.Logger
+}
+
+func New(service Service, logger *logger.Logger) *Handler {
+	return &Handler{service: service, logger: logger}
+}
+
+// RegisterRoutes: предложение и договор — клиенту; файл договора отдаёт модуль document.
+func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, clientOnly echo.MiddlewareFunc) {
+	client := api.Group("/applications", authenticate, clientOnly)
+	client.GET("/:id/offer", h.offer)
+	client.GET("/:id/contract", h.contract)
+}
+
+// offer godoc
+//
+//	@Summary	Текущее предложение
+//	@Tags		applications
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path		string	true	"Заявка"	format(uuid)
+//	@Success	200	{object}	offerdto.OfferResponse	"null — предложения нет"
+//	@Failure	404	{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Router		/applications/{id}/offer [get]
+func (h *Handler) offer(c *echo.Context) error {
+	userID, id, err := clientTarget(c)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	offer, err := h.service.Offer(c.Request().Context(), userID, id)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	if offer == nil {
+		return c.JSON(http.StatusOK, nil)
+	}
+	return c.JSON(http.StatusOK, offerdto.NewOffer(*offer))
+}
+
+// contract godoc
+//
+//	@Summary		Договор к предложению
+//	@Description	Метаданные; файл — GET /documents/{id}/content с id договора.
+//	@Tags			applications
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string	true	"Заявка"	format(uuid)
+//	@Success		200	{object}	offerdto.ContractResponse	"null — договора нет"
+//	@Failure		404	{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Router			/applications/{id}/contract [get]
+func (h *Handler) contract(c *echo.Context) error {
+	userID, id, err := clientTarget(c)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	offer, err := h.service.Offer(c.Request().Context(), userID, id)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	if offer == nil || offer.Contract == nil {
+		return c.JSON(http.StatusOK, nil)
+	}
+	return c.JSON(http.StatusOK, offerdto.NewContract(offer.Contract))
+}
+
+//============================================================================================
+
+var errUnauthenticated = errors.New("unauthenticated")
+
+// clientTarget — пользователь из токена и заявка из пути. Некорректный id
+// неотличим от несуществующей заявки.
+func clientTarget(c *echo.Context) (uuid.UUID, uuid.UUID, error) {
+	claims, ok := authdomain.GetClaims(c.Request().Context())
+	if !ok {
+		return uuid.Nil, uuid.Nil, errUnauthenticated
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return uuid.Nil, uuid.Nil, applicationerrors.ErrNotFound
+	}
+	return claims.UserID, id, nil
+}
+
+// fail переводит ошибку сервиса в ответ общего формата. 5xx логируются,
+// клиенту уходит только общий текст.
+func (h *Handler) fail(c *echo.Context, err error) error {
+	switch {
+	case errors.Is(err, errUnauthenticated):
+		return h.respond(c, http.StatusUnauthorized, "UNAUTHENTICATED", "Требуется авторизация")
+	case errors.Is(err, applicationerrors.ErrNotFound):
+		return h.respond(c, http.StatusNotFound, "NOT_FOUND", "Заявка не найдена")
+	default:
+		h.logger.Error("offer request failed",
+			"err", err,
+			"request_id", requestID(c),
+			"application_id", c.Param("id"),
+			"method", c.Request().Method,
+			"path", c.Request().URL.Path,
+		)
+		return h.respond(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Внутренняя ошибка сервера")
+	}
+}
+
+func (h *Handler) respond(c *echo.Context, status int, code, message string) error {
+	return c.JSON(status, applicationdto.NewErrorResponse(code, message, requestID(c), nil))
+}
+
+// requestID — id запроса от middleware RequestID или прокси; пусто, если его нет.
+func requestID(c *echo.Context) string {
+	if id := c.Response().Header().Get(echo.HeaderXRequestID); id != "" {
+		return id
+	}
+	return c.Request().Header.Get(echo.HeaderXRequestID)
+}

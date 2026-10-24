@@ -15,7 +15,7 @@ import (
 )
 
 // SelectDetails — заявка с карточками компании и заявителя; читается ScanDetails.
-// Экспортирован для модуля review: заявку он читает так же.
+// Экспортирован для модуля underwriting: заявку он читает так же.
 const SelectDetails = `SELECT ` + detailsColumns + ` ` + detailsFrom
 
 const detailsColumns = `a.id, a.number, a.revision, a.company_id, a.applicant_id, a.status,
