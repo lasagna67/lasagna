@@ -7,6 +7,7 @@ CREATE TYPE credit_purpose AS ENUM (
     'cash_gap',
     'equipment',
     'business_launch',
+    'business_start',
     'business_expansion',
     'refinancing',
     'other'

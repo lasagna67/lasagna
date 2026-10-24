@@ -350,6 +350,255 @@ definitions:
         - unavailable
         type: string
     type: object
+  creditdto.ApplicantResponse:
+    properties:
+      display_name:
+        example: Кедрова Анна Викторовна
+        type: string
+      id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+    type: object
+  creditdto.ApplicationResponse:
+    properties:
+      applicant:
+        $ref: '#/definitions/creditdto.ApplicantResponse'
+      applicant_id:
+        example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+        format: uuid
+        type: string
+      available_actions:
+        example:
+        - edit
+        - fetch_financials
+        - submit
+        items:
+          type: string
+        type: array
+      checks:
+        type: object
+      collateral:
+        type: object
+      company:
+        $ref: '#/definitions/creditdto.CompanyCardResponse'
+      company_id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+      contract:
+        type: object
+      created_at:
+        type: string
+      editable_fields:
+        example:
+        - request.amount_kopecks
+        - request.product_code
+        items:
+          type: string
+        type: array
+      financials:
+        $ref: '#/definitions/creditdto.FinancialStateResponse'
+      id:
+        example: 3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13
+        format: uuid
+        type: string
+      issue:
+        type: object
+      number:
+        example: 1000
+        type: integer
+      offer:
+        type: object
+      product_details:
+        type: object
+      request:
+        $ref: '#/definitions/creditdto.RequestResponse'
+      revision:
+        example: 1
+        type: integer
+      scoring:
+        type: object
+      status:
+        enum:
+        - draft
+        - submitted
+        - validation
+        - enrichment
+        - scoring
+        - manual_review
+        - info_requested
+        - approved
+        - counter_offer
+        - signing
+        - issued
+        - rejected
+        - cancelled
+        - expired
+        example: draft
+        type: string
+      submitted_at:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  creditdto.CompanyCardResponse:
+    properties:
+      id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+      inn:
+        example: "7705005410"
+        type: string
+      name:
+        example: ООО «Кедровый контур Демо»
+        type: string
+    type: object
+  creditdto.CreateApplicationRequest:
+    properties:
+      company_id:
+        example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
+        format: uuid
+        type: string
+    type: object
+  creditdto.ErrorBody:
+    properties:
+      code:
+        enum:
+        - INVALID_REQUEST
+        - UNAUTHENTICATED
+        - FORBIDDEN
+        - NOT_FOUND
+        - REVISION_CONFLICT
+        - INVALID_STATE
+        - CSV_NOT_ALLOWED
+        - OFFER_CHANGED
+        - IDEMPOTENCY_CONFLICT
+        - VALIDATION_FAILED
+        - INVALID_CSV
+        - SERVICE_UNAVAILABLE
+        - INTERNAL_ERROR
+        example: VALIDATION_FAILED
+        type: string
+      field_errors:
+        items:
+          $ref: '#/definitions/creditdto.FieldErrorResponse'
+        type: array
+      message:
+        example: Исправьте поля
+        type: string
+    type: object
+  creditdto.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/creditdto.ErrorBody'
+      request_id:
+        type: string
+    type: object
+  creditdto.FieldErrorResponse:
+    properties:
+      code:
+        example: REQUIRED
+        type: string
+      field:
+        example: company_id
+        type: string
+      message:
+        example: Выберите компанию
+        type: string
+    type: object
+  creditdto.FinancialStateResponse:
+    properties:
+      allow_csv_upload:
+        example: false
+        type: boolean
+      data_status:
+        enum:
+        - missing
+        - ready
+        - no_history
+        example: missing
+        type: string
+      issues:
+        items:
+          $ref: '#/definitions/creditdto.IssueResponse'
+        type: array
+      revision:
+        example: 1
+        type: integer
+      snapshot:
+        type: object
+      source_status:
+        enum:
+        - not_requested
+        - ok
+        - not_found
+        - unavailable
+        - invalid
+        example: not_requested
+        type: string
+      source_type:
+        enum:
+        - automatic
+        - csv
+        type: string
+    type: object
+  creditdto.IssueResponse:
+    properties:
+      code:
+        type: string
+      field:
+        type: string
+      message:
+        type: string
+    type: object
+  creditdto.NeedPeriodResponse:
+    properties:
+      unit:
+        enum:
+        - months
+        - days
+        - unknown
+        example: unknown
+        type: string
+      value:
+        type: integer
+    type: object
+  creditdto.RequestResponse:
+    properties:
+      amount_kopecks:
+        type: integer
+      collateral_mode:
+        enum:
+        - none
+        - pledged
+        example: none
+        type: string
+      need_period:
+        $ref: '#/definitions/creditdto.NeedPeriodResponse'
+      product_code:
+        enum:
+        - express
+        - overdraft
+        - working_capital
+        - equipment
+        - start
+        type: string
+      purpose:
+        enum:
+        - working_capital
+        - cash_gap
+        - equipment
+        - business_start
+        - business_expansion
+        - other
+        type: string
+      purpose_description:
+        type: string
+      term_months:
+        type: integer
+    type: object
   creditproducts.CollateralMode:
     enum:
     - not_supported
@@ -602,6 +851,62 @@ info:
   title: Lasagna API
   version: "0.1"
 paths:
+  /applications:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Черновик от имени компании, в которой пользователь — представитель.
+        Повтор с тем же Idempotency-Key и телом возвращает ту же заявку,
+        с другим телом — 409 IDEMPOTENCY_CONFLICT.
+      parameters:
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Компания-заёмщик
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/creditdto.CreateApplicationRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/creditdto.ApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: не клиент
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: 'NOT_FOUND: нет компании или пользователь не её участник'
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "409":
+          description: IDEMPOTENCY_CONFLICT
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+        "422":
+          description: VALIDATION_FAILED
+          schema:
+            $ref: '#/definitions/creditdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Новая заявка
+      tags:
+      - applications
   /auth/login:
     post:
       consumes:
