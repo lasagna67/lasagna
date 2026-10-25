@@ -3,20 +3,12 @@ package scoring
 import (
 	"fmt"
 	"math"
+	"math/bits"
 	"sort"
 	"time"
 
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 )
-
-// Payment — строка графика. Все суммы в копейках; Balance — остаток после платежа.
-type Payment struct {
-	Month     int   `json:"month"`
-	Payment   int64 `json:"payment"`
-	Interest  int64 `json:"interest"`
-	Principal int64 `json:"principal"`
-	Balance   int64 `json:"balance"`
-}
 
 // MonthlyFreeCashFlow рассчитывает F из исходных сумм, не доверяя полю FreeCash.
 func MonthlyFreeCashFlow(month companydomain.MonthlyData) (int64, error) {
@@ -135,75 +127,6 @@ func ActiveMonthlyDebt(loans []companydomain.Loan) (int64, error) {
 	return total, nil
 }
 
-// BuildAnnuitySchedule строит график с ежемесячным начислением процентов.
-// amount — копейки; annualRateBasisPoints — сотые процента годовых (2400 = 24%).
-// Сумма, ставка и срок передаются аргументами.
-// Проценты и регулярный платёж округляются до ближайшей копейки, половины вверх.
-// Последний платёж погашает весь остаток. Даты и дневное начисление здесь не используются.
-func BuildAnnuitySchedule(amount, annualRateBasisPoints int64, termMonths int) ([]Payment, error) {
-	if amount <= 0 || annualRateBasisPoints < 0 || termMonths <= 0 {
-		return nil, fmt.Errorf("amount and term must be positive; rate must be nonnegative")
-	}
-	rate := float64(annualRateBasisPoints) / 120000
-	regular := float64(amount) / float64(termMonths)
-	if annualRateBasisPoints > 0 {
-		// Та же аннуитетная формула, устойчивая при малой ставке.
-		regular = float64(amount) * rate / -math.Expm1(-float64(termMonths)*math.Log1p(rate))
-	}
-	regularPayment, err := roundCash(regular)
-	if err != nil {
-		return nil, err
-	}
-	balance := amount
-	schedule := make([]Payment, 0, termMonths)
-	for month := 1; month <= termMonths; month++ {
-		interest, err := roundCash(float64(balance) * rate)
-		if err != nil {
-			return nil, err
-		}
-		principal := regularPayment - interest
-		if principal < 0 {
-			return nil, fmt.Errorf("rounded payment does not cover interest")
-		}
-		if month == termMonths || principal > balance {
-			principal = balance
-		}
-		payment, err := addCash(principal, interest)
-		if err != nil {
-			return nil, err
-		}
-		balance -= principal
-		schedule = append(schedule, Payment{Month: month, Payment: payment, Interest: interest, Principal: principal, Balance: balance})
-	}
-	return schedule, nil
-}
-
-// MaximumPayment возвращает Pmax из полного графика, включая последний платёж.
-func MaximumPayment(schedule []Payment) (int64, error) {
-	if len(schedule) == 0 {
-		return 0, fmt.Errorf("repayment schedule is empty")
-	}
-	var maximum int64
-	for _, row := range schedule {
-		if row.Payment < 0 {
-			return 0, fmt.Errorf("negative scheduled payment")
-		}
-		if row.Payment > maximum {
-			maximum = row.Payment
-		}
-	}
-	return maximum, nil
-}
-
-// CoverageRatios возвращает K=C/(D+Pmax), Ks=Cs/(D+Pmax).
-func CoverageRatios(c, cs, debt, pmax int64) (k, ks float64, err error) {
-	if c < 0 || cs < 0 || debt < 0 || pmax < 0 || (debt == 0 && pmax == 0) {
-		return 0, 0, fmt.Errorf("coverage amounts must be nonnegative and total payment must be positive")
-	}
-	denominator := float64(debt) + float64(pmax)
-	return float64(c) / denominator, float64(cs) / denominator, nil
-}
-
 func addCash(a, b int64) (int64, error) {
 	if (b > 0 && a > math.MaxInt64-b) || (b < 0 && a < math.MinInt64-b) {
 		return 0, fmt.Errorf("cash amount overflows int64")
@@ -211,11 +134,56 @@ func addCash(a, b int64) (int64, error) {
 	return a + b, nil
 }
 
-// roundCash применяется только к неотрицательным суммам процентов/платежей.
-func roundCash(value float64) (int64, error) {
-	rounded := math.Round(value)
-	if math.IsNaN(rounded) || rounded < 0 || rounded >= float64(math.MaxInt64) {
-		return 0, fmt.Errorf("cash amount overflows int64")
+func historyPoints(history companydomain.CreditHistory) int {
+	points := 0
+	if history.HasCreditHistory != nil {
+		switch {
+		case !*history.HasCreditHistory:
+			points = 150
+		case history.HistoryMonths >= 12:
+			points = 300
+		case history.HistoryMonths >= 1:
+			points = 200
+		}
 	}
-	return int64(rounded), nil
+	for _, loan := range history.Loans {
+		if loan.Status == "active" && (loan.OverdueAmount > 0 || loan.OverdueDays > 0) {
+			points = 0
+			break
+		}
+	}
+	return points
+}
+
+func stabilityPoints(positiveMonths, totalMonths int) int {
+	points := 0
+	if totalMonths > 0 {
+		switch {
+		case positiveMonths*6 >= totalMonths*5:
+			points = 200
+		case positiveMonths*3 >= totalMonths*2:
+			points = 100
+		}
+	}
+	return points
+}
+
+func ratioAtLeast(numerator, denominator, p, q int64) bool {
+	leftHi, leftLo := bits.Mul64(uint64(numerator), uint64(q))
+	rightHi, rightLo := bits.Mul64(uint64(denominator), uint64(p))
+	return leftHi > rightHi || (leftHi == rightHi && leftLo >= rightLo)
+}
+
+func formatRatio(numerator, denominator int64) string {
+	whole, remainder := numerator/denominator, numerator%denominator
+	hi, lo := bits.Mul64(uint64(remainder), 10000)
+	fraction, rest := bits.Div64(hi, lo, uint64(denominator))
+	if rest >= uint64(denominator)-rest {
+		fraction++
+	}
+	if fraction == 10000 {
+		whole++
+		fraction = 0
+	}
+	return fmt.Sprintf("%d.%04d", whole, fraction)
 }
