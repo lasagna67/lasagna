@@ -207,8 +207,10 @@ func validateOverview(o companydomain.Overview, inn string, now time.Time) Valid
 	return result
 }
 
-// NoAnomalousIncome проверяет наличие поступлений, строго превышающих утроенную медиану.
-// nil означает историю короче трёх месяцев, отрицательные поступления или нулевую медиану.
+// NoAnomalousIncome — нет разового поступления (P04): ни одна строка не больше
+// двух медиан income; при нулевой медиане разовым считается любое положительное
+// поступление. Ровно две медианы флага не дают. nil — меньше трёх месяцев или
+// отрицательные поступления.
 func NoAnomalousIncome(months []companydomain.MonthlyData) *bool {
 	if len(months) < 3 {
 		return nil
@@ -222,20 +224,12 @@ func NoAnomalousIncome(months []companydomain.MonthlyData) *bool {
 	}
 	slices.Sort(income)
 	lower, upper := income[(len(income)-1)/2], income[len(income)/2]
-	if upper == 0 {
-		return nil
-	}
-	median := lower + (upper-lower)/2
 	clean := true
-	if median > math.MaxInt64/3 {
+	// Две медианы — ровно lower + upper, без половины копейки у чётного ряда.
+	if lower > math.MaxInt64-upper {
 		return &clean
 	}
-	threshold := 3 * median
-	// Если дробная часть медианы равна половине копейки, floor(3 * median) даёт дополнительную копейку.
-	if (upper-lower)%2 != 0 && threshold < math.MaxInt64 {
-		threshold++
-	}
-	clean = income[len(income)-1] <= threshold
+	clean = income[len(income)-1] <= lower+upper
 	return &clean
 }
 

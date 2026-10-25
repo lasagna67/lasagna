@@ -126,6 +126,10 @@ type Application struct {
 	Status      Status
 	Request     Request
 
+	// DataRevision — версия входных данных риска: растёт при изменении запроса,
+	// залога, проекта и денежного плана, но не статуса и банковских заключений.
+	DataRevision int
+
 	AssigneeID *uuid.UUID // сотрудник, взявший заявку на рассмотрение; назначает модуль underwriting
 	Info       InfoRound  // запросы банка текущего раунда; только в info_requested
 
@@ -180,6 +184,7 @@ const (
 	ActionTake             Action = "take"
 	ActionRequestInfo      Action = "request_info"
 	ActionReviewCollateral Action = "review_collateral"
+	ActionReviewCashPlan   Action = "review_cash_plan"
 	ActionDecide           Action = "decide"
 	ActionRetryChecks      Action = "retry_checks"
 	ActionRetryIssue       Action = "retry_issue"
@@ -372,11 +377,13 @@ func (a *Application) Expire(validUntil *time.Time, now time.Time) (Transition, 
 // Что доступно клиенту:
 
 // draftFields — пути полей, которые клиент заполняет в черновике.
-// product_details и collateral — целиком: состав зависит от продукта.
+// product_details, collateral и cash_plan — целиком: состав зависит от продукта.
+// Денежный план в черновике — только у «Старта», у других кредитов его
+// открывает банк запросом уточнений.
 var draftFields = []string{
 	"request.purpose", "request.purpose_description", "request.amount_kopecks",
 	"request.need_period", "request.product_code", "request.term_months",
-	"request.collateral_mode", "product_details", "collateral",
+	"request.collateral_mode", "product_details", "collateral", "cash_plan",
 }
 
 // DraftFields — поля черновика; из них банк выбирает, что открыть клиенту

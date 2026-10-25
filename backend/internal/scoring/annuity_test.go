@@ -8,18 +8,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 )
 
 func decisionInput() ScoringInput {
-	yes, no := true, false
+	yes := true
 	rate := int64(1200)
 	in := ScoringInput{
 		RegistrySyncedAt: timeValue(decisionNow),
 		CreditFetchedAt:  timeValue(decisionNow),
 		INN:              "7705005410", Amount: 10000000, TermMonths: 12, Purpose: "working_capital",
 		Product: &ScoringProduct{Code: "express", Active: true, Purposes: []string{"working_capital"}, MinAmount: 1000000, MaxAmount: 500000000, MinTerm: 3, MaxTerm: 36, MinBusinessAgeMonths: 6, CollateralMode: "not_supported", RepaymentType: "annuity", AnnualRateBasisPoints: &rate},
-		Checks:  ScoringChecks{AccountActiveAndOwned: &yes, NoAnomalousIncome: &yes, CashPlanRequired: &no},
+		Checks:  ScoringChecks{AccountActiveAndOwned: &yes, NoAnomalousIncome: &yes},
 		Overview: companydomain.Overview{
 			Registry:             companydomain.SourceResult[companydomain.RegistryCard]{Status: "ok", Data: &companydomain.RegistryCard{INN: "7705005410", Status: companydomain.StatusActive, RegistrationDate: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)}},
 			CreditHistory:        companydomain.SourceResult[companydomain.CreditReport]{Status: "ok", Data: &companydomain.CreditReport{INN: "7705005410", Status: "ok", ReportDate: "2026-10-24", Report: companydomain.CreditHistory{HasCreditHistory: &yes, HistoryMonths: 24, Loans: []companydomain.Loan{}}}},
@@ -66,13 +68,19 @@ func TestAnnuityPositiveDecisionReadiness(t *testing.T) {
 			in.HasCollateral = true
 		}, false, "collateral_acceptance_missing", DecisionManualReview},
 		{"accepted cash plan", func(in *ScoringInput) {
-			in.Checks.CashPlanRequired, in.Checks.CashPlanConfirmed, in.Checks.CashPlanAccepted = boolValue(true), boolValue(true), boolValue(true)
+			in.Overview.Financials.Data.MonthlyData[0].Expenses = 200000000
+			in.Checks.CashPlanConfirmed, in.Checks.CashPlanAccepted = boolValue(true), boolValue(true)
 		}, true, "", DecisionManualReview},
-		{"missing cash plan confirmation", func(in *ScoringInput) { in.Checks.CashPlanRequired = boolValue(true) }, false, "cash_plan_confirmation_missing", DecisionManualReview},
+		{"missing cash plan confirmation", func(in *ScoringInput) {
+			in.Overview.Financials.Data.MonthlyData[0].Expenses = 200000000
+		}, false, "cash_plan_confirmation_missing", DecisionManualReview},
 		{"missing cash plan review", func(in *ScoringInput) {
-			in.Checks.CashPlanRequired, in.Checks.CashPlanConfirmed = boolValue(true), boolValue(true)
+			in.Overview.Financials.Data.MonthlyData[0].Expenses = 200000000
+			in.Checks.CashPlanConfirmed = boolValue(true)
 		}, false, "cash_plan_acceptance_missing", DecisionManualReview},
-		{"unknown cash plan requirement", func(in *ScoringInput) { in.Checks.CashPlanRequired = nil }, false, "cash_plan_requirement_unknown", DecisionManualReview},
+		{"unknown cash plan requirement", func(in *ScoringInput) {
+			in.Overview.Financials.Data.MonthlyData = in.Overview.Financials.Data.MonthlyData[4:]
+		}, false, "cash_plan_requirement_unknown", DecisionManualReview},
 		{"unknown account", func(in *ScoringInput) { in.Checks.AccountActiveAndOwned = nil }, false, "account_check_missing", DecisionManualReview},
 		{"unknown financial source", func(in *ScoringInput) { in.Overview.FinancialsSourceType = "" }, false, "financials_source_unknown", DecisionManualReview},
 		{"no BKI", func(in *ScoringInput) { in.Overview.CreditHistory.Data = nil }, false, ReasonCreditHistoryUnavailable, DecisionManualReview},
@@ -169,6 +177,22 @@ func TestEvaluateApplication(t *testing.T) {
 		{"missing rate", func(in *ScoringInput) { in.Product.AnnualRateBasisPoints = nil }, DecisionManualReview, "product_rate_missing"},
 		{"missing latest month", func(in *ScoringInput) { in.Overview.Financials.Data.MonthlyData[5].Month = "2026-03" }, DecisionManualReview, "latest_financial_month_missing"},
 		{"income anomaly", func(in *ScoringInput) { no := false; in.Checks.NoAnomalousIncome = &no }, DecisionManualReview, "income_anomaly"},
+		{"caller cannot waive cash plan", func(in *ScoringInput) {
+			in.Overview.Financials.Data.MonthlyData[0].Expenses = 200000000
+		}, DecisionManualReview, "cash_plan_confirmation_missing"},
+		{"plan requirement unknown on short window", func(in *ScoringInput) {
+			in.Overview.Financials.Data.MonthlyData = in.Overview.Financials.Data.MonthlyData[4:]
+		}, DecisionManualReview, "cash_plan_requirement_unknown"},
+		{"income decline requires plan", func(in *ScoringInput) {
+			for i := 3; i < 6; i++ {
+				in.Overview.Financials.Data.MonthlyData[i].Income = 79000000
+			}
+		}, DecisionManualReview, "cash_plan_required"},
+		{"income at 0.8 needs no plan", func(in *ScoringInput) {
+			for i := 3; i < 6; i++ {
+				in.Overview.Financials.Data.MonthlyData[i].Income = 80000000
+			}
+		}, DecisionAutoApproved, ""},
 		{"low coverage with CSV", func(in *ScoringInput) {
 			in.Overview.FinancialsSourceType = "csv"
 			for i := range in.Overview.Financials.Data.MonthlyData {
@@ -188,6 +212,30 @@ func TestEvaluateApplication(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Принятый проходящий план всё равно оставляет заявку на ручном рассмотрении.
+func TestAnnuityAcceptedCashPlan(t *testing.T) {
+	in := decisionInput()
+	in.Checks.CashPlanConfirmed, in.Checks.CashPlanAccepted = boolValue(true), boolValue(true)
+	in.Overview.Financials.Data.MonthlyData[0].Expenses = 200000000
+	reserve := int64(0)
+	in.CashPlan = &CashPlanInput{Plan: liquidityPlan(12, 2000000, 500000), ValidatedReserveKopecks: &reserve}
+	got := EvaluateApplication(EvaluationInput{ScoringInput: in}, decisionNow)
+	if got.State != DecisionManualReview || !got.CanPublish || got.CashPlan == nil || got.CashPlan.Required == nil || !*got.CashPlan.Required ||
+		!slices.Equal(got.CashPlan.Signals, []string{SignalNegativeCashMonth}) || got.CashPlan.Plan == nil || len(got.CashPlan.Plan.Issues) != 0 {
+		t.Fatalf("cash plan must exclude auto: %+v", got)
+	}
+}
+
+// liquidityPlan — подтверждённый план на n месяцев с ноября 2026 (decisionNow — октябрь).
+func liquidityPlan(n int, income, expenses int64) *cashplandomain.CashPlan {
+	plan := &cashplandomain.CashPlan{Kind: cashplandomain.KindLiquidity, FirstMonth: cashplandomain.FirstMonth(decisionNow)}
+	for i := range n {
+		plan.Forecast = append(plan.Forecast, cashplandomain.ForecastRow{Month: cashplandomain.AddMonths(plan.FirstMonth, i), IncomeKopecks: income, ExpensesKopecks: expenses})
+	}
+	plan.Confirm(uuid.New(), decisionNow)
+	return plan
 }
 
 func TestDecisionMetricsAndNoMutation(t *testing.T) {

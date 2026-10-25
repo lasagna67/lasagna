@@ -2,6 +2,7 @@ package underwritingdomain
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
+	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 )
 
@@ -114,7 +116,17 @@ func counter(terms *TermsInput) DecideCommand {
 }
 
 func context(app Details, p *Product) DecisionContext {
-	return DecisionContext{Application: app, Checks: readyChecks(), Product: p, Account: companyAccount, Version: 1, Now: now}
+	return DecisionContext{Application: app, Checks: readyChecks(), PlanContext: planContext(), Product: p, Account: companyAccount, Version: 1, Now: now}
+}
+
+// planContext — ровные полгода финансов до октября 2026: денежный план обычному
+// кредиту не нужен; действующих кредитов нет.
+func planContext() CashPlanContext {
+	var window []companydomain.MonthlyData
+	for m := 4; m <= 9; m++ {
+		window = append(window, companydomain.MonthlyData{Month: fmt.Sprintf("2026-%02d", m), Income: 100000000, Expenses: 40000000})
+	}
+	return CashPlanContext{Window: window, DebtKopecks: ptr(int64(0)), RateBps: ptr(2290)}
 }
 
 // fieldErrors — «поле:код» из ValidationError; nil, если ошибка другая.
@@ -342,29 +354,6 @@ func TestDecideOverdraft(t *testing.T) {
 			t.Errorf("errors = %v", got)
 		}
 	})
-}
-
-func TestDecideStart(t *testing.T) {
-	dcFor := func() DecisionContext {
-		dc := context(pledged(application(), "start", 100000000), product("start"))
-		dc.Checks.Financials.DataStatus = FinancialsNoHistory
-		dc.Application.CollateralReview = reviewOf(dc.Application.Collateral, "accepted", 200000000)
-		return dc
-	}
-	terms := func() *TermsInput {
-		return &TermsInput{ProductCode: ptr("start"), AmountKopecks: ptr(int64(100000000)), TermMonths: ptr(12), AnnualRateBps: ptr(2400)}
-	}
-
-	// Без фактической истории start рассматривается вручную.
-	if _, _, err := Decide(uuid.New(), approve(terms()), dcFor()); err != nil {
-		t.Fatalf("start without history: %v", err)
-	}
-	less := terms()
-	less.AmountKopecks = ptr(int64(70000000))
-	_, _, err := Decide(uuid.New(), counter(less), dcFor())
-	if got := fieldErrors(err); !slices.Equal(got, []string{"terms.amount_kopecks:BUDGET_MISMATCH"}) {
-		t.Errorf("start with new amount: %v", got)
-	}
 }
 
 func TestDecideTermsValidation(t *testing.T) {

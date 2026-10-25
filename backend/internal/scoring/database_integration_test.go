@@ -2,6 +2,7 @@ package scoring
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"slices"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	collateral "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	companyrepo "github.com/lasagna67/lasagna.git/internal/company/repo"
 )
@@ -120,3 +122,101 @@ func TestDatabaseScorer(t *testing.T) {
 		t.Fatal("successful registry refresh did not update timestamp")
 	}
 }
+
+// Флаги плана заполняются из БД: true от вызывающего кода не заменяет план,
+// подтверждение клиента и актуальное заключение банка.
+func TestDatabaseScorerCashPlan(t *testing.T) {
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL is not configured")
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, query, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	company, user, app := uuid.New(), uuid.New(), uuid.New()
+	inn := fmt.Sprintf("%010d", (time.Now().UnixNano()+7)%10000000000)
+	exec(`INSERT INTO users(id,email,password_hash,role) VALUES($1,$2,'test','underwriter')`, user, user.String()+"@scoring.test")
+	exec(`INSERT INTO companies(id,inn,entity_type,short_name,registration_date,registry_status,registry_synced_at) VALUES($1,$2,'legal_entity','Start','2026-01-01','active',$3)`, company, inn, decisionNow)
+	exec(`INSERT INTO applications(id,company_id,applicant_id,product_id,purpose,requested_amount_kopecks,requested_term_months,has_collateral)
+		SELECT $1,$2,$3,id,'business_start',30000000,24,true FROM credit_products WHERE code='start'`, app, company, user)
+
+	in := startInput()
+	in.INN, in.Overview.CompanyID = inn, company
+	in.Overview.Registry.Data.INN, in.Overview.CreditHistory.Data.INN = inn, inn
+	yes := true
+	in.Checks.CashPlanConfirmed, in.Checks.CashPlanAccepted = &yes, &yes
+	scorer := NewScorer(pool)
+	evaluate := func() ScoringDecision {
+		t.Helper()
+		got, err := scorer.EvaluateApplication(ctx, app, in, decisionNow)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	has := func(got ScoringDecision, reason string) bool { return slices.Contains(got.Reasons, reason) }
+	// «Старт» оценивает проектная модель: подтверждение и заключение по плану — её блокеры.
+	confirmation, acceptance := "CASH_PLAN_CONFIRMATION_REQUIRED", "CASH_PLAN_REVIEW_REQUIRED"
+
+	if got := evaluate(); !has(got, confirmation) || !has(got, acceptance) || got.Project == nil {
+		t.Fatalf("caller flags without plan: %+v", got)
+	}
+
+	project := startProject()
+	plan := startPlan(10000000)
+	confirmed := plan.ConfirmedHash
+	items, _ := json.Marshal(project.CostItems)
+	forecast, _ := json.Marshal(plan.Forecast)
+	exec(`INSERT INTO application_projects(application_id,description,cost_items,own_funds_kopecks,sales_start_month) VALUES($1,$2,$3,$4,$5)`,
+		app, project.Description, items, project.OwnFundsKopecks, project.SalesStartMonth)
+	exec(`INSERT INTO application_cash_plans(application_id,kind,first_month,own_reserve_kopecks,forecast) VALUES($1,$2,$3,$4,$5)`,
+		app, plan.Kind, plan.FirstMonth, plan.OwnReserveKopecks, forecast)
+	if got := evaluate(); !has(got, confirmation) {
+		t.Fatalf("unconfirmed plan: %v", got.Reasons)
+	}
+	exec(`UPDATE application_cash_plans SET confirmed_hash=$2,confirmed_by=$3,confirmed_at=$4 WHERE application_id=$1`, app, confirmed, user, decisionNow)
+	got := evaluate()
+	if has(got, confirmation) || !has(got, acceptance) {
+		t.Fatalf("confirmed plan: %v", got.Reasons)
+	}
+
+	terms := cashplandomain.Terms{ProductCode: "start", AmountKopecks: 30000000, TermMonths: ptr(24), CollateralMode: "pledged"}
+	review := func(version int, terms cashplandomain.Terms, dataRevision int) {
+		t.Helper()
+		data, _ := json.Marshal(terms)
+		exec(`INSERT INTO cash_plan_reviews(application_id,revision,version,reviewer,cash_plan_hash,terms,terms_hash,data_revision,result,validated_reserve_kopecks,comment)
+			VALUES($1,1,$2,$3,$4,$5,$6,$7,'accepted',10000000,'Выписка')`, app, version, user, plan.Hash(), data, terms.Hash(), dataRevision)
+	}
+	review(1, terms, 1)
+	got = evaluate()
+	if has(got, acceptance) {
+		t.Fatalf("accepted current review: %v", got.Reasons)
+	}
+
+	// Новые данные заявки делают заключение неактуальным.
+	exec(`UPDATE applications SET data_revision=data_revision+1 WHERE id=$1`, app)
+	if got := evaluate(); !has(got, acceptance) {
+		t.Fatalf("stale data revision: %v", got.Reasons)
+	}
+	// Заключение на другой сумме к запросу не относится.
+	other := terms
+	other.AmountKopecks = 25000000
+	review(2, other, 2)
+	if got := evaluate(); !has(got, acceptance) {
+		t.Fatalf("other terms: %v", got.Reasons)
+	}
+	review(3, terms, 2)
+	if got := evaluate(); has(got, acceptance) {
+		t.Fatalf("latest current review: %v", got.Reasons)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }

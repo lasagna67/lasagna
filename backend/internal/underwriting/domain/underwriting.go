@@ -17,6 +17,7 @@ import (
 
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	documentdomain "github.com/lasagna67/lasagna.git/internal/document/domain"
@@ -74,18 +75,26 @@ func Actions(d Details, r Reviewer) []applicationdomain.Action {
 		return actions
 	}
 	// Проверку залога (модуль collateral) пишет только назначенный сотрудник,
-	// в manual_review и info_requested.
+	// в manual_review и info_requested. Заключение по плану — как остальное
+	// рассмотрение: назначенный сотрудник или admin, когда план заполнен.
 	reviewCollateral := d.Collateral != nil && a.AssigneeID != nil && *a.AssigneeID == r.ID
+	reviewCashPlan := d.CashPlan != nil
 	switch a.Status {
 	case applicationdomain.StatusManualReview:
 		actions = append(actions, applicationdomain.ActionRequestInfo)
 		if reviewCollateral {
 			actions = append(actions, applicationdomain.ActionReviewCollateral)
 		}
+		if reviewCashPlan {
+			actions = append(actions, applicationdomain.ActionReviewCashPlan)
+		}
 		actions = append(actions, applicationdomain.ActionDecide, applicationdomain.ActionRetryChecks)
 	case applicationdomain.StatusInfoRequested:
 		if reviewCollateral {
 			actions = append(actions, applicationdomain.ActionReviewCollateral)
+		}
+		if reviewCashPlan {
+			actions = append(actions, applicationdomain.ActionReviewCashPlan)
 		}
 	case applicationdomain.StatusApproved, applicationdomain.StatusCounterOffer:
 		// Новая версия предложения до подписания.
@@ -377,6 +386,7 @@ type Change struct {
 	AnsweredRequest *InfoRequest             // ответ клиента на запрос
 	Document        *documentdomain.Document // пишется раньше решения: решение на него ссылается
 	Decision        *offerdomain.Decision
+	CashPlanReview  *cashplandomain.Review // новое заключение по плану; data_revision не меняется
 	Notification    *applicationdomain.Notification
 }
 
@@ -384,12 +394,16 @@ type Change struct {
 // КАРТОЧКИ:
 
 // Details — заявка с тем, что добавляет рассмотрение: ответственный, залог с
-// последней проверкой (модуль collateral) и текущее предложение с договором.
+// последней проверкой (модуль collateral), поля проекта «Старта», денежный план
+// с последним заключением и текущее предложение с договором.
 type Details struct {
 	applicationdomain.ApplicationDetails
 	Assignee         *applicationdomain.ApplicantCard // клиенту не показывается
 	Collateral       *collateraldomain.Collateral
 	CollateralReview *collateraldomain.CollateralReview
+	Project          *cashplandomain.Project
+	CashPlan         *cashplandomain.CashPlan
+	CashPlanReview   *cashplandomain.Review
 	Offer            *offerdomain.Decision
 }
 
@@ -400,8 +414,12 @@ type Review struct {
 	Checks            CheckSummary
 	InfoRequests      []InfoRequest
 	CollateralReviews []collateraldomain.CollateralReview
+	CashPlanReviews   []cashplandomain.Review
 	Decisions         []offerdomain.Decision
 	History           []Event
+	// PlanContext заполняет сервис; PlanAssessment — AssessPlan на момент чтения.
+	PlanContext    CashPlanContext
+	PlanAssessment PlanAssessment
 	// DecisionBlockers — Blockers на момент чтения карточки.
 	DecisionBlockers []applicationerrors.FieldError
 }

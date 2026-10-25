@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
@@ -27,6 +28,9 @@ type fakeRepo struct {
 	infos         map[uuid.UUID][]underwritingdomain.InfoRequest // новые в конце
 	assets        map[uuid.UUID]collateraldomain.Collateral
 	collateral    map[uuid.UUID][]collateraldomain.CollateralReview // пишет модуль collateral
+	projects      map[uuid.UUID]cashplandomain.Project              // пишет модуль intake
+	plans         map[uuid.UUID]cashplandomain.CashPlan             // пишет модуль intake
+	planReviews   map[uuid.UUID][]cashplandomain.Review
 	decisions     map[uuid.UUID][]offerdomain.Decision
 	history       map[uuid.UUID][]underwritingdomain.Event
 	roundStart    map[uuid.UUID]int // индекс первого запроса текущего раунда
@@ -39,17 +43,20 @@ type fakeRepo struct {
 
 func newFakeRepo() *fakeRepo {
 	return &fakeRepo{
-		apps:       map[uuid.UUID]applicationdomain.ApplicationDetails{},
-		infos:      map[uuid.UUID][]underwritingdomain.InfoRequest{},
-		assets:     map[uuid.UUID]collateraldomain.Collateral{},
-		collateral: map[uuid.UUID][]collateraldomain.CollateralReview{},
-		decisions:  map[uuid.UUID][]offerdomain.Decision{},
-		history:    map[uuid.UUID][]underwritingdomain.Event{},
-		roundStart: map[uuid.UUID]int{},
-		documents:  map[uuid.UUID]documentdomain.Document{},
-		products:   map[string]underwritingdomain.Product{},
-		accounts:   map[uuid.UUID]offerdomain.Account{},
-		keys:       map[string]string{},
+		apps:        map[uuid.UUID]applicationdomain.ApplicationDetails{},
+		infos:       map[uuid.UUID][]underwritingdomain.InfoRequest{},
+		assets:      map[uuid.UUID]collateraldomain.Collateral{},
+		collateral:  map[uuid.UUID][]collateraldomain.CollateralReview{},
+		projects:    map[uuid.UUID]cashplandomain.Project{},
+		plans:       map[uuid.UUID]cashplandomain.CashPlan{},
+		planReviews: map[uuid.UUID][]cashplandomain.Review{},
+		decisions:   map[uuid.UUID][]offerdomain.Decision{},
+		history:     map[uuid.UUID][]underwritingdomain.Event{},
+		roundStart:  map[uuid.UUID]int{},
+		documents:   map[uuid.UUID]documentdomain.Document{},
+		products:    map[string]underwritingdomain.Product{},
+		accounts:    map[uuid.UUID]offerdomain.Account{},
+		keys:        map[string]string{},
 	}
 }
 
@@ -84,6 +91,16 @@ func (f *fakeRepo) details(id uuid.UUID) (underwritingdomain.Details, error) {
 		last := reviews[len(reviews)-1]
 		d.CollateralReview = &last
 	}
+	if p, ok := f.projects[id]; ok {
+		d.Project = &p
+	}
+	if p, ok := f.plans[id]; ok {
+		d.CashPlan = &p
+	}
+	if reviews := f.planReviews[id]; len(reviews) > 0 {
+		last := reviews[len(reviews)-1]
+		d.CashPlanReview = &last
+	}
 	if decisions := f.decisions[id]; len(decisions) > 0 && decisions[len(decisions)-1].Positive() {
 		last := decisions[len(decisions)-1]
 		d.Offer = &last
@@ -108,6 +125,7 @@ func (f *fakeRepo) GetReview(_ context.Context, id uuid.UUID) (underwritingdomai
 		Details:           d,
 		InfoRequests:      reversed(f.infos[id]),
 		CollateralReviews: reversed(f.collateral[id]),
+		CashPlanReviews:   reversed(f.planReviews[id]),
 		Decisions:         reversed(f.decisions[id]),
 		History:           reversed(f.history[id]),
 	}, nil
@@ -174,6 +192,12 @@ func (f *fakeRepo) Update(_ context.Context, cmd applicationdomain.UpdateCommand
 	}
 	if change.Decision != nil {
 		f.decisions[id] = append(f.decisions[id], *change.Decision)
+	}
+	if r := change.CashPlanReview; r != nil {
+		if n := len(f.planReviews[id]); n > 0 && f.planReviews[id][n-1].Version >= r.Version {
+			return false, errors.New("duplicate cash plan review version")
+		}
+		f.planReviews[id] = append(f.planReviews[id], *r)
 	}
 	for i, tr := range change.Transitions {
 		from := tr.From
@@ -244,11 +268,28 @@ func reversed[T any](s []T) []T {
 	return out
 }
 
-// fakeOverviews: сводки компании нет — проверки берутся только из fakeChecks.
-type fakeOverviews struct{}
+// fakeOverviews: сводка компании — только финансы и БКИ для денежного плана:
+// ровные полгода до текущего месяца и ни одного кредита, план не нужен.
+// Реестр и БКИ для проверок берутся из fakeChecks. missing — сводки нет.
+type fakeOverviews struct{ missing bool }
 
-func (fakeOverviews) GetOverview(context.Context, uuid.UUID) (companydomain.Overview, error) {
-	return companydomain.Overview{}, companyerrors.ErrOverviewNotFound
+func (f fakeOverviews) GetOverview(_ context.Context, companyID uuid.UUID) (companydomain.Overview, error) {
+	if f.missing {
+		return companydomain.Overview{}, companyerrors.ErrOverviewNotFound
+	}
+	o := companydomain.Overview{
+		CompanyID:            companyID,
+		Financials:           companydomain.SourceResult[companydomain.FinancialReport]{Status: "ok", Data: &companydomain.FinancialReport{INN: companyINN, Status: "ok"}},
+		CreditHistory:        companydomain.SourceResult[companydomain.CreditReport]{Status: "ok", Data: &companydomain.CreditReport{INN: companyINN, Status: "ok", Report: companydomain.CreditHistory{Loans: []companydomain.Loan{}}}},
+		FinancialsSourceType: "auto",
+	}
+	now := time.Now().In(time.FixedZone("Europe/Moscow", 3*60*60))
+	start := time.Date(now.Year(), now.Month()-6, 1, 0, 0, 0, 0, now.Location())
+	for i := range 6 {
+		o.Financials.Data.MonthlyData = append(o.Financials.Data.MonthlyData,
+			companydomain.MonthlyData{Month: start.AddDate(0, i, 0).Format("2006-01"), Income: 100000000, Expenses: 40000000})
+	}
+	return o, nil
 }
 
 type fakeChecks struct {

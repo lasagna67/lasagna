@@ -54,7 +54,9 @@ type FinancialStateResponse struct {
 
 // ApplicationResponse — объект заявки из контракта lasagna-credit-v1.
 // collateral, offer и contract заполняют модули, которые их ведут (intake,
-// underwriting); product_details, checks, scoring и issue пока всегда null.
+// underwriting); product_details и cash_plan — intake и underwriting, plan_review —
+// underwriting. product_details есть только у «Старта»; checks, scoring и issue
+// пока всегда null.
 type ApplicationResponse struct {
 	ID               uuid.UUID              `json:"id" swaggertype:"string" format:"uuid" example:"3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13"`
 	CompanyID        uuid.UUID              `json:"company_id" swaggertype:"string" format:"uuid" example:"9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"`
@@ -63,11 +65,14 @@ type ApplicationResponse struct {
 	Applicant        ApplicantResponse      `json:"applicant"`
 	Number           int64                  `json:"number" example:"1000"`
 	Revision         int                    `json:"revision" example:"1"`
+	DataRevision     int                    `json:"data_revision" example:"1"`
 	Status           string                 `json:"status" enums:"draft,submitted,validation,enrichment,scoring,manual_review,info_requested,approved,counter_offer,signing,issued,rejected,cancelled,expired" example:"draft"`
 	Request          RequestResponse        `json:"request"`
 	ProductDetails   any                    `json:"product_details" swaggertype:"object"`
 	Financials       FinancialStateResponse `json:"financials"`
 	Collateral       any                    `json:"collateral" swaggertype:"object"`
+	CashPlan         any                    `json:"cash_plan" swaggertype:"object"`
+	PlanReview       any                    `json:"plan_review" swaggertype:"object"`
 	Checks           any                    `json:"checks" swaggertype:"object"`
 	Scoring          any                    `json:"scoring" swaggertype:"object"`
 	Offer            any                    `json:"offer" swaggertype:"object"`
@@ -95,6 +100,7 @@ func NewApplicationResponse(d applicationdomain.ApplicationDetails) ApplicationR
 		Applicant:        NewApplicantResponse(d.Applicant),
 		Number:           a.Number,
 		Revision:         a.Revision,
+		DataRevision:     a.DataRevision,
 		Status:           string(a.Status),
 		Request:          newRequestResponse(a.Request),
 		Financials:       newFinancialState(a),

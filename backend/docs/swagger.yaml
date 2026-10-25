@@ -88,6 +88,8 @@ definitions:
         items:
           type: string
         type: array
+      cash_plan:
+        type: object
       checks:
         type: object
       collateral:
@@ -102,6 +104,9 @@ definitions:
         type: object
       created_at:
         type: string
+      data_revision:
+        example: 1
+        type: integer
       editable_fields:
         example:
         - request.amount_kopecks
@@ -121,6 +126,8 @@ definitions:
         example: 1000
         type: integer
       offer:
+        type: object
+      plan_review:
         type: object
       product_details:
         type: object
@@ -982,6 +989,26 @@ definitions:
         example: client
         type: string
     type: object
+  intakedto.CashPlanPatch:
+    properties:
+      confirmed:
+        type: boolean
+      first_month:
+        example: 2026-11
+        type: string
+      forecast:
+        items:
+          $ref: '#/definitions/intakedto.ForecastRowRequest'
+        type: array
+      kind:
+        enum:
+        - project
+        - liquidity
+        type: string
+      own_reserve_kopecks:
+        example: 10000000
+        type: integer
+    type: object
   intakedto.CollateralRequest:
     properties:
       declared_value_kopecks:
@@ -1005,11 +1032,32 @@ definitions:
         example: equipment
         type: string
     type: object
+  intakedto.CostItemRequest:
+    properties:
+      amount_kopecks:
+        example: 40000000
+        type: integer
+      name:
+        example: Печь
+        type: string
+    type: object
   intakedto.CreateApplicationRequest:
     properties:
       company_id:
         example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
         format: uuid
+        type: string
+    type: object
+  intakedto.ForecastRowRequest:
+    properties:
+      expenses_kopecks:
+        example: 8000000
+        type: integer
+      income_kopecks:
+        example: 15000000
+        type: integer
+      month:
+        example: 2026-11
         type: string
     type: object
   intakedto.NeedPeriodRequest:
@@ -1027,11 +1075,15 @@ definitions:
     type: object
   intakedto.PatchApplicationRequest:
     properties:
+      cash_plan:
+        $ref: '#/definitions/intakedto.CashPlanPatch'
       collateral:
         $ref: '#/definitions/intakedto.CollateralRequest'
       expected_revision:
         example: 3
         type: integer
+      product_details:
+        $ref: '#/definitions/intakedto.ProjectPatch'
       request:
         $ref: '#/definitions/intakedto.PatchRequestFields'
     type: object
@@ -1069,6 +1121,22 @@ definitions:
       term_months:
         example: 12
         type: integer
+    type: object
+  intakedto.ProjectPatch:
+    properties:
+      cost_items:
+        items:
+          $ref: '#/definitions/intakedto.CostItemRequest'
+        type: array
+      own_funds_kopecks:
+        example: 20000000
+        type: integer
+      project_description:
+        example: Пекарня у метро
+        type: string
+      sales_start_month:
+        example: 2026-12
+        type: string
     type: object
   intakedto.RevisionRequest:
     properties:
@@ -1229,6 +1297,57 @@ definitions:
         type: string
       terms_accepted:
         type: boolean
+  scoring.CashPlanResult:
+    properties:
+      c:
+        type: integer
+      cs:
+        type: integer
+      debt_kopecks:
+        type: integer
+      max_payment_kopecks:
+        type: integer
+      min_stress_balance_kopecks:
+        type: integer
+      months:
+        items:
+          $ref: '#/definitions/scoring.PlanMonth'
+        type: array
+      reserve_kopecks:
+        type: integer
+    type: object
+  scoring.PlanMonth:
+    properties:
+      month:
+        type: string
+      payment_kopecks:
+        type: integer
+      stress_balance_kopecks:
+        type: integer
+    type: object
+  scoring.ProjectResult:
+    properties:
+      own_funds_kopecks:
+        type: integer
+      plan:
+        $ref: '#/definitions/scoring.CashPlanResult'
+      preliminary:
+        type: boolean
+      project_cost_kopecks:
+        type: integer
+      required_own_funds_kopecks:
+        type: integer
+      result:
+        enum:
+        - pass
+        - needs_info
+        - fail
+        type: string
+      status:
+        enum:
+        - completed
+        - insufficient_data
+        type: string
     type: object
   swagger.HTTPError:
     properties:
@@ -1253,6 +1372,51 @@ definitions:
         type: array
       next_cursor:
         type: string
+    type: object
+  underwritingdto.CashPlanAssessmentResponse:
+    properties:
+      blockers:
+        items:
+          $ref: '#/definitions/applicationdto.FieldErrorResponse'
+        type: array
+      liquidity:
+        $ref: '#/definitions/scoring.CashPlanResult'
+      project:
+        $ref: '#/definitions/scoring.ProjectResult'
+      required:
+        type: boolean
+      review_current:
+        type: boolean
+      signals:
+        items:
+          type: string
+        type: array
+      terms:
+        $ref: '#/definitions/underwritingdto.PlanTermsResponse'
+    type: object
+  underwritingdto.CashPlanReviewRequest:
+    properties:
+      comment:
+        example: Резерв на депозите, кредитные средства и деньги бюджета проекта не
+          входят
+        type: string
+      expected_revision:
+        example: 6
+        type: integer
+      public_comment:
+        type: string
+      result:
+        enum:
+        - accepted
+        - needs_info
+        - rejected
+        example: accepted
+        type: string
+      terms:
+        $ref: '#/definitions/underwritingdto.PlanTermsRequest'
+      validated_reserve_kopecks:
+        example: 10000000
+        type: integer
     type: object
   underwritingdto.DecisionRequest:
     properties:
@@ -1354,6 +1518,37 @@ definitions:
         - cancelled
         type: string
     type: object
+  underwritingdto.PlanTermsRequest:
+    properties:
+      amount_kopecks:
+        example: 30000000
+        type: integer
+      collateral_mode:
+        enum:
+        - none
+        - pledged
+        type: string
+      product_code:
+        example: start
+        type: string
+      term_months:
+        example: 24
+        type: integer
+    type: object
+  underwritingdto.PlanTermsResponse:
+    properties:
+      amount_kopecks:
+        type: integer
+      collateral_mode:
+        enum:
+        - none
+        - pledged
+        type: string
+      product_code:
+        type: string
+      term_months:
+        type: integer
+    type: object
   underwritingdto.RequestInfoRequest:
     properties:
       editable_fields:
@@ -1404,6 +1599,14 @@ definitions:
         items:
           type: string
         type: array
+      cash_plan:
+        type: object
+      cash_plan_assessment:
+        $ref: '#/definitions/underwritingdto.CashPlanAssessmentResponse'
+      cash_plan_reviews:
+        items:
+          $ref: '#/definitions/underwritingdto.StaffPlanReviewResponse'
+        type: array
       checks:
         type: object
       collateral:
@@ -1422,6 +1625,9 @@ definitions:
         type: object
       created_at:
         type: string
+      data_revision:
+        example: 1
+        type: integer
       decision_blockers:
         items:
           $ref: '#/definitions/applicationdto.FieldErrorResponse'
@@ -1457,6 +1663,8 @@ definitions:
         example: 1000
         type: integer
       offer:
+        type: object
+      plan_review:
         type: object
       product_details:
         type: object
@@ -1523,6 +1731,41 @@ definitions:
       version:
         type: integer
     type: object
+  underwritingdto.StaffPlanReviewResponse:
+    properties:
+      actual:
+        type: boolean
+      cash_plan_hash:
+        type: string
+      comment:
+        type: string
+      data_revision:
+        type: integer
+      id:
+        format: uuid
+        type: string
+      public_comment:
+        type: string
+      result:
+        enum:
+        - accepted
+        - needs_info
+        - rejected
+        type: string
+      reviewed_at:
+        type: string
+      reviewed_by:
+        format: uuid
+        type: string
+      terms:
+        $ref: '#/definitions/underwritingdto.PlanTermsResponse'
+      terms_hash:
+        type: string
+      validated_reserve_kopecks:
+        type: integer
+      version:
+        type: integer
+    type: object
   underwritingdto.TermsRequest:
     properties:
       agreement_term_months:
@@ -1567,6 +1810,8 @@ definitions:
         items:
           type: string
         type: array
+      cash_plan:
+        type: object
       checks:
         type: object
       collateral:
@@ -1581,6 +1826,9 @@ definitions:
         type: object
       created_at:
         type: string
+      data_revision:
+        example: 1
+        type: integer
       editable_fields:
         example:
         - request.amount_kopecks
@@ -1600,6 +1848,8 @@ definitions:
         example: 1000
         type: integer
       offer:
+        type: object
+      plan_review:
         type: object
       product_details:
         type: object
@@ -1765,7 +2015,13 @@ paths:
         иначе 409 INVALID_STATE; поле вне editable_fields — 422 NOT_EDITABLE.
         Непереданное поле не меняется, null очищает значение. need_period и collateral
         заменяются целиком; collateral — только при collateral_mode = pledged.
-        Полноту и условия продукта проверяет submit.
+        product_details — поля «Старта», cash_plan — денежный план: заменяются целиком, null удаляет.
+        План в черновике — только у «Старта» (kind = project); план ликвидности (liquidity) —
+        по запросу банка, у овердрафта плана нет. Правка содержимого снимает подтверждение;
+        подтверждение — отдельной правкой {"cash_plan": {"confirmed": true}}, когда прогноз
+        начинается со следующего месяца и покрывает весь срок кредита, иначе 422
+        FORECAST_CONFIRMATION_REQUIRED. data_revision растёт, только если изменились данные.
+        Полноту, бюджет «Старта» и условия продукта проверяет submit.
       parameters:
       - description: Заявка
         format: uuid
@@ -1956,7 +2212,8 @@ paths:
       - application/json
       description: |-
         info_requested → submitted после ответов на все запросы банка; запрос проверяется
-        как при отправке. Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.
+        как при отправке. Если банк открыл cash_plan, план должен быть подтверждён на срок кредита.
+        Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.
       parameters:
       - description: Заявка
         format: uuid
@@ -2178,7 +2435,9 @@ paths:
       - application/json
       description: |-
         draft → submitted → конвейер проверок. Неполный запрос или нарушение условий
-        продукта — 422 с полями, заявка остаётся draft. Повтор с тем же Idempotency-Key
+        продукта — 422 с полями, заявка остаётся draft. У «Старта» обязательны полные
+        product_details (кредит + собственные средства = стоимость, собственных не меньше 30%)
+        и подтверждённый cash_plan на срок кредита. Повтор с тем же Idempotency-Key
         и телом не создаёт второй отправки.
       parameters:
       - description: Заявка
@@ -2953,6 +3212,64 @@ paths:
       summary: Карточка заявки
       tags:
       - underwriter
+  /underwriter/applications/{id}/cash-plan-review:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Неизменяемая версия заключения в manual_review или info_requested: accepted, needs_info
+        или rejected с внутренним comment о предпосылках. accepted — с validated_reserve_kopecks
+        от 0 до заявленного резерва: кредитные средства и деньги бюджета проекта в него не входят.
+        terms — условия проверки, по умолчанию из запроса; сумма не больше запрошенной. Принять план
+        можно, только если клиент подтвердил его на срок условий, а у «Старта» сумма сходится с
+        бюджетом, — иначе 422: сначала новая ревизия клиента. Заключение действует, пока не
+        изменились план, условия и data_revision заявки; revision + 1, data_revision не меняется.
+        needs_info сам вопрос клиенту не создаёт — для этого request-info.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Заключение
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/underwritingdto.CashPlanReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: 'FORBIDDEN: заявка у другого сотрудника'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "422":
+          description: 'VALIDATION_FAILED: нет плана, не подтверждён, условия, резерв'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Заключение по денежному плану
+      tags:
+      - underwriter
   /underwriter/applications/{id}/collateral-review:
     post:
       consumes:
@@ -3017,8 +3334,11 @@ paths:
       - application/json
       description: |-
         approved — условия как в запросе (ставка не считается), counter_offer — изменён продукт,
-        сумма, срок или обеспечение. Положительное решение требует готовых проверок и принятого
-        залога у обеспеченного продукта; создаёт предложение и PDF договора. Платёж считает сервер.
+        сумма, срок или обеспечение. Положительное решение требует готовых проверок, принятого
+        залога у обеспеченного продукта и, если нужен денежный план, подтверждённого клиентом и
+        принятого на этих условиях плана, который проходит расчёт; создаёт предложение и PDF
+        договора. Предложение по плану действует не дольше 7 суток и до начала следующего месяца.
+        Платёж считает сервер.
         rejected — с reason_code и пояснениями для клиента.
       parameters:
       - description: Заявка

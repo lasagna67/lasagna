@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 )
@@ -27,7 +28,8 @@ type ScoringInput struct {
 	HasCollateral    bool
 	Checks           ScoringChecks
 	RegistrySyncedAt *time.Time
-	CreditFetchedAt  *time.Time // Время получения БКИ отдельно от календарной даты отчёта.
+	CreditFetchedAt  *time.Time     // Время получения БКИ отдельно от календарной даты отчёта.
+	CashPlan         *CashPlanInput // nil — ни плана, ни полей проекта
 }
 
 // EvaluationInput содержит общие данные и дополнительные входы выбранной модели.
@@ -53,11 +55,31 @@ type ScoringProduct struct {
 
 // nil — проверка не выполнена. Актуальность рассчитывается по датам данных.
 // Аномалии также проверяются по месячным данным; внешний false учитывается дополнительно.
+// Нужен ли денежный план, модель определяет сама по продукту и окну финансов
+// (CashPlan.Required в решении); подтверждение клиента и принятие банком
+// заполняет Scorer из БД.
 type ScoringChecks struct {
-	AccountActiveAndOwned                                 *bool
-	CollateralAccepted, CollateralSufficient              *bool
-	CashPlanRequired, CashPlanConfirmed, CashPlanAccepted *bool
-	NoAnomalousIncome                                     *bool
+	AccountActiveAndOwned                    *bool
+	CollateralAccepted, CollateralSufficient *bool
+	CashPlanConfirmed, CashPlanAccepted      *bool
+	NoAnomalousIncome                        *bool
+}
+
+// CashPlanInput — денежный план и поля проекта заявки. ValidatedReserveKopecks —
+// резерв из принятого актуального заключения банка; nil — такого заключения нет.
+type CashPlanInput struct {
+	Plan                    *cashplandomain.CashPlan
+	Project                 *cashplandomain.Project
+	ValidatedReserveKopecks *int64
+}
+
+// CashPlanAssessment — денежный план в решении по разовому кредиту: нужен ли он
+// и почему (Signals), расчёт плана ликвидности на проверенном резерве (Plan).
+// План «Старта» оценивает проектная модель (ScoringDecision.Project).
+type CashPlanAssessment struct {
+	Required *bool           `json:"required"`
+	Signals  []string        `json:"signals"`
+	Plan     *CashPlanResult `json:"plan"`
 }
 
 type MonthlyFlow struct {
@@ -94,6 +116,7 @@ type ScoringDecision struct {
 	PositiveBlockers []string             `json:"positive_blockers"`
 	Project          *ProjectAssessment   `json:"project,omitempty"`
 	Overdraft        *OverdraftAssessment `json:"overdraft,omitempty"`
+	CashPlan         *CashPlanAssessment  `json:"cash_plan,omitempty"`
 	State            DecisionState        `json:"state"`
 	Metrics          DecisionMetrics      `json:"metrics"`
 	Reasons          []string             `json:"reasons"`

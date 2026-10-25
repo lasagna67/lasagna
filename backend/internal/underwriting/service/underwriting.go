@@ -1,6 +1,7 @@
 // Package underwritingservice — рассмотрение заявки: очередь и карточка сотрудника,
-// назначение, запросы уточнений, решение с договором; ответы клиента на
-// запросы. Правку и отправку заявки ведёт модуль intake, проверку залога — collateral.
+// назначение, запросы уточнений, заключение по денежному плану, решение с
+// договором; ответы клиента на запросы. Правку и отправку заявки ведёт модуль
+// intake, проверку залога — collateral.
 package underwritingservice
 
 import (
@@ -20,6 +21,7 @@ import (
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 	documentdomain "github.com/lasagna67/lasagna.git/internal/document/domain"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
+	"github.com/lasagna67/lasagna.git/internal/scoring"
 	underwritingdomain "github.com/lasagna67/lasagna.git/internal/underwriting/domain"
 	underwritingerrors "github.com/lasagna67/lasagna.git/internal/underwriting/errors"
 )
@@ -159,7 +161,12 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (underwritingdomain.Rev
 		return underwritingdomain.Review{}, fmt.Errorf("get company overview: %w", err)
 	}
 	review.Checks.FillFromOverview(overview, review.Company.INN)
-	review.DecisionBlockers = review.Blockers(s.now())
+	if review.PlanContext, err = s.planContext(ctx, review.Details, overview); err != nil {
+		return underwritingdomain.Review{}, err
+	}
+	now := s.now()
+	review.PlanAssessment = review.AssessPlan(now)
+	review.DecisionBlockers = review.Blockers(now)
 	return review, nil
 }
 
@@ -253,6 +260,7 @@ func (s *Service) Decide(ctx context.Context, cmd underwritingdomain.DecideComma
 	dc := underwritingdomain.DecisionContext{
 		Application: review.Details,
 		Checks:      review.Checks,
+		PlanContext: review.PlanContext,
 		Version:     1,
 		Now:         now,
 	}
@@ -305,6 +313,62 @@ func (s *Service) Decide(ctx context.Context, cmd underwritingdomain.DecideComma
 	})
 	if err != nil {
 		return underwritingdomain.Review{}, fmt.Errorf("decide: %w", err)
+	}
+	return s.Get(ctx, cmd.ApplicationID)
+}
+
+// ReviewCashPlan — заключение сотрудника по денежному плану на условиях
+// cmd.Terms (по умолчанию — из запроса). Неизменяемая версия привязана к хешам
+// плана и условий и к data_revision заявки; revision заявки + 1, data_revision
+// не меняется. Считается по прочитанной карточке, сверка revision в транзакции
+// гарантирует, что план и данные с тех пор не менялись.
+func (s *Service) ReviewCashPlan(ctx context.Context, cmd underwritingdomain.ReviewCashPlanCommand) (underwritingdomain.Review, error) {
+	review, err := s.Get(ctx, cmd.ApplicationID)
+	if err != nil {
+		return underwritingdomain.Review{}, err
+	}
+	if err := underwritingdomain.CanReview(review.Application, cmd.Reviewer); err != nil {
+		return underwritingdomain.Review{}, err
+	}
+	if review.Revision != cmd.ExpectedRevision {
+		return underwritingdomain.Review{}, &applicationerrors.RevisionConflictError{Current: review.Revision}
+	}
+	code := ""
+	if c := review.Request.ProductCode; c != nil {
+		code = *c
+	}
+	if cmd.Terms != nil && cmd.Terms.ProductCode != nil {
+		code = *cmd.Terms.ProductCode
+	}
+	var product *underwritingdomain.Product
+	p, err := s.repo.Product(ctx, code)
+	switch {
+	case errors.Is(err, underwritingerrors.ErrProductNotFound):
+	case err != nil:
+		return underwritingdomain.Review{}, fmt.Errorf("get product: %w", err)
+	default:
+		product = &p
+	}
+	version := 1
+	if len(review.CashPlanReviews) > 0 {
+		version = review.CashPlanReviews[0].Version + 1
+	}
+	planReview, err := underwritingdomain.NewCashPlanReview(uuid.New(), cmd, review.Details, product, version, s.now())
+	if err != nil {
+		return underwritingdomain.Review{}, err
+	}
+
+	_, err = s.repo.Update(ctx, s.update(cmd.ApplicationID, cmd.ExpectedRevision, cmd.Reviewer.ID), func(a *applicationdomain.Application) (underwritingdomain.Change, error) {
+		if err := underwritingdomain.CanReview(*a, cmd.Reviewer); err != nil {
+			return underwritingdomain.Change{}, err
+		}
+		if a.Status != applicationdomain.StatusManualReview && a.Status != applicationdomain.StatusInfoRequested {
+			return underwritingdomain.Change{}, fmt.Errorf("%w: review cash plan in %s", applicationerrors.ErrInvalidState, a.Status)
+		}
+		return underwritingdomain.Change{CashPlanReview: &planReview}, nil
+	})
+	if err != nil {
+		return underwritingdomain.Review{}, fmt.Errorf("review cash plan: %w", err)
 	}
 	return s.Get(ctx, cmd.ApplicationID)
 }
@@ -421,6 +485,32 @@ func (s *Service) clientDetails(ctx context.Context, userID, id uuid.UUID) (unde
 		return underwritingdomain.Details{}, fmt.Errorf("check membership: %w", err)
 	}
 	return d, nil
+}
+
+// planContext — что нужно проверке денежного плана: окно финансов и платежи по
+// действующим кредитам из сохранённой сводки компании, ставка и вид погашения
+// запрошенного продукта.
+func (s *Service) planContext(ctx context.Context, d underwritingdomain.Details, o companydomain.Overview) (underwritingdomain.CashPlanContext, error) {
+	var pc underwritingdomain.CashPlanContext
+	if f := o.Financials.Data; o.Financials.Status == "ok" && f != nil && f.Status == "ok" {
+		pc.Window = scoring.FinancialWindow(f.MonthlyData, s.now())
+	}
+	if c := o.CreditHistory.Data; o.CreditHistory.Status == "ok" && c != nil && c.Status == "ok" && c.Report.Loans != nil {
+		if debt, err := scoring.ActiveMonthlyDebt(c.Report.Loans); err == nil {
+			pc.DebtKopecks = &debt
+		}
+	}
+	if code := d.Request.ProductCode; code != nil {
+		p, err := s.repo.Product(ctx, *code)
+		switch {
+		case errors.Is(err, underwritingerrors.ErrProductNotFound):
+		case err != nil:
+			return pc, fmt.Errorf("get product: %w", err)
+		default:
+			pc.RateBps, pc.Overdraft = p.BaseRateBps, p.Repayment == underwritingdomain.RepaymentOverdraft
+		}
+	}
+	return pc, nil
 }
 
 // loadTerms загружает продукт из условий и счёт: из условий или счёт компании.

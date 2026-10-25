@@ -95,7 +95,13 @@ func (h *Handler) create(c *echo.Context) error {
 //	@Description	иначе 409 INVALID_STATE; поле вне editable_fields — 422 NOT_EDITABLE.
 //	@Description	Непереданное поле не меняется, null очищает значение. need_period и collateral
 //	@Description	заменяются целиком; collateral — только при collateral_mode = pledged.
-//	@Description	Полноту и условия продукта проверяет submit.
+//	@Description	product_details — поля «Старта», cash_plan — денежный план: заменяются целиком, null удаляет.
+//	@Description	План в черновике — только у «Старта» (kind = project); план ликвидности (liquidity) —
+//	@Description	по запросу банка, у овердрафта плана нет. Правка содержимого снимает подтверждение;
+//	@Description	подтверждение — отдельной правкой {"cash_plan": {"confirmed": true}}, когда прогноз
+//	@Description	начинается со следующего месяца и покрывает весь срок кредита, иначе 422
+//	@Description	FORECAST_CONFIRMATION_REQUIRED. data_revision растёт, только если изменились данные.
+//	@Description	Полноту, бюджет «Старта» и условия продукта проверяет submit.
 //	@Tags			applications
 //	@Accept			json
 //	@Produce		json
@@ -134,7 +140,9 @@ func (h *Handler) patch(c *echo.Context) error {
 //
 //	@Summary		Отправить заявку
 //	@Description	draft → submitted → конвейер проверок. Неполный запрос или нарушение условий
-//	@Description	продукта — 422 с полями, заявка остаётся draft. Повтор с тем же Idempotency-Key
+//	@Description	продукта — 422 с полями, заявка остаётся draft. У «Старта» обязательны полные
+//	@Description	product_details (кредит + собственные средства = стоимость, собственных не меньше 30%)
+//	@Description	и подтверждённый cash_plan на срок кредита. Повтор с тем же Idempotency-Key
 //	@Description	и телом не создаёт второй отправки.
 //	@Tags			applications
 //	@Accept			json
@@ -160,7 +168,8 @@ func (h *Handler) submit(c *echo.Context) error {
 //
 //	@Summary		Отправить повторно
 //	@Description	info_requested → submitted после ответов на все запросы банка; запрос проверяется
-//	@Description	как при отправке. Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.
+//	@Description	как при отправке. Если банк открыл cash_plan, план должен быть подтверждён на срок кредита.
+//	@Description	Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.
 //	@Tags			applications
 //	@Accept			json
 //	@Produce		json
