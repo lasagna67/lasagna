@@ -1,6 +1,7 @@
-// Package underwritingrepo — хранение рассмотрения заявки: запросы уточнений и
-// карточка сотрудника. Заявку читает applicationrepo, решения — offerrepo; залог,
-// его проверки и счёт компании пишут модули collateral и company, здесь они
+// Package underwritingrepo — хранение рассмотрения заявки: запросы уточнений,
+// заключения по денежному плану (через cashplanrepo) и карточка сотрудника.
+// Заявку читает applicationrepo, решения — offerrepo; залог, его проверки, план
+// клиента и счёт компании пишут модули collateral, intake и company, здесь они
 // только читаются.
 package underwritingrepo
 
@@ -16,6 +17,7 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	applicationrepo "github.com/lasagna67/lasagna.git/internal/application/repo"
+	cashplanrepo "github.com/lasagna67/lasagna.git/internal/cashplan/repo"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	documentrepo "github.com/lasagna67/lasagna.git/internal/document/repo"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
@@ -58,6 +60,9 @@ func (r *Repo) GetReview(ctx context.Context, id uuid.UUID) (underwritingdomain.
 			return err
 		}
 		if review.CollateralReviews, err = listCollateralReviews(ctx, tx, id, 0); err != nil {
+			return err
+		}
+		if review.CashPlanReviews, err = cashplanrepo.Reviews(ctx, tx, id, 0); err != nil {
 			return err
 		}
 		if review.Decisions, err = offerrepo.ListDecisions(ctx, tx, id, 0); err != nil {
@@ -157,10 +162,11 @@ func (r *Repo) Product(ctx context.Context, code string) (underwritingdomain.Pro
 	var p underwritingdomain.Product
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, code, name, is_active, min_amount_kopecks, max_amount_kopecks,
-			min_term_months, max_term_months, repayment_type::text, collateral_mode::text, max_drawdown_days
+			min_term_months, max_term_months, repayment_type::text, collateral_mode::text, max_drawdown_days,
+			round(base_rate * 100)::int
 		FROM credit_products WHERE code = $1`, code,
 	).Scan(&p.ID, &p.Code, &p.Name, &p.IsActive, &p.MinAmountKopecks, &p.MaxAmountKopecks,
-		&p.MinTermMonths, &p.MaxTermMonths, &p.Repayment, &p.CollateralPolicy, &p.MaxTrancheDays)
+		&p.MinTermMonths, &p.MaxTermMonths, &p.Repayment, &p.CollateralPolicy, &p.MaxTrancheDays, &p.BaseRateBps)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return underwritingdomain.Product{}, underwritingerrors.ErrProductNotFound
 	}
@@ -210,6 +216,11 @@ func apply(ctx context.Context, tx pgx.Tx, c underwritingdomain.Change) error {
 			return err
 		}
 	}
+	if c.CashPlanReview != nil {
+		if err := cashplanrepo.InsertReview(ctx, tx, *c.CashPlanReview); err != nil {
+			return err
+		}
+	}
 	if req := c.InfoRequest; req != nil {
 		_, err := tx.Exec(ctx, `
 			INSERT INTO application_info_requests (id, application_id, status, requested_by, message, editable_fields)
@@ -242,8 +253,9 @@ func apply(ctx context.Context, tx pgx.Tx, c underwritingdomain.Change) error {
 	return nil
 }
 
-// withExtras дополняет заявку ответственным, залогом с последней проверкой и
-// текущим предложением: последним решением, если оно положительное.
+// withExtras дополняет заявку ответственным, залогом с последней проверкой,
+// полями проекта, планом с последним заключением и текущим предложением:
+// последним решением, если оно положительное.
 func withExtras(ctx context.Context, q applicationrepo.Querier, app applicationdomain.ApplicationDetails) (underwritingdomain.Details, error) {
 	d := underwritingdomain.Details{ApplicationDetails: app}
 	if app.AssigneeID != nil {
@@ -273,6 +285,19 @@ func withExtras(ctx context.Context, q applicationrepo.Querier, app applicationd
 	}
 	if len(reviews) > 0 {
 		d.CollateralReview = &reviews[0]
+	}
+	if d.Project, err = cashplanrepo.Project(ctx, q, app.ID); err != nil {
+		return underwritingdomain.Details{}, err
+	}
+	if d.CashPlan, err = cashplanrepo.Plan(ctx, q, app.ID); err != nil {
+		return underwritingdomain.Details{}, err
+	}
+	planReviews, err := cashplanrepo.Reviews(ctx, q, app.ID, 1)
+	if err != nil {
+		return underwritingdomain.Details{}, err
+	}
+	if len(planReviews) > 0 {
+		d.CashPlanReview = &planReviews[0]
 	}
 	decisions, err := offerrepo.ListDecisions(ctx, q, app.ID, 1)
 	if err != nil {

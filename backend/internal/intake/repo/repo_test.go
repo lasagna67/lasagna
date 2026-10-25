@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	intakedomain "github.com/lasagna67/lasagna.git/internal/intake/domain"
 )
@@ -242,5 +243,51 @@ func TestSubmitOverdraftWithoutTerm(t *testing.T) {
 	}
 	if history != 1 || notifications != 1 {
 		t.Errorf("history %d, notifications %d; want 1, 1", history, notifications)
+	}
+}
+
+// Поля проекта и план пишутся вместе с заявкой; data_revision растёт только по
+// DataChanged, подтверждение хранится вместе с хешем содержимого.
+func TestProjectAndPlanRoundTrip(t *testing.T) {
+	pool := testPool(t)
+	r := New(pool)
+	id, user := seedDraft(t, pool)
+
+	plan := cashplandomain.CashPlan{Kind: cashplandomain.KindProject, FirstMonth: "2026-11", OwnReserveKopecks: 10_000_000,
+		Forecast: []cashplandomain.ForecastRow{{Month: "2026-11", IncomeKopecks: 0, ExpensesKopecks: 3_000_000}, {Month: "2026-12", IncomeKopecks: 5_000_000, ExpensesKopecks: 4_000_000}}}
+	plan.Confirm(user, time.Now())
+	project := cashplandomain.Project{Description: ptr("Пекарня"), OwnFundsKopecks: ptr(int64(20_000_000)), SalesStartMonth: ptr("2026-12"),
+		CostItems: []cashplandomain.CostItem{{Name: "Печь", AmountKopecks: 40_000_000}}}
+	write := func(revision int, change intakedomain.Change) {
+		t.Helper()
+		_, err := r.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: revision, ActorID: &user}, func(*intakedomain.Draft) (intakedomain.Change, error) {
+			return change, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(1, intakedomain.Change{Project: &intakedomain.ProjectWrite{Value: &project}, CashPlan: &intakedomain.PlanWrite{Value: &plan}, DataChanged: true})
+
+	d, err := r.Get(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Revision != 2 || d.DataRevision != 2 || d.Project == nil || d.Project.Hash() != project.Hash() ||
+		d.CashPlan == nil || d.CashPlan.Hash() != plan.Hash() || !d.CashPlan.Confirmed() || *d.CashPlan.ConfirmedBy != user {
+		t.Fatalf("stored = revision %d, data %d, project %+v, plan %+v", d.Revision, d.DataRevision, d.Project, d.CashPlan)
+	}
+
+	// Без DataChanged data_revision не двигается; nil удаляет план.
+	write(2, intakedomain.Change{CashPlan: &intakedomain.PlanWrite{}})
+	if d, err = r.Get(ctx, id); err != nil || d.DataRevision != 2 || d.CashPlan != nil || d.Project == nil {
+		t.Fatalf("after delete = data %d, plan %+v, project %v, %v", d.DataRevision, d.CashPlan, d.Project, err)
+	}
+
+	// Подтверждение без хеша БД не примет.
+	_, err = pool.Exec(ctx, `INSERT INTO application_cash_plans (application_id, kind, first_month, own_reserve_kopecks, forecast, confirmed_by)
+		VALUES ($1, 'project', '2026-11', 0, '[]', $2)`, id, user)
+	if err == nil {
+		t.Error("partial confirmation accepted")
 	}
 }

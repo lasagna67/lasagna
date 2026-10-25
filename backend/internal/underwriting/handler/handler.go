@@ -23,6 +23,7 @@ type Service interface {
 	Get(ctx context.Context, id uuid.UUID) (underwritingdomain.Review, error)
 	Take(ctx context.Context, cmd underwritingdomain.TakeCommand) (underwritingdomain.Review, error)
 	RequestInfo(ctx context.Context, cmd underwritingdomain.RequestInfoCommand) (underwritingdomain.Review, error)
+	ReviewCashPlan(ctx context.Context, cmd underwritingdomain.ReviewCashPlanCommand) (underwritingdomain.Review, error)
 	Decide(ctx context.Context, cmd underwritingdomain.DecideCommand) (underwritingdomain.Review, error)
 	RetryChecks(ctx context.Context, cmd underwritingdomain.RetryChecksCommand) (underwritingdomain.Review, error)
 
@@ -51,6 +52,7 @@ func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, clientOnly, staf
 	staff.GET("/:id", h.get)
 	staff.POST("/:id/take", h.take)
 	staff.POST("/:id/request-info", h.requestInfo)
+	staff.POST("/:id/cash-plan-review", h.reviewCashPlan)
 	staff.POST("/:id/decision", h.decide)
 	staff.POST("/:id/retry-checks", h.retryChecks)
 
@@ -221,12 +223,56 @@ func (h *Handler) requestInfo(c *echo.Context) error {
 	return c.JSON(http.StatusOK, underwritingdto.NewReview(review, reviewer))
 }
 
+// reviewCashPlan godoc
+//
+//	@Summary		Заключение по денежному плану
+//	@Description	Неизменяемая версия заключения в manual_review или info_requested: accepted, needs_info
+//	@Description	или rejected с внутренним comment о предпосылках. accepted — с validated_reserve_kopecks
+//	@Description	от 0 до заявленного резерва: кредитные средства и деньги бюджета проекта в него не входят.
+//	@Description	terms — условия проверки, по умолчанию из запроса; сумма не больше запрошенной. Принять план
+//	@Description	можно, только если клиент подтвердил его на срок условий, а у «Старта» сумма сходится с
+//	@Description	бюджетом, — иначе 422: сначала новая ревизия клиента. Заключение действует, пока не
+//	@Description	изменились план, условия и data_revision заявки; revision + 1, data_revision не меняется.
+//	@Description	needs_info сам вопрос клиенту не создаёт — для этого request-info.
+//	@Tags			underwriter
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		string							true	"Заявка"	format(uuid)
+//	@Param			request	body		underwritingdto.CashPlanReviewRequest	true	"Заключение"
+//	@Success		200		{object}	underwritingdto.ReviewApplicationResponse
+//	@Failure		400		{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
+//	@Failure		403		{object}	applicationdto.ErrorResponse	"FORBIDDEN: заявка у другого сотрудника"
+//	@Failure		404		{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		409		{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
+//	@Failure		422		{object}	applicationdto.ErrorResponse	"VALIDATION_FAILED: нет плана, не подтверждён, условия, резерв"
+//	@Router			/underwriter/applications/{id}/cash-plan-review [post]
+func (h *Handler) reviewCashPlan(c *echo.Context) error {
+	reviewer, id, err := h.staffTarget(c)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	var req underwritingdto.CashPlanReviewRequest
+	revision, err := bindRevision(c, &req, &req.ExpectedRevision)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	review, err := h.service.ReviewCashPlan(c.Request().Context(), req.Command(id, reviewer, revision))
+	if err != nil {
+		return h.fail(c, err)
+	}
+	return c.JSON(http.StatusOK, underwritingdto.NewReview(review, reviewer))
+}
+
 // decide godoc
 //
 //	@Summary		Опубликовать решение
 //	@Description	approved — условия как в запросе (ставка не считается), counter_offer — изменён продукт,
-//	@Description	сумма, срок или обеспечение. Положительное решение требует готовых проверок и принятого
-//	@Description	залога у обеспеченного продукта; создаёт предложение и PDF договора. Платёж считает сервер.
+//	@Description	сумма, срок или обеспечение. Положительное решение требует готовых проверок, принятого
+//	@Description	залога у обеспеченного продукта и, если нужен денежный план, подтверждённого клиентом и
+//	@Description	принятого на этих условиях плана, который проходит расчёт; создаёт предложение и PDF
+//	@Description	договора. Предложение по плану действует не дольше 7 суток и до начала следующего месяца.
+//	@Description	Платёж считает сервер.
 //	@Description	rejected — с reason_code и пояснениями для клиента.
 //	@Tags			underwriter
 //	@Accept			json

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
@@ -192,13 +193,7 @@ func EvaluateAnnuity(in ScoringInput, now time.Time) ScoringDecision {
 		check(in.Checks.CollateralAccepted, "collateral_acceptance_missing", "collateral_acceptance_missing", false)
 		check(in.Checks.CollateralSufficient, "collateral_sufficiency_unconfirmed", "collateral_insufficient", false)
 	}
-	if in.Checks.CashPlanRequired == nil {
-		add("cash_plan_requirement_unknown", false)
-	} else if *in.Checks.CashPlanRequired {
-		check(in.Checks.CashPlanConfirmed, "cash_plan_confirmation_missing", "cash_plan_confirmation_missing", false)
-		check(in.Checks.CashPlanAccepted, "cash_plan_acceptance_missing", "cash_plan_acceptance_missing", false)
-		add("cash_plan_required", false)
-	}
+	evaluateCashPlan(in, months, &result, add, check)
 	if in.Overview.FinancialsSourceType == "csv" {
 		add("financials_from_csv", false)
 	} else if in.Overview.FinancialsSourceType != "auto" {
@@ -263,6 +258,53 @@ func EvaluateAnnuity(in ScoringInput, now time.Time) ScoringDecision {
 		result.State = DecisionAutoApproved
 	}
 	return result
+}
+
+// evaluateCashPlan — денежный план в EvaluateAnnuity (P09). Нужен ли он, решают
+// продукт и окно финансов, а не вызывающий код: фиктивное «не нужен» не
+// подставляется. Подтверждение клиента и принятие банком — из in.Checks.
+// Обязательный план всегда оставляет заявку на ручном рассмотрении.
+func evaluateCashPlan(in ScoringInput, months []companydomain.MonthlyData, result *ScoringDecision, add func(string, bool), check func(*bool, string, string, bool)) {
+	code, overdraft := "", false
+	if in.Product != nil {
+		code, overdraft = in.Product.Code, in.Product.RepaymentType == "overdraft"
+	}
+	required, signals := CashPlanRequirement(code, overdraft, months)
+	// Разовое поступление, подтверждённое внешней проверкой, тоже требует плана.
+	if required != nil && !*required && !overdraft && in.Checks.NoAnomalousIncome != nil && !*in.Checks.NoAnomalousIncome {
+		yes := true
+		required, signals = &yes, append(signals, SignalOneOffIncome)
+	}
+	result.CashPlan = &CashPlanAssessment{Required: required, Signals: signals}
+	switch {
+	case required == nil:
+		add("cash_plan_requirement_unknown", false)
+		return
+	case !*required:
+		return
+	}
+	check(in.Checks.CashPlanConfirmed, "cash_plan_confirmation_missing", "cash_plan_confirmation_missing", false)
+	check(in.Checks.CashPlanAccepted, "cash_plan_acceptance_missing", "cash_plan_acceptance_missing", false)
+	add("cash_plan_required", false)
+
+	cp := in.CashPlan
+	if cp == nil || cp.Plan == nil || cp.ValidatedReserveKopecks == nil || in.Checks.CashPlanAccepted == nil || !*in.Checks.CashPlanAccepted {
+		return // план не подтверждён или не принят — причины уже добавлены
+	}
+	m := &result.Metrics
+	if m.D == nil || in.Product.AnnualRateBasisPoints == nil || in.TermMonths <= 0 {
+		add("cash_plan_not_calculable", false)
+		return
+	}
+	res, err := EvaluateCashPlan(*cp.Plan, *cp.ValidatedReserveKopecks, *m.D, in.Amount, int(*in.Product.AnnualRateBasisPoints), in.TermMonths)
+	if err != nil {
+		add("cash_plan_not_calculable", false)
+		return
+	}
+	result.CashPlan.Plan = &res
+	for _, issue := range res.Issues {
+		add(strings.ToLower(issue.Code), false)
+	}
 }
 
 // CalculateScore возвращает 0–1000 баллов по уже проверенным данным.

@@ -18,7 +18,7 @@ import (
 // Экспортирован для модуля underwriting: заявку он читает так же.
 const SelectDetails = `SELECT ` + detailsColumns + ` ` + detailsFrom
 
-const detailsColumns = `a.id, a.number, a.revision, a.company_id, a.applicant_id, a.status,
+const detailsColumns = `a.id, a.number, a.revision, a.data_revision, a.company_id, a.applicant_id, a.status,
 	a.purpose, a.purpose_description, a.requested_amount_kopecks,
 	a.need_period_unit, a.need_period_value, p.code, a.requested_term_months, a.has_collateral,
 	a.assignee_id,
@@ -238,7 +238,7 @@ func ScanDetails(row pgx.CollectableRow) (applicationdomain.ApplicationDetails, 
 	var pledged bool
 	a, req := &d.Application, &d.Application.Request
 	err := row.Scan(
-		&a.ID, &a.Number, &a.Revision, &a.CompanyID, &a.ApplicantID, &a.Status,
+		&a.ID, &a.Number, &a.Revision, &a.DataRevision, &a.CompanyID, &a.ApplicantID, &a.Status,
 		&req.Purpose, &req.PurposeDescription, &req.AmountKopecks,
 		&req.NeedPeriod.Unit, &req.NeedPeriod.Value, &req.ProductCode, &req.TermMonths, &pledged,
 		&a.AssigneeID,

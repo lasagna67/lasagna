@@ -69,7 +69,7 @@ func (f *fakeDrafts) Update(_ context.Context, cmd applicationdomain.UpdateComma
 		return false, &applicationerrors.RevisionConflictError{Current: d.Revision}
 	}
 	app := d.Application
-	draft := intakedomain.Draft{Application: &app, Collateral: d.Collateral}
+	draft := intakedomain.Draft{Application: &app, Collateral: d.Collateral, Project: d.Project, CashPlan: d.CashPlan}
 	if code := app.Request.ProductCode; code != nil {
 		if p, ok := f.products[*code]; ok {
 			draft.Product = &p
@@ -95,6 +95,15 @@ func (f *fakeDrafts) Update(_ context.Context, cmd applicationdomain.UpdateComma
 			}
 		}
 		d.Collateral = &next
+	}
+	if w := change.Project; w != nil {
+		d.Project = w.Value
+	}
+	if w := change.CashPlan; w != nil {
+		d.CashPlan = w.Value
+	}
+	if change.DataChanged {
+		d.DataRevision++
 	}
 	f.history[app.ID] = append(f.history[app.ID], change.Transitions...)
 	if n := change.Notification; n != nil {

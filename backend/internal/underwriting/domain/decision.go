@@ -46,6 +46,7 @@ type Product struct {
 	Repayment        RepaymentType
 	CollateralPolicy CollateralPolicy
 	MaxTrancheDays   *int // овердрафт: предельный срок транша
+	BaseRateBps      *int // ставка каталога; nil — не задана
 }
 
 // TermsInput — условия из запроса сотрудника; nil — поле не передано.
@@ -75,12 +76,14 @@ type DecideCommand struct {
 	Comment          *string  // внутренний комментарий
 }
 
-// DecisionContext — от чего зависит решение: заявка с залогом и его проверкой,
-// проверки, продукт и счёт. Product сервис загружает по условиям, Account — по
-// условиям или счёт компании; nil — не найдены. Version — номер нового решения.
+// DecisionContext — от чего зависит решение: заявка с залогом, планом и их
+// проверками, проверки источников, продукт и счёт. Product сервис загружает по
+// условиям, Account — по условиям или счёт компании; nil — не найдены.
+// PlanContext — для проверки денежного плана. Version — номер нового решения.
 type DecisionContext struct {
 	Application Details
 	Checks      CheckSummary
+	PlanContext CashPlanContext
 	Product     *Product
 	Account     *offerdomain.Account
 	Version     int
@@ -305,6 +308,23 @@ func offerTerms(in *TermsInput, dc DecisionContext) (offerdomain.OfferTerms, []s
 
 	errs = append(errs, dc.Checks.Blockers(p.Code, dc.Application.Company.INN)...)
 
+	// Денежный план — на окончательных условиях и ставке предложения. Предложение
+	// по плану с абсолютными месяцами действует ограниченно (P14).
+	if t.AmountKopecks > 0 && (p.Repayment != RepaymentAnnuity || t.TermMonths != nil) {
+		pt := offerPlanTerms(t)
+		plan := AssessCashPlan(dc.Application, dc.PlanContext, &pt, &t.AnnualRateBps, p.Repayment == RepaymentOverdraft, dc.Now)
+		errs = append(errs, plan.Blockers...)
+		if plan.Required != nil && *plan.Required {
+			deadline := planOfferDeadline(dc.Now)
+			switch {
+			case in.ValidUntil == nil:
+				t.ValidUntil = &deadline
+			case t.ValidUntil != nil && t.ValidUntil.After(deadline):
+				term("valid_until", "TOO_LATE", "Предложение по денежному плану действует не дольше 7 суток и не дальше начала следующего месяца")
+			}
+		}
+	}
+
 	changed := changedFields(a.Request, t, in)
 	// Бюджет «Старта»: кредит плюс собственные средства равны стоимости проекта.
 	// Новая сумма его ломает — сначала клиент уточняет источники финансирования.
@@ -356,8 +376,13 @@ func collateralBlockers(c *collateraldomain.Collateral, review *collateraldomain
 // CollateralAccepted — результат проверки залога в модуле collateral.
 const CollateralAccepted = "accepted"
 
+// AssessPlan — денежный план на запрошенных условиях и ставке продукта по каталогу.
+func (r Review) AssessPlan(now time.Time) PlanAssessment {
+	return AssessCashPlan(r.Details, r.PlanContext, RequestTerms(r.Request), r.PlanContext.RateBps, r.PlanContext.Overdraft, now)
+}
+
 // Blockers — что сейчас мешает одобрить заявку на запрошенных условиях:
-// проверки и залог. Условия решения проверяет Decide.
+// проверки, залог и денежный план. Условия решения проверяет Decide.
 func (r Review) Blockers(now time.Time) []applicationerrors.FieldError {
 	code := ""
 	if r.Request.ProductCode != nil {
@@ -371,7 +396,7 @@ func (r Review) Blockers(now time.Time) []applicationerrors.FieldError {
 		}
 		errs = append(errs, collateralBlockers(r.Collateral, r.CollateralReview, amount, now)...)
 	}
-	return errs
+	return append(errs, r.AssessPlan(now).Blockers...)
 }
 
 // changedFields — чем условия отличаются от запроса. Ставка не входит: её

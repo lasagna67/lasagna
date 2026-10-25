@@ -97,7 +97,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "В draft — любые поля запроса и залог, в info_requested — только из editable_fields,\nиначе 409 INVALID_STATE; поле вне editable_fields — 422 NOT_EDITABLE.\nНепереданное поле не меняется, null очищает значение. need_period и collateral\nзаменяются целиком; collateral — только при collateral_mode = pledged.\nПолноту и условия продукта проверяет submit.",
+                "description": "В draft — любые поля запроса и залог, в info_requested — только из editable_fields,\nиначе 409 INVALID_STATE; поле вне editable_fields — 422 NOT_EDITABLE.\nНепереданное поле не меняется, null очищает значение. need_period и collateral\nзаменяются целиком; collateral — только при collateral_mode = pledged.\nproduct_details — поля «Старта», cash_plan — денежный план: заменяются целиком, null удаляет.\nПлан в черновике — только у «Старта» (kind = project); план ликвидности (liquidity) —\nпо запросу банка, у овердрафта плана нет. Правка содержимого снимает подтверждение;\nподтверждение — отдельной правкой {\"cash_plan\": {\"confirmed\": true}}, когда прогноз\nначинается со следующего месяца и покрывает весь срок кредита, иначе 422\nFORECAST_CONFIRMATION_REQUIRED. data_revision растёт, только если изменились данные.\nПолноту, бюджет «Старта» и условия продукта проверяет submit.",
                 "consumes": [
                     "application/json"
                 ],
@@ -389,7 +389,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "info_requested → submitted после ответов на все запросы банка; запрос проверяется\nкак при отправке. Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.",
+                "description": "info_requested → submitted после ответов на все запросы банка; запрос проверяется\nкак при отправке. Если банк открыл cash_plan, план должен быть подтверждён на срок кредита.\nПовтор с тем же Idempotency-Key и телом не создаёт второй отправки.",
                 "consumes": [
                     "application/json"
                 ],
@@ -485,7 +485,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "draft → submitted → конвейер проверок. Неполный запрос или нарушение условий\nпродукта — 422 с полями, заявка остаётся draft. Повтор с тем же Idempotency-Key\nи телом не создаёт второй отправки.",
+                "description": "draft → submitted → конвейер проверок. Неполный запрос или нарушение условий\nпродукта — 422 с полями, заявка остаётся draft. У «Старта» обязательны полные\nproduct_details (кредит + собственные средства = стоимость, собственных не меньше 30%)\nи подтверждённый cash_plan на срок кредита. Повтор с тем же Idempotency-Key\nи телом не создаёт второй отправки.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1623,6 +1623,83 @@
                 }
             }
         },
+        "/underwriter/applications/{id}/cash-plan-review": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Неизменяемая версия заключения в manual_review или info_requested: accepted, needs_info\nили rejected с внутренним comment о предпосылках. accepted — с validated_reserve_kopecks\nот 0 до заявленного резерва: кредитные средства и деньги бюджета проекта в него не входят.\nterms — условия проверки, по умолчанию из запроса; сумма не больше запрошенной. Принять план\nможно, только если клиент подтвердил его на срок условий, а у «Старта» сумма сходится с\nбюджетом, — иначе 422: сначала новая ревизия клиента. Заключение действует, пока не\nизменились план, условия и data_revision заявки; revision + 1, data_revision не меняется.\nneeds_info сам вопрос клиенту не создаёт — для этого request-info.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "underwriter"
+                ],
+                "summary": "Заключение по денежному плану",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Заключение",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/underwritingdto.CashPlanReviewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN: заявка у другого сотрудника",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED: нет плана, не подтверждён, условия, резерв",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/underwriter/applications/{id}/collateral-review": {
             "post": {
                 "security": [
@@ -1713,7 +1790,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "approved — условия как в запросе (ставка не считается), counter_offer — изменён продукт,\nсумма, срок или обеспечение. Положительное решение требует готовых проверок и принятого\nзалога у обеспеченного продукта; создаёт предложение и PDF договора. Платёж считает сервер.\nrejected — с reason_code и пояснениями для клиента.",
+                "description": "approved — условия как в запросе (ставка не считается), counter_offer — изменён продукт,\nсумма, срок или обеспечение. Положительное решение требует готовых проверок, принятого\nзалога у обеспеченного продукта и, если нужен денежный план, подтверждённого клиентом и\nпринятого на этих условиях плана, который проходит расчёт; создаёт предложение и PDF\nдоговора. Предложение по плану действует не дольше 7 суток и до начала следующего месяца.\nПлатёж считает сервер.\nrejected — с reason_code и пояснениями для клиента.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2348,6 +2425,9 @@
                         "submit"
                     ]
                 },
+                "cash_plan": {
+                    "type": "object"
+                },
                 "checks": {
                     "type": "object"
                 },
@@ -2367,6 +2447,10 @@
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "data_revision": {
+                    "type": "integer",
+                    "example": 1
                 },
                 "editable_fields": {
                     "type": "array",
@@ -2394,6 +2478,9 @@
                     "example": 1000
                 },
                 "offer": {
+                    "type": "object"
+                },
+                "plan_review": {
                     "type": "object"
                 },
                 "product_details": {
@@ -3537,6 +3624,35 @@
                 }
             }
         },
+        "intakedto.CashPlanPatch": {
+            "type": "object",
+            "properties": {
+                "confirmed": {
+                    "type": "boolean"
+                },
+                "first_month": {
+                    "type": "string",
+                    "example": "2026-11"
+                },
+                "forecast": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/intakedto.ForecastRowRequest"
+                    }
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "project",
+                        "liquidity"
+                    ]
+                },
+                "own_reserve_kopecks": {
+                    "type": "integer",
+                    "example": 10000000
+                }
+            }
+        },
         "intakedto.CollateralRequest": {
             "type": "object",
             "properties": {
@@ -3568,6 +3684,19 @@
                 }
             }
         },
+        "intakedto.CostItemRequest": {
+            "type": "object",
+            "properties": {
+                "amount_kopecks": {
+                    "type": "integer",
+                    "example": 40000000
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Печь"
+                }
+            }
+        },
         "intakedto.CreateApplicationRequest": {
             "type": "object",
             "properties": {
@@ -3575,6 +3704,23 @@
                     "type": "string",
                     "format": "uuid",
                     "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                }
+            }
+        },
+        "intakedto.ForecastRowRequest": {
+            "type": "object",
+            "properties": {
+                "expenses_kopecks": {
+                    "type": "integer",
+                    "example": 8000000
+                },
+                "income_kopecks": {
+                    "type": "integer",
+                    "example": 15000000
+                },
+                "month": {
+                    "type": "string",
+                    "example": "2026-11"
                 }
             }
         },
@@ -3599,12 +3745,18 @@
         "intakedto.PatchApplicationRequest": {
             "type": "object",
             "properties": {
+                "cash_plan": {
+                    "$ref": "#/definitions/intakedto.CashPlanPatch"
+                },
                 "collateral": {
                     "$ref": "#/definitions/intakedto.CollateralRequest"
                 },
                 "expected_revision": {
                     "type": "integer",
                     "example": 3
+                },
+                "product_details": {
+                    "$ref": "#/definitions/intakedto.ProjectPatch"
                 },
                 "request": {
                     "$ref": "#/definitions/intakedto.PatchRequestFields"
@@ -3655,6 +3807,29 @@
                 "term_months": {
                     "type": "integer",
                     "example": 12
+                }
+            }
+        },
+        "intakedto.ProjectPatch": {
+            "type": "object",
+            "properties": {
+                "cost_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/intakedto.CostItemRequest"
+                    }
+                },
+                "own_funds_kopecks": {
+                    "type": "integer",
+                    "example": 20000000
+                },
+                "project_description": {
+                    "type": "string",
+                    "example": "Пекарня у метро"
+                },
+                "sales_start_month": {
+                    "type": "string",
+                    "example": "2026-12"
                 }
             }
         },
@@ -3783,6 +3958,84 @@
                 }
             }
         },
+        "scoring.CashPlanResult": {
+            "type": "object",
+            "properties": {
+                "c": {
+                    "type": "integer"
+                },
+                "cs": {
+                    "type": "integer"
+                },
+                "debt_kopecks": {
+                    "type": "integer"
+                },
+                "max_payment_kopecks": {
+                    "type": "integer"
+                },
+                "min_stress_balance_kopecks": {
+                    "type": "integer"
+                },
+                "months": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/scoring.PlanMonth"
+                    }
+                },
+                "reserve_kopecks": {
+                    "type": "integer"
+                }
+            }
+        },
+        "scoring.PlanMonth": {
+            "type": "object",
+            "properties": {
+                "month": {
+                    "type": "string"
+                },
+                "payment_kopecks": {
+                    "type": "integer"
+                },
+                "stress_balance_kopecks": {
+                    "type": "integer"
+                }
+            }
+        },
+        "scoring.ProjectResult": {
+            "type": "object",
+            "properties": {
+                "own_funds_kopecks": {
+                    "type": "integer"
+                },
+                "plan": {
+                    "$ref": "#/definitions/scoring.CashPlanResult"
+                },
+                "preliminary": {
+                    "type": "boolean"
+                },
+                "project_cost_kopecks": {
+                    "type": "integer"
+                },
+                "required_own_funds_kopecks": {
+                    "type": "integer"
+                },
+                "result": {
+                    "type": "string",
+                    "enum": [
+                        "pass",
+                        "needs_info",
+                        "fail"
+                    ]
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "completed",
+                        "insufficient_data"
+                    ]
+                }
+            }
+        },
         "swagger.HTTPError": {
             "type": "object",
             "properties": {
@@ -3816,6 +4069,70 @@
                 },
                 "next_cursor": {
                     "type": "string"
+                }
+            }
+        },
+        "underwritingdto.CashPlanAssessmentResponse": {
+            "type": "object",
+            "properties": {
+                "blockers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/applicationdto.FieldErrorResponse"
+                    }
+                },
+                "liquidity": {
+                    "$ref": "#/definitions/scoring.CashPlanResult"
+                },
+                "project": {
+                    "$ref": "#/definitions/scoring.ProjectResult"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "review_current": {
+                    "type": "boolean"
+                },
+                "signals": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "terms": {
+                    "$ref": "#/definitions/underwritingdto.PlanTermsResponse"
+                }
+            }
+        },
+        "underwritingdto.CashPlanReviewRequest": {
+            "type": "object",
+            "properties": {
+                "comment": {
+                    "type": "string",
+                    "example": "Резерв на депозите, кредитные средства и деньги бюджета проекта не входят"
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 6
+                },
+                "public_comment": {
+                    "type": "string"
+                },
+                "result": {
+                    "type": "string",
+                    "enum": [
+                        "accepted",
+                        "needs_info",
+                        "rejected"
+                    ],
+                    "example": "accepted"
+                },
+                "terms": {
+                    "$ref": "#/definitions/underwritingdto.PlanTermsRequest"
+                },
+                "validated_reserve_kopecks": {
+                    "type": "integer",
+                    "example": 10000000
                 }
             }
         },
@@ -3964,6 +4281,51 @@
                 }
             }
         },
+        "underwritingdto.PlanTermsRequest": {
+            "type": "object",
+            "properties": {
+                "amount_kopecks": {
+                    "type": "integer",
+                    "example": 30000000
+                },
+                "collateral_mode": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "pledged"
+                    ]
+                },
+                "product_code": {
+                    "type": "string",
+                    "example": "start"
+                },
+                "term_months": {
+                    "type": "integer",
+                    "example": 24
+                }
+            }
+        },
+        "underwritingdto.PlanTermsResponse": {
+            "type": "object",
+            "properties": {
+                "amount_kopecks": {
+                    "type": "integer"
+                },
+                "collateral_mode": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "pledged"
+                    ]
+                },
+                "product_code": {
+                    "type": "string"
+                },
+                "term_months": {
+                    "type": "integer"
+                }
+            }
+        },
         "underwritingdto.RequestInfoRequest": {
             "type": "object",
             "properties": {
@@ -4035,6 +4397,18 @@
                         "submit"
                     ]
                 },
+                "cash_plan": {
+                    "type": "object"
+                },
+                "cash_plan_assessment": {
+                    "$ref": "#/definitions/underwritingdto.CashPlanAssessmentResponse"
+                },
+                "cash_plan_reviews": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/underwritingdto.StaffPlanReviewResponse"
+                    }
+                },
                 "checks": {
                     "type": "object"
                 },
@@ -4060,6 +4434,10 @@
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "data_revision": {
+                    "type": "integer",
+                    "example": 1
                 },
                 "decision_blockers": {
                     "type": "array",
@@ -4111,6 +4489,9 @@
                     "example": 1000
                 },
                 "offer": {
+                    "type": "object"
+                },
+                "plan_review": {
                     "type": "object"
                 },
                 "product_details": {
@@ -4202,6 +4583,57 @@
                 }
             }
         },
+        "underwritingdto.StaffPlanReviewResponse": {
+            "type": "object",
+            "properties": {
+                "actual": {
+                    "type": "boolean"
+                },
+                "cash_plan_hash": {
+                    "type": "string"
+                },
+                "comment": {
+                    "type": "string"
+                },
+                "data_revision": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "public_comment": {
+                    "type": "string"
+                },
+                "result": {
+                    "type": "string",
+                    "enum": [
+                        "accepted",
+                        "needs_info",
+                        "rejected"
+                    ]
+                },
+                "reviewed_at": {
+                    "type": "string"
+                },
+                "reviewed_by": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "terms": {
+                    "$ref": "#/definitions/underwritingdto.PlanTermsResponse"
+                },
+                "terms_hash": {
+                    "type": "string"
+                },
+                "validated_reserve_kopecks": {
+                    "type": "integer"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
         "underwritingdto.TermsRequest": {
             "type": "object",
             "properties": {
@@ -4264,6 +4696,9 @@
                         "submit"
                     ]
                 },
+                "cash_plan": {
+                    "type": "object"
+                },
                 "checks": {
                     "type": "object"
                 },
@@ -4283,6 +4718,10 @@
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "data_revision": {
+                    "type": "integer",
+                    "example": 1
                 },
                 "editable_fields": {
                     "type": "array",
@@ -4310,6 +4749,9 @@
                     "example": 1000
                 },
                 "offer": {
+                    "type": "object"
+                },
+                "plan_review": {
                     "type": "object"
                 },
                 "product_details": {
