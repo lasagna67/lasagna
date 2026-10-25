@@ -6,6 +6,7 @@ import (
 	"time"
 
 	company "github.com/lasagna67/lasagna.git/internal/company/domain"
+	"github.com/lasagna67/lasagna.git/internal/validation"
 )
 
 // EvaluateProject рассчитывает проект независимо от исторических Financials.
@@ -53,15 +54,15 @@ func EvaluateProject(in ProjectInput, now time.Time) ProjectAssessment {
 	for _, reason := range append(bad, pending...) {
 		add(strings.ToUpper(reason))
 	}
-	card, fresh := registrySnapshot(in.ScoringInput, now, 30*24*time.Hour)
+	card, fresh := validation.RegistrySnapshot(in.Overview.Registry, in.INN, in.RegistrySyncedAt, now, 30*24*time.Hour)
 	if card == nil || card.Status != company.StatusActive || !fresh {
 		add("REGISTRY_ACTIVE_CURRENT_REQUIRED")
 	}
-	credit, _, creditReason := validatedCreditDebt(in.Overview.CreditHistory, in.INN, businessDay(now))
+	credit, _, creditReason := validatedCreditDebt(in.Overview.CreditHistory, in.INN, validation.BusinessDay(now))
 	if creditReason != "" {
 		add(creditReason)
 	} else {
-		if current := creditReportCurrent(credit, now, 30*24*time.Hour); current == nil || !*current {
+		if current := validation.CreditReportCurrent(credit, now, 30*24*time.Hour); current == nil || !*current {
 			add("BKI_STALE")
 		}
 		for _, loan := range credit.Report.Loans {
@@ -223,7 +224,7 @@ func projectForecast(in ProjectInput, now time.Time) ([]company.MonthlyData, str
 			return nil, "SALES_START_MONTH_REQUIRED"
 		}
 	}
-	day := businessDay(now)
+	day := validation.BusinessDay(now)
 	first := time.Date(day.Year(), day.Month()+1, 1, 0, 0, 0, 0, day.Location())
 	months := make([]company.MonthlyData, 0, len(in.Forecast))
 	for i, row := range in.Forecast {

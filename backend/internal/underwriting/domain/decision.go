@@ -9,7 +9,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"

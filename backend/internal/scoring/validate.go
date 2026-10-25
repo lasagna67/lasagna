@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
+	"github.com/lasagna67/lasagna.git/internal/validation"
 )
 
 type ValidationStatus string
@@ -232,52 +233,6 @@ func NoAnomalousIncome(months []companydomain.MonthlyData) *bool {
 	return &clean
 }
 
-// dataCurrent проверяет актуальность источника, включая точную границу допустимого возраста.
-func dataCurrent(date *time.Time, now time.Time, maxAge time.Duration) *bool {
-	if date == nil || date.IsZero() {
-		return nil
-	}
-	current := !date.After(now) && !date.Before(now.Add(-maxAge))
-	return &current
-}
-
-// Срок актуальности задаётся моделью; отсутствие или некорректная дата — неизвестная актуальность.
-func creditReportCurrent(report *companydomain.CreditReport, now time.Time, maxAge time.Duration) *bool {
-	if report == nil {
-		return nil
-	}
-	day := businessDay(now)
-	date, err := time.ParseInLocation(time.DateOnly, report.ReportDate, day.Location())
-	if err != nil {
-		return nil
-	}
-	return dataCurrent(&date, day, maxAge)
-}
-
-// registrySnapshot проверяет источник и принадлежность данных компании.
-// Дополнительные требования к статусу и регистрации остаются в моделях.
-func registrySnapshot(in ScoringInput, now time.Time, maxAge time.Duration) (*companydomain.RegistryCard, bool) {
-	r := in.Overview.Registry
-	if r.Status != "ok" || r.Data == nil || in.INN == "" || r.Data.INN != in.INN {
-		return nil, false
-	}
-	fresh := dataCurrent(in.RegistrySyncedAt, now, maxAge)
-	return r.Data, fresh != nil && *fresh
-}
-
-// validateRegistry проверяет корректность снимка реестра и отдельно его свежесть
-// в пределах 24 часов. Проверка общая для кредитных моделей.
-func validateRegistry(in ScoringInput, now time.Time) (valid, fresh bool) {
-	card, fresh := registrySnapshot(in, now, 24*time.Hour)
-	if card == nil || card.RegistrationDate.IsZero() || businessDay(card.RegistrationDate).After(businessDay(now)) {
-		return false, false
-	}
-	if !slices.Contains([]companydomain.RegistryStatus{companydomain.StatusActive, companydomain.StatusReorganizing, companydomain.StatusTerminated}, card.Status) {
-		return false, false
-	}
-	return true, fresh
-}
-
 // При чтении нормализованных снимков из JSON отличаем явно переданный ноль
 // от отсутствующей суммы. При вызове из Go значения передаёт вызывающий код.
 func (in *OverdraftInput) UnmarshalJSON(data []byte) error {
@@ -369,44 +324,15 @@ func overdraftCredit(in OverdraftInput, day time.Time) (*companydomain.CreditRep
 }
 
 func validatedCreditDebt(r companydomain.SourceResult[companydomain.CreditReport], inn string, day time.Time) (*companydomain.CreditReport, int64, string) {
-	if r.Status != "ok" || r.Data == nil {
-		return nil, 0, "BKI_UNAVAILABLE"
+	credit, reason := validation.CreditReport(r, inn, day)
+	if reason != "" {
+		return credit, 0, reason
 	}
-	c := r.Data
-	date, err := time.ParseInLocation(time.DateOnly, c.ReportDate, day.Location())
-	if c.Status != "ok" || inn == "" || c.INN != inn || err != nil || date.After(day) || c.Report.HasCreditHistory == nil || c.Report.HistoryMonths < 0 || c.Report.Loans == nil {
-		return nil, 0, "BKI_INVALID"
-	}
-	seen := map[string]bool{}
-	obligationsUsable := true
-	for _, loan := range c.Report.Loans {
-		if strings.TrimSpace(loan.LoanID) == "" || seen[loan.LoanID] || loan.MonthlyPayment < 0 || loan.OutstandingAmount < 0 || loan.OverdueAmount < 0 || loan.OverdueDays < 0 {
-			return nil, 0, "BKI_INVALID"
-		}
-		seen[loan.LoanID] = true
-		if loan.Status != "active" && loan.Status != "closed" {
-			return nil, 0, "BKI_INVALID"
-		}
-		if loan.Status == "active" {
-			if !*c.Report.HasCreditHistory {
-				return nil, 0, "BKI_INVALID"
-			}
-			if loan.Currency != "RUB" || !slices.Contains([]string{"business_loan", "equipment_loan", "consumer_loan", "mortgage", "auto_loan"}, loan.LoanType) || (loan.OutstandingAmount > 0 && loan.MonthlyPayment == 0) {
-				obligationsUsable = false
-			}
-		}
-	}
-	if !*c.Report.HasCreditHistory && (c.Report.HistoryMonths != 0 || len(c.Report.Loans) != 0) {
-		return nil, 0, "BKI_INVALID"
-	}
-	if !obligationsUsable {
-		return c, 0, "BKI_OBLIGATIONS_INSUFFICIENT"
-	}
-	debt, err := ActiveMonthlyDebt(c.Report.Loans)
+	debt, err := ActiveMonthlyDebt(credit.Report.Loans)
 	if err != nil {
-		return c, 0, "CALCULATION_FAILED"
+		return credit, 0, "CALCULATION_FAILED"
 	}
-	return c, debt, ""
+	return credit, debt, ""
 }
 
 func overdraftOneOff(months []companydomain.MonthlyData) bool {
@@ -419,9 +345,4 @@ func overdraftOneOff(months []companydomain.MonthlyData) bool {
 	// Удвоенная медиана чётного ряда равна точной сумме двух центральных значений.
 	sum, carry := bits.Add64(uint64(lower), uint64(upper), 0)
 	return carry == 0 && uint64(incomes[len(incomes)-1]) > sum
-}
-
-func businessDay(now time.Time) time.Time {
-	t := now.In(time.FixedZone("Europe/Moscow", 3*60*60))
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }

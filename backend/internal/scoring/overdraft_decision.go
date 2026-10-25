@@ -8,14 +8,15 @@ import (
 
 	"github.com/google/uuid"
 	company "github.com/lasagna67/lasagna.git/internal/company/domain"
+	"github.com/lasagna67/lasagna.git/internal/validation"
 )
 
 // EvaluateOverdraft рассчитывает оценку и рекомендует маршрут для Approval.
 // can_publish разрешает положительное решение сотрудника, а не автоодобрение.
 func EvaluateOverdraft(in OverdraftInput, now time.Time) OverdraftAssessment {
 	stops := []string{}
-	day := businessDay(now)
-	registryValid, registryFresh := validateRegistry(in.ScoringInput, now)
+	day := validation.BusinessDay(now)
+	registryValid, registryFresh := validation.Registry(in.Overview.Registry, in.INN, in.RegistrySyncedAt, now)
 	credit, _, creditReason := overdraftCredit(in, day)
 	creditFresh := credit != nil && overdraftCreditFresh(in, now)
 	// Стоп-факторы P06 учитываются только по корректным актуальным источникам,
@@ -123,11 +124,11 @@ func EvaluateOverdraft(in OverdraftInput, now time.Time) OverdraftAssessment {
 }
 
 func overdraftCreditFresh(in OverdraftInput, now time.Time) bool {
-	freshness := dataCurrent(in.CreditFetchedAt, now, 24*time.Hour)
+	freshness := validation.DataCurrent(in.CreditFetchedAt, now, 24*time.Hour)
 	if freshness == nil || !*freshness || in.Overview.CreditHistory.Data == nil {
 		return false
 	}
-	current := creditReportCurrent(in.Overview.CreditHistory.Data, now, 7*24*time.Hour)
+	current := validation.CreditReportCurrent(in.Overview.CreditHistory.Data, now, 7*24*time.Hour)
 	return current != nil && *current
 }
 

@@ -11,6 +11,7 @@ import (
 
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
+	"github.com/lasagna67/lasagna.git/internal/validation"
 )
 
 // EvaluateAnnuity рассчитывает метрики и выбирает маршрут. manual_review не является
@@ -32,16 +33,16 @@ func EvaluateAnnuity(in ScoringInput, now time.Time) ScoringDecision {
 		add(reason, false)
 	}
 	result.Metrics = DecisionMetrics{Status: "insufficient_data", F: []MonthlyFlow{}, S: []MonthlyFlow{}, Schedule: []Payment{}}
-	registryCurrent := dataCurrent(in.RegistrySyncedAt, now, 24*time.Hour)
-	creditCurrent := dataCurrent(in.CreditFetchedAt, now, 24*time.Hour)
-	creditReportDateCurrent := creditReportCurrent(in.Overview.CreditHistory.Data, now, 7*24*time.Hour)
+	registryCurrent := validation.DataCurrent(in.RegistrySyncedAt, now, 24*time.Hour)
+	creditCurrent := validation.DataCurrent(in.CreditFetchedAt, now, 24*time.Hour)
+	creditReportDateCurrent := validation.CreditReportCurrent(in.Overview.CreditHistory.Data, now, 7*24*time.Hour)
 	credit, debt, creditReason := cashflowCredit(in, now)
 	if creditReason != "" {
 		add(creditReason, false)
 	}
 	// Проверяем известные стоп-причины даже при недоступном другом источнике.
 	if card := in.Overview.Registry.Data; card != nil {
-		valid, fresh := validateRegistry(in, now)
+		valid, fresh := validation.Registry(in.Overview.Registry, in.INN, in.RegistrySyncedAt, now)
 		if valid && fresh && card.Status == companydomain.StatusTerminated {
 			add(ReasonCompanyTerminated, true)
 		}
@@ -411,15 +412,7 @@ func BuildAnnuitySchedule(amount, annualRateBasisPoints int64, termMonths int) (
 	if int64(int(annualRateBasisPoints)) != annualRateBasisPoints {
 		return nil, fmt.Errorf("annual rate overflows int")
 	}
-	rows, err := offerdomain.AnnuitySchedule(amount, int(annualRateBasisPoints), termMonths)
-	if err != nil {
-		return nil, err
-	}
-	schedule := make([]Payment, len(rows))
-	for i, row := range rows {
-		schedule[i] = Payment(row)
-	}
-	return schedule, nil
+	return offerdomain.AnnuitySchedule(amount, int(annualRateBasisPoints), termMonths)
 }
 
 // MaximumPayment возвращает Pmax из полного графика, включая последний платёж.
@@ -475,7 +468,7 @@ func annuityIncomeTrend(months []companydomain.MonthlyData) *big.Rat {
 // cashflowCredit проверяет целостность отчёта независимо от его свежести.
 // Некорректный отчёт не может запускать стоп-правило или давать расчётный долг.
 func cashflowCredit(in ScoringInput, now time.Time) (*companydomain.CreditReport, int64, string) {
-	credit, debt, reason := validatedCreditDebt(in.Overview.CreditHistory, in.INN, businessDay(now))
+	credit, debt, reason := validatedCreditDebt(in.Overview.CreditHistory, in.INN, validation.BusinessDay(now))
 	if credit == nil {
 		return nil, 0, "credit_report_invalid"
 	}

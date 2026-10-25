@@ -125,10 +125,17 @@ const (
 
 // Certificate — сертификат КЭП, которым подписано заявление.
 type Certificate struct {
-	Serial          string
-	Type            CertificateType
-	OwnerINN        string
-	OrganizationINN string // пусто, если сертификат не на организацию
+	Serial           string          `json:"serial"`
+	Type             CertificateType `json:"type"`
+	OwnerINN         string          `json:"owner_inn"`
+	OrganizationINN  string          `json:"organization_inn"` // пусто, если сертификат не на организацию
+	ValidFrom        string          `json:"valid_from"`
+	ValidTo          string          `json:"valid_to"`
+	Status           string          `json:"status"`
+	Issuer           string          `json:"issuer"`
+	OwnerFullName    string          `json:"owner_full_name"`
+	OwnerPosition    string          `json:"owner_position"`
+	OrganizationName string          `json:"organization_name"`
 }
 
 // Challenge — заявление о подключении компании, которое руководитель

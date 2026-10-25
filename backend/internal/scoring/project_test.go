@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	company "github.com/lasagna67/lasagna.git/internal/company/domain"
+	"github.com/lasagna67/lasagna.git/internal/validation"
 )
 
 // Фикстура явно моделирует проверенные банком данные, без значений по умолчанию в модели.
@@ -270,7 +271,7 @@ func TestProjectIntegerOverflow(t *testing.T) {
 
 func TestProjectFreshnessBoundary(t *testing.T) {
 	in := projectInput(24)
-	day := businessDay(decisionNow)
+	day := validation.BusinessDay(decisionNow)
 	in.RegistrySyncedAt = timeValue(decisionNow.Add(-30 * 24 * time.Hour))
 	in.Overview.CreditHistory.Data.ReportDate = day.AddDate(0, 0, -30).Format(time.DateOnly)
 	if a := EvaluateProject(in, decisionNow); !a.CanPublish {

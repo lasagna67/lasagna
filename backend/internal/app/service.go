@@ -13,6 +13,7 @@ import (
 	offercontract "github.com/lasagna67/lasagna.git/internal/offer/contract"
 	offerservice "github.com/lasagna67/lasagna.git/internal/offer/service"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
+	signservice "github.com/lasagna67/lasagna.git/internal/sign/service"
 	underwritingservice "github.com/lasagna67/lasagna.git/internal/underwriting/service"
 	userservice "github.com/lasagna67/lasagna.git/internal/user/service"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
@@ -31,6 +32,7 @@ type Service struct {
 	Underwriting   *underwritingservice.Service
 	Offer          *offerservice.Service
 	Document       *documentservice.Service
+	Sign           *signservice.Service
 }
 
 func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service, error) {
@@ -46,16 +48,13 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		return nil, err
 	}
 
-	company := companyservice.New(
-		repo.Companies,
-		repo.CompanyChallenges,
-		companyhttpjson.NewWithReports(
-			companyhttpjson.Endpoint{URL: cfg.Registry.URL, Timeout: cfg.Registry.Timeout},
-			companyhttpjson.Endpoint{URL: cfg.ESign.URL, Timeout: cfg.ESign.Timeout},
-			companyhttpjson.Endpoint{URL: cfg.BKI.URL, Timeout: cfg.BKI.Timeout},
-			companyhttpjson.Endpoint{URL: cfg.Financials.URL, Timeout: cfg.Financials.Timeout},
-		),
+	external := companyhttpjson.NewWithReports(
+		companyhttpjson.Endpoint{URL: cfg.Registry.URL, Timeout: cfg.Registry.Timeout},
+		companyhttpjson.Endpoint{URL: cfg.ESign.URL, Timeout: cfg.ESign.Timeout},
+		companyhttpjson.Endpoint{URL: cfg.BKI.URL, Timeout: cfg.BKI.Timeout},
+		companyhttpjson.Endpoint{URL: cfg.Financials.URL, Timeout: cfg.Financials.Timeout},
 	)
+	company := companyservice.New(repo.Companies, repo.CompanyChallenges, external)
 
 	products, err := creditproducts.New(repo.CreditProducts)
 	if err != nil {
@@ -85,6 +84,7 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Pipeline:     pipeline,
 	})
 
+	documents := documentservice.New(repo.Documents, repo.Files, company)
 	return &Service{
 		Auth:           auth,
 		User:           userservice.New(repo.Users, hasher),
@@ -96,6 +96,7 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		CreditProducts: products,
 		Underwriting:   underwriting,
 		Offer:          offerservice.New(repo.Offers, company),
-		Document:       documentservice.New(repo.Documents, repo.Files, company),
+		Document:       documents,
+		Sign:           signservice.New(repo.Sign, company, external, underwriting, documents, repo.Files),
 	}, nil
 }
