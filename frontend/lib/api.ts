@@ -1,137 +1,179 @@
-export class ApiError extends Error {
-  status: number;
+import { request, requestBlob, newIdemKey } from "./http";
+import type {
+  AppPage,
+  Application,
+  Contract,
+  FinancialState,
+  InfoRequest,
+  Offer,
+  ProductSuggestion,
+  Signature,
+  SigningContext,
+} from "./types-application";
+import type {
+  AuthResponse,
+  Certificate,
+  Challenge,
+  Company,
+  Overview,
+  RegistryCard,
+} from "./types";
+import type { QueuePage, ReviewCard } from "./types-underwriter";
 
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
+export { ApiError, isRevisionConflict } from "./http";
+export { newIdemKey } from "./http";
+export type {
+  AuthResponse,
+  Certificate,
+  Challenge,
+  Company,
+  Overview,
+  RegistryCard,
+  SourceStatus,
+} from "./types";
+export type { Application, Offer, Contract, InfoRequest } from "./types-application";
 
-type RequestOptions = { method?: "GET" | "POST" | "DELETE"; body?: unknown; token?: string };
+type Token = string;
+type Revision = { expected_revision: number };
 
-async function request<T>(path: string, opts: RequestOptions = {}, base = "/api/v0"): Promise<T> {
-  let res: Response;
-  try {
-    res = await fetch(`${base}${path}`, {
-      method: opts.method ?? "GET",
-      headers: {
-        ...(opts.body ? { "Content-Type": "application/json" } : {}),
-        ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
-      },
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
-    });
-  } catch {
-    throw new ApiError(0, "Сервис недоступен, попробуйте позже");
-  }
-  if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as
-      | { message?: string; error?: { message?: string } }
-      | null;
-    throw new ApiError(res.status, data?.message ?? data?.error?.message ?? "Ошибка сервиса");
-  }
-  return res.json() as Promise<T>;
-}
-
-export type SourceStatus = "ok" | "not_found" | "unavailable";
-export type EntityType = "legal_entity" | "individual_entrepreneur";
-
-export type AuthResponse = {
-  access_token: string;
-  expires_at: string;
-  user: { id: string; role: string };
-};
-
-export type RegistryCard = {
-  inn: string;
-  entity_type: EntityType;
-  name: string;
-  registration_date: string;
-  business_status: string;
-  termination_date?: string;
-  okved?: { code: string; name: string }[];
-  head?: { full_name: string; position: string } | null;
-};
-
-export type Company = RegistryCard & {
-  id: string;
-  primary_okved?: string;
-  additional_okveds: string[];
-  membership: { position: string; can_sign: boolean };
-};
-
-export type Challenge = {
-  challenge_id: string;
-  data: string;
-  expires_at: string;
-  company: RegistryCard;
-};
-
-export type Certificate = {
-  serial: string;
-  subject: { full_name: string; inn: string; position?: string };
-  status: string;
-};
-
-export type Loan = {
-  loan_type: string;
-  status: string;
-  opened_date: string;
-  outstanding_amount: number;
-  monthly_payment: number;
-  overdue_amount: number;
-  overdue_days: number;
-};
-
-export type Overview = {
-  company_id: string;
-  registry: { status: SourceStatus; data: RegistryCard | null };
-  credit_history: {
-    status: SourceStatus;
-    data: {
-      report_date: string;
-      report: { has_credit_history: boolean; history_months: number; loans: Loan[] };
-    } | null;
-  };
-  financials: {
-    status: SourceStatus;
-    data: {
-      period?: { from: string; to: string };
-      monthly_data: {
-        month: string;
-        income: number;
-        expenses: number;
-        free_cash: number;
-      }[];
-    } | null;
-  };
-};
+const esign = { base: "/esign" };
 
 export const api = {
   login: (email: string, password: string) =>
     request<AuthResponse>("/auth/login", { method: "POST", body: { email, password } }),
   createUser: (email: string, password: string) =>
     request<{ id: string }>("/users", { method: "POST", body: { email, password } }),
-  logout: (token: string) =>
+  logout: (token: Token) =>
     request<void>("/auth/logout", { method: "POST", token }).catch(() => undefined),
-  me: (token: string) => request<{ id: string; role: string }>("/auth/me", { token }),
-  companies: (token: string) => request<Company[]>("/companies", { token }),
-  lookup: (inn: string, token: string) =>
+  me: (token: Token) => request<{ id: string; role: string }>("/auth/me", { token }),
+
+  companies: (token: Token) => request<Company[]>("/companies", { token }),
+  company: (id: string, token: Token) => request<Company>(`/companies/${id}`, { token }),
+  lookup: (inn: string, token: Token) =>
     request<RegistryCard>(`/companies/lookup?inn=${inn}`, { token }),
-  createChallenge: (inn: string, token: string) =>
+  createChallenge: (inn: string, token: Token) =>
     request<Challenge>("/companies/challenges", { method: "POST", body: { inn }, token }),
-  connect: (challengeId: string, signature: string, token: string) =>
+  connect: (challengeId: string, signature: string, token: Token) =>
     request<Company>("/companies", {
       method: "POST",
       body: { challenge_id: challengeId, signature },
       token,
     }),
-  overview: (companyId: string, token: string) =>
+  overview: (companyId: string, token: Token) =>
     request<Overview>(`/companies/${companyId}/overview`, { token }),
-  certificates: () => request<{ certificates: Certificate[] }>("/v1/certificates", {}, "/esign"),
-  sign: (certificateSerial: string, pin: string, data: string) =>
-    request<{ signature: string }>(
-      "/v1/sign",
-      { method: "POST", body: { certificate_serial: certificateSerial, pin, data } },
-      "/esign",
-    ),
+  uploadCompanyCsv: (companyId: string, file: File, token: Token) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<unknown>(`/companies/${companyId}/financials`, { method: "POST", form, token });
+  },
+
+  products: (query: Record<string, string | number | undefined>, token: Token) =>
+    request<ProductSuggestion[]>("/credit-products", { query, token }),
+
+  createApp: (companyId: string, token: Token, idem = newIdemKey()) =>
+    request<Application>("/applications", {
+      method: "POST",
+      body: { company_id: companyId },
+      token,
+      idem,
+    }),
+  listApps: (companyId: string, token: Token, status?: string) =>
+    request<AppPage>("/applications", { query: { company_id: companyId, status }, token }),
+  getApp: (id: string, token: Token) => request<Application>(`/applications/${id}`, { token }),
+  patchApp: (id: string, body: Record<string, unknown>, token: Token) =>
+    request<Application>(`/applications/${id}`, { method: "PATCH", body, token }),
+  submitApp: (id: string, revision: number, token: Token, idem = newIdemKey()) =>
+    request<Application>(`/applications/${id}/submit`, {
+      method: "POST",
+      body: { expected_revision: revision },
+      token,
+      idem,
+    }),
+  resubmitApp: (id: string, revision: number, token: Token, idem = newIdemKey()) =>
+    request<Application>(`/applications/${id}/resubmit`, {
+      method: "POST",
+      body: { expected_revision: revision },
+      token,
+      idem,
+    }),
+  infoRequests: (id: string, token: Token) =>
+    request<InfoRequest[]>(`/applications/${id}/info-requests`, { token }),
+  answerInfo: (id: string, rid: string, body: Revision & { answer: string }, token: Token) =>
+    request<Application>(`/applications/${id}/info-requests/${rid}/answer`, {
+      method: "POST",
+      body,
+      token,
+    }),
+  offer: (id: string, token: Token) => request<Offer | null>(`/applications/${id}/offer`, { token }),
+  contract: (id: string, token: Token) =>
+    request<Contract | null>(`/applications/${id}/contract`, { token }),
+  document: (docId: string, token: Token) =>
+    requestBlob(`/documents/${docId}/content`, { token }),
+
+  appFinancials: (id: string, token: Token) =>
+    request<FinancialState>(`/applications/${id}/financials`, { token }),
+  fetchFinancials: (id: string, body: Revision & { demo_mode?: string }, token: Token, idem = newIdemKey()) =>
+    request<FinancialState>(`/applications/${id}/financials/fetch`, {
+      method: "POST",
+      body,
+      token,
+      idem,
+    }),
+  uploadAppCsv: (id: string, file: File, expectedRevision: number, token: Token) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("expected_revision", String(expectedRevision));
+    return request<FinancialState>(`/applications/${id}/financials/csv`, {
+      method: "POST",
+      form,
+      token,
+      idem: newIdemKey(),
+    });
+  },
+  declareNoHistory: (
+    id: string,
+    body: Revision & { confirmed: boolean },
+    token: Token,
+    idem = newIdemKey(),
+  ) =>
+    request<FinancialState>(`/applications/${id}/financials/no-history`, {
+      method: "POST",
+      body,
+      token,
+      idem,
+    }),
+
+  signingContext: (
+    id: string,
+    body: Revision & { offer_id: string; document_id: string },
+    token: Token,
+  ) => request<SigningContext>(`/applications/${id}/signing-context`, { method: "POST", body, token }),
+  signApp: (
+    id: string,
+    body: { context_id: string; signature: string; terms_accepted: boolean },
+    token: Token,
+    idem = newIdemKey(),
+  ) =>
+    request<Signature>(`/applications/${id}/sign`, {
+      method: "POST",
+      body,
+      token,
+      idem,
+    }),
+  signature: (id: string, token: Token) => request<Signature>(`/applications/${id}/signature`, { token }),
+
+  uwQueue: (query: Record<string, string | number | undefined>, token: Token) =>
+    request<QueuePage>("/underwriter/applications", { query, token }),
+  uwGet: (id: string, token: Token) =>
+    request<ReviewCard>(`/underwriter/applications/${id}`, { token }),
+  uwPost: (id: string, action: string, body: Record<string, unknown>, token: Token) =>
+    request<ReviewCard>(`/underwriter/applications/${id}/${action}`, { method: "POST", body, token }),
+
+  certificates: () => request<{ certificates: Certificate[] }>("/v1/certificates", esign),
+  esignSign: (certificateSerial: string, pin: string, data: string) =>
+    request<{ signature: string }>("/v1/sign", {
+      method: "POST",
+      body: { certificate_serial: certificateSerial, pin, data },
+      ...esign,
+    }),
 };

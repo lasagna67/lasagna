@@ -30,3 +30,7 @@ export function setSession(session: Session) {
 export function clearSession() {
   localStorage.removeItem(KEY);
 }
+
+export function homeForRole(role?: string): string {
+  return role === "underwriter" || role === "admin" ? "/underwriter" : "/cabinet";
+}
