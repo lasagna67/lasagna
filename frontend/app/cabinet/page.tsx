@@ -7,6 +7,7 @@ import type { Application } from "@/lib/types-application";
 import { businessStatusLabel, entityLabel, positionLabel } from "@/lib/demo-data";
 import { clearSession, getSession, setSession } from "@/lib/session";
 import { ConnectFlow } from "@/components/auth/connect-flow";
+import { CsvFormat } from "@/components/application/csv-format";
 import { ApplicationsSection } from "@/components/cabinet/applications-section";
 import { OverviewSection } from "@/components/cabinet/overview";
 import { AppHeader } from "@/components/ui/app-header";
@@ -204,6 +205,10 @@ export default function CabinetPage() {
                 }}
               />
             </label>
+
+            <div className="mt-3">
+              <CsvFormat />
+            </div>
 
             {state.overview && <OverviewSection overview={state.overview} />}
 
