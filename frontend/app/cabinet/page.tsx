@@ -63,19 +63,20 @@ export default function CabinetPage() {
       if (showLoading) setState({ phase: "loading" });
       const token = session.accessToken;
       try {
-        const [me, companies] = await Promise.all([api.me(token), api.companies(token)]);
+        const me = await api.me(token);
         setSession({ ...session, role: me.role });
         if (me.role === "underwriter" || me.role === "admin") {
           router.replace("/underwriter");
           return;
         }
+        const companies = await api.companies(token);
         if (companies.length === 0) {
           setState({ phase: "ready", token, email: session.email, companies: [], activeId: "", overview: null, apps: [] });
           return;
         }
         await loadCompanyData(token, companies[0], session.email);
       } catch (e) {
-        if (e instanceof ApiError && e.status === 401) {
+        if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
           clearSession();
           router.replace("/login");
           return;

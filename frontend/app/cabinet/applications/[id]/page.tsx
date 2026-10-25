@@ -84,7 +84,7 @@ function ApplicationDetail({ params }: { params: Promise<{ id: string }> }) {
         setConflict(false);
         setState({ phase: "ready", token, email: session.email, app, offer, contract, infoRequests, canSign });
       } catch (e) {
-        if (e instanceof ApiError && e.status === 401) {
+        if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
           clearSession();
           router.replace("/login");
           return;
