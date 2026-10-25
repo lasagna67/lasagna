@@ -39,7 +39,8 @@ export function Tour({ steps, startIndex = 0, onClose }: Props) {
       const el = findEl();
       if (!el) return setRect(null);
       el.scrollIntoView({
-        block: "center",
+        // на узких экранах панель занимает низ — целимся в верхнюю половину
+        block: window.innerWidth < 768 ? "start" : "center",
         behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
       });
       setRect(el.getBoundingClientRect());

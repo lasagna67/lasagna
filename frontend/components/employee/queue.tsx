@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { appStatusLabel, dateRu, kopecks } from "@/lib/demo-data";
 import { clearSession, getSession } from "@/lib/session";
@@ -45,17 +45,21 @@ export function Queue() {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>({ status: "", assignee: "" });
+  // глубокая пагинация: пока пользователь листает страницы — список не перестраиваем
+  const [appended, setAppended] = useState(false);
+  const appendedRef = useRef(false);
 
   const load = useCallback(
-    async (f: Filter, appendAfter?: string) => {
+    async (f: Filter, opts?: { appendAfter?: string; quiet?: boolean }) => {
       const session = getSession();
       if (!session) {
         router.replace("/login");
         return;
       }
       const tok = session.accessToken;
-      if (!appendAfter) setLoading(true);
-      setError("");
+      const { appendAfter, quiet = false } = opts ?? {};
+      if (!appendAfter && !quiet) setLoading(true);
+      if (!quiet) setError("");
       try {
         const me = await api.me(tok);
         if (me.role !== "underwriter" && me.role !== "admin") {
@@ -66,18 +70,21 @@ export function Queue() {
           { status: f.status, assignee: f.assignee, limit: 20, cursor: appendAfter },
           tok,
         );
+        if (quiet && appendedRef.current) return;
         setEmail(session.email);
         setItems((prev) => (appendAfter ? [...prev, ...page.items] : page.items));
         setCursor(page.next_cursor);
+        appendedRef.current = Boolean(appendAfter);
+        setAppended(Boolean(appendAfter));
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
           clearSession();
           router.replace("/login");
           return;
         }
-        setError(e instanceof ApiError ? e.message : "Неизвестная ошибка");
+        if (!quiet) setError(e instanceof ApiError ? e.message : "Неизвестная ошибка");
       } finally {
-        setLoading(false);
+        if (!quiet) setLoading(false);
       }
     },
     [router],
@@ -87,6 +94,13 @@ export function Queue() {
     const timer = setTimeout(() => void load(filter), 0);
     return () => clearTimeout(timer);
   }, [load, filter]);
+
+  // тихое обновление первой страницы каждые 3 с — пока не открыта пагинация
+  useEffect(() => {
+    if (appended) return;
+    const timer = setInterval(() => void load(filter, { quiet: true }), 3000);
+    return () => clearInterval(timer);
+  }, [load, filter, appended]);
 
   function select(name: keyof Filter, value: string) {
     setFilter({ ...filter, [name]: value });
@@ -172,7 +186,7 @@ export function Queue() {
             type="button"
             className="mt-6 text-[15px] text-brand hover:underline"
             disabled={loading}
-            onClick={() => void load(filter, cursor)}
+            onClick={() => void load(filter, { appendAfter: cursor })}
           >
             {loading ? "Загружаем…" : "Показать ещё"}
           </button>
