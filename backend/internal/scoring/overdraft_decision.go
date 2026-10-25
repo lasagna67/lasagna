@@ -15,7 +15,7 @@ import (
 func EvaluateOverdraft(in OverdraftInput, now time.Time) OverdraftAssessment {
 	stops := []string{}
 	day := businessDay(now)
-	registryValid, registryFresh := overdraftRegistry(in, now)
+	registryValid, registryFresh := validateRegistry(in.ScoringInput, now)
 	credit, _, creditReason := overdraftCredit(in, day)
 	creditFresh := credit != nil && overdraftCreditFresh(in, now)
 	// Стоп-факторы P06 учитываются только по корректным актуальным источникам,
@@ -120,17 +120,6 @@ func EvaluateOverdraft(in OverdraftInput, now time.Time) OverdraftAssessment {
 	a.CanPublish = a.Status == "completed" && len(a.PositiveBlockers) == 0
 	a.Recommendation = overdraftRecommendation(a)
 	return a
-}
-
-func overdraftRegistry(in OverdraftInput, now time.Time) (valid, fresh bool) {
-	card, fresh := registrySnapshot(in.ScoringInput, now, 24*time.Hour)
-	if card == nil || card.RegistrationDate.IsZero() || businessDay(card.RegistrationDate).After(businessDay(now)) {
-		return false, false
-	}
-	if !slices.Contains([]company.RegistryStatus{company.StatusActive, company.StatusReorganizing, company.StatusTerminated}, card.Status) {
-		return false, false
-	}
-	return true, fresh
 }
 
 func overdraftCreditFresh(in OverdraftInput, now time.Time) bool {

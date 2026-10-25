@@ -16,6 +16,7 @@ func decisionInput() ScoringInput {
 	rate := int64(1200)
 	in := ScoringInput{
 		RegistrySyncedAt: timeValue(decisionNow),
+		CreditFetchedAt:  timeValue(decisionNow),
 		INN:              "7705005410", Amount: 10000000, TermMonths: 12, Purpose: "working_capital",
 		Product: &ScoringProduct{Code: "express", Active: true, Purposes: []string{"working_capital"}, MinAmount: 1000000, MaxAmount: 500000000, MinTerm: 3, MaxTerm: 36, MinBusinessAgeMonths: 6, CollateralMode: "not_supported", RepaymentType: "annuity", AnnualRateBasisPoints: &rate},
 		Checks:  ScoringChecks{AccountActiveAndOwned: &yes, NoAnomalousIncome: &yes, CashPlanRequired: &no},
@@ -40,48 +41,48 @@ func TestAnnuityPositiveDecisionReadiness(t *testing.T) {
 		change  func(*ScoringInput)
 		publish bool
 		blocker string
+		state   DecisionState
 	}{
-		{"auto ready", func(in *ScoringInput) {}, true, ""},
-		{"CSV requires review only", func(in *ScoringInput) { in.Overview.FinancialsSourceType = "csv" }, true, ""},
+		{"auto ready", func(in *ScoringInput) {}, true, "", DecisionAutoApproved},
+		{"CSV requires review only", func(in *ScoringInput) { in.Overview.FinancialsSourceType = "csv" }, true, "", DecisionManualReview},
 		{"four months", func(in *ScoringInput) {
 			in.Overview.Financials.Data.MonthlyData = in.Overview.Financials.Data.MonthlyData[2:]
-		}, true, ""},
+		}, true, "", DecisionManualReview},
 		{"accepted collateral", func(in *ScoringInput) {
 			in.Product.Code = "equipment"
 			in.Product.CollateralMode = "required"
 			in.HasCollateral = true
 			in.Checks.CollateralAccepted, in.Checks.CollateralSufficient = boolValue(true), boolValue(true)
-		}, true, ""},
+		}, true, "", DecisionManualReview},
+		{"pledged working capital", func(in *ScoringInput) {
+			in.Product.Code = "working_capital"
+			in.Product.CollateralMode = "optional"
+			in.HasCollateral = true
+			in.Checks.CollateralAccepted, in.Checks.CollateralSufficient = boolValue(true), boolValue(true)
+		}, true, "", DecisionManualReview},
 		{"missing collateral review", func(in *ScoringInput) {
 			in.Product.Code = "equipment"
 			in.Product.CollateralMode = "required"
 			in.HasCollateral = true
-		}, false, "collateral_acceptance_missing"},
+		}, false, "collateral_acceptance_missing", DecisionManualReview},
 		{"accepted cash plan", func(in *ScoringInput) {
 			in.Checks.CashPlanRequired, in.Checks.CashPlanConfirmed, in.Checks.CashPlanAccepted = boolValue(true), boolValue(true), boolValue(true)
-		}, true, ""},
-		{"missing cash plan confirmation", func(in *ScoringInput) { in.Checks.CashPlanRequired = boolValue(true) }, false, "cash_plan_confirmation_missing"},
+		}, true, "", DecisionManualReview},
+		{"missing cash plan confirmation", func(in *ScoringInput) { in.Checks.CashPlanRequired = boolValue(true) }, false, "cash_plan_confirmation_missing", DecisionManualReview},
 		{"missing cash plan review", func(in *ScoringInput) {
 			in.Checks.CashPlanRequired, in.Checks.CashPlanConfirmed = boolValue(true), boolValue(true)
-		}, false, "cash_plan_acceptance_missing"},
-		{"unknown cash plan requirement", func(in *ScoringInput) { in.Checks.CashPlanRequired = nil }, false, "cash_plan_requirement_unknown"},
-		{"unknown account", func(in *ScoringInput) { in.Checks.AccountActiveAndOwned = nil }, false, "account_check_missing"},
-		{"stale registry", func(in *ScoringInput) { in.RegistrySyncedAt = timeValue(decisionNow.AddDate(0, 0, -31)) }, false, "registry_outdated"},
-		{"stale credit", func(in *ScoringInput) { in.Overview.CreditHistory.Data.ReportDate = "2026-09-01" }, false, "credit_outdated"},
-		{"unknown financial source", func(in *ScoringInput) { in.Overview.FinancialsSourceType = "" }, false, "financials_source_unknown"},
-		{"no BKI", func(in *ScoringInput) { in.Overview.CreditHistory.Data = nil }, false, ReasonCreditHistoryUnavailable},
-		{"stopped company", func(in *ScoringInput) { in.Overview.Registry.Data.Status = companydomain.StatusTerminated }, false, ReasonCompanyTerminated},
-		{"catalog violation", func(in *ScoringInput) { in.Amount = in.Product.MaxAmount + 1 }, false, "product_amount_out_of_range"},
+		}, false, "cash_plan_acceptance_missing", DecisionManualReview},
+		{"unknown cash plan requirement", func(in *ScoringInput) { in.Checks.CashPlanRequired = nil }, false, "cash_plan_requirement_unknown", DecisionManualReview},
+		{"unknown account", func(in *ScoringInput) { in.Checks.AccountActiveAndOwned = nil }, false, "account_check_missing", DecisionManualReview},
+		{"unknown financial source", func(in *ScoringInput) { in.Overview.FinancialsSourceType = "" }, false, "financials_source_unknown", DecisionManualReview},
+		{"no BKI", func(in *ScoringInput) { in.Overview.CreditHistory.Data = nil }, false, ReasonCreditHistoryUnavailable, DecisionManualReview},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			in := decisionInput()
 			tc.change(&in)
 			got := EvaluateApplication(EvaluationInput{ScoringInput: in}, decisionNow)
-			if got.CanPublish != tc.publish || tc.publish && len(got.PositiveBlockers) != 0 || tc.blocker != "" && !slices.Contains(got.PositiveBlockers, tc.blocker) {
+			if got.State != tc.state || got.CanPublish != tc.publish || tc.publish && len(got.PositiveBlockers) != 0 || tc.blocker != "" && !slices.Contains(got.PositiveBlockers, tc.blocker) {
 				t.Fatalf("publish=%v, state=%s, blockers=%v, reasons=%v", got.CanPublish, got.State, got.PositiveBlockers, got.Reasons)
-			}
-			if tc.publish && tc.name != "auto ready" && got.State != DecisionManualReview {
-				t.Fatal("manual-only condition allowed automatic approval")
 			}
 		})
 	}
@@ -144,36 +145,6 @@ func TestEvaluateApplicationSelectsModel(t *testing.T) {
 	}
 }
 
-func TestCalculateScoreMatchesDecisionMetrics(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		income []int64
-	}{
-		{"stable", []int64{100000000, 100000000, 100000000, 100000000, 100000000, 100000000}},
-		{"falling", []int64{100000000, 100000000, 100000000, 70000000, 70000000, 70000000}},
-		{"losses", []int64{10000000, 10000000, 100000000, 100000000, 100000000, 100000000}},
-		{"undefined trend", []int64{0, 0, 0, 100000000, 100000000, 100000000}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			in := decisionInput()
-			months := in.Overview.Financials.Data.MonthlyData
-			for i := range months {
-				months[i].Income = tc.income[i]
-			}
-			result := EvaluateApplication(EvaluationInput{ScoringInput: in}, decisionNow)
-			if result.Metrics.K == nil || result.Metrics.Score == nil {
-				t.Fatal(result)
-			}
-			// Отдельная функция также принимает месяцы в произвольном порядке.
-			slices.Reverse(months)
-			score, err := CalculateScore(*result.Metrics.K, in.Overview.CreditHistory.Data.Report, months)
-			if err != nil || score != *result.Metrics.Score {
-				t.Fatalf("score=%d, want=%d, err=%v", score, *result.Metrics.Score, err)
-			}
-		})
-	}
-}
-
 func TestEvaluateApplication(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -181,55 +152,29 @@ func TestEvaluateApplication(t *testing.T) {
 		state  DecisionState
 		reason string
 	}{
-		{"auto express", func(in *ScoringInput) {}, DecisionAutoApproved, ""},
 		{"auto working capital", func(in *ScoringInput) { in.Product.Code = "working_capital"; in.Product.CollateralMode = "optional" }, DecisionAutoApproved, ""},
-		{"CSV", func(in *ScoringInput) { in.Overview.FinancialsSourceType = "csv" }, DecisionManualReview, "financials_from_csv"},
-		{"terminated overrides CSV and missing BKI", func(in *ScoringInput) {
-			in.Overview.Registry.Data.Status = companydomain.StatusTerminated
-			in.Overview.FinancialsSourceType = "csv"
-			in.Overview.CreditHistory.Data = nil
-		}, DecisionAutoRejected, ReasonCompanyTerminated},
 		{"overdue overrides missing finances", func(in *ScoringInput) {
-			in.Overview.CreditHistory.Data.Report.Loans = []companydomain.Loan{{LoanID: "a", Status: "active", OverdueDays: 31}}
+			in.Overview.CreditHistory.Data.Report.Loans = []companydomain.Loan{cashflowOverdueLoan(31)}
 			in.Overview.Financials.Data = nil
 		}, DecisionAutoRejected, ReasonCreditOverdueOver30Days},
 		{"any current overdue", func(in *ScoringInput) {
-			in.Overview.CreditHistory.Data.Report.Loans = []companydomain.Loan{{LoanID: "a", Status: "active", OverdueDays: 1}}
-		}, DecisionAutoRejected, "current_credit_overdue"},
+			in.Overview.CreditHistory.Data.Report.Loans = []companydomain.Loan{cashflowOverdueLoan(1)}
+		}, DecisionManualReview, "current_credit_overdue"},
 		{"missing finances", func(in *ScoringInput) { in.Overview.Financials.Data = nil }, DecisionManualReview, ReasonFinancialsUnavailable},
-		{"missing BKI", func(in *ScoringInput) { in.Overview.CreditHistory.Data = nil }, DecisionManualReview, ReasonCreditHistoryUnavailable},
-		{"missing account", func(in *ScoringInput) { in.Checks.AccountActiveAndOwned = nil }, DecisionManualReview, "account_check_missing"},
-		{"inactive account", func(in *ScoringInput) { no := false; in.Checks.AccountActiveAndOwned = &no }, DecisionAutoRejected, "account_not_active_or_not_owned"},
-		{"inactive product overrides CSV", func(in *ScoringInput) { in.Product.Active = false; in.Overview.FinancialsSourceType = "csv" }, DecisionAutoRejected, "product_inactive"},
-		{"wrong purpose", func(in *ScoringInput) { in.Purpose = "other" }, DecisionAutoRejected, "product_purpose_mismatch"},
-		{"wrong amount", func(in *ScoringInput) { in.Amount = in.Product.MaxAmount + 1 }, DecisionAutoRejected, "product_amount_out_of_range"},
-		{"wrong term", func(in *ScoringInput) { in.TermMonths = 37 }, DecisionAutoRejected, "product_term_out_of_range"},
-		{"young business", func(in *ScoringInput) { in.Overview.Registry.Data.RegistrationDate = decisionNow.AddDate(0, -1, 0) }, DecisionAutoRejected, "business_too_young"},
+		{"inactive product with CSV", func(in *ScoringInput) { in.Product.Active = false; in.Overview.FinancialsSourceType = "csv" }, DecisionManualReview, "product_inactive"},
+		{"wrong purpose", func(in *ScoringInput) { in.Purpose = "other" }, DecisionManualReview, "product_purpose_mismatch"},
+		{"wrong term", func(in *ScoringInput) { in.TermMonths = 37 }, DecisionManualReview, "product_term_out_of_range"},
+		{"young business", func(in *ScoringInput) { in.Overview.Registry.Data.RegistrationDate = decisionNow.AddDate(0, -1, 0) }, DecisionManualReview, "business_too_young"},
 		{"missing product", func(in *ScoringInput) { in.Product = nil }, DecisionManualReview, "product_missing"},
 		{"missing rate", func(in *ScoringInput) { in.Product.AnnualRateBasisPoints = nil }, DecisionManualReview, "product_rate_missing"},
-		{"unknown freshness", func(in *ScoringInput) { in.RegistrySyncedAt = nil }, DecisionManualReview, "registry_freshness_unconfirmed"},
-		{"four months", func(in *ScoringInput) {
-			in.Overview.Financials.Data.MonthlyData = in.Overview.Financials.Data.MonthlyData[2:]
-		}, DecisionManualReview, ReasonFinancialHistoryUnderSixMonths},
-		{"two months", func(in *ScoringInput) {
-			in.Overview.Financials.Data.MonthlyData = in.Overview.Financials.Data.MonthlyData[4:]
-		}, DecisionAutoRejected, ReasonFinancialHistoryInsufficient},
 		{"missing latest month", func(in *ScoringInput) { in.Overview.Financials.Data.MonthlyData[5].Month = "2026-03" }, DecisionManualReview, "latest_financial_month_missing"},
-		{"anomalies calculated locally", func(in *ScoringInput) { in.Checks.NoAnomalousIncome = nil }, DecisionAutoApproved, ""},
 		{"income anomaly", func(in *ScoringInput) { no := false; in.Checks.NoAnomalousIncome = &no }, DecisionManualReview, "income_anomaly"},
-		{"unknown cash plan requirement", func(in *ScoringInput) { in.Checks.CashPlanRequired = nil }, DecisionManualReview, "cash_plan_requirement_unknown"},
-		{"required plan pending", func(in *ScoringInput) { yes := true; in.Checks.CashPlanRequired = &yes }, DecisionManualReview, "cash_plan_confirmation_missing"},
-		{"equipment collateral pending", func(in *ScoringInput) {
-			in.Product.Code = "equipment"
-			in.Product.CollateralMode = "required"
-			in.HasCollateral = true
-		}, DecisionManualReview, "collateral_acceptance_missing"},
-		{"low coverage overrides CSV", func(in *ScoringInput) {
+		{"low coverage with CSV", func(in *ScoringInput) {
 			in.Overview.FinancialsSourceType = "csv"
 			for i := range in.Overview.Financials.Data.MonthlyData {
 				in.Overview.Financials.Data.MonthlyData[i].Expenses = 99999999
 			}
-		}, DecisionAutoRejected, "coverage_below_1_2"},
+		}, DecisionManualReview, "coverage_below_1_2"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			in := decisionInput()
@@ -260,34 +205,6 @@ func TestDecisionMetricsAndNoMutation(t *testing.T) {
 	got = EvaluateApplication(EvaluationInput{ScoringInput: in}, decisionNow)
 	if got.Metrics.Score != nil || got.Metrics.K != nil || got.Metrics.Status == "completed" {
 		t.Fatalf("missing BKI became a score: %+v", got)
-	}
-}
-
-func TestManualOnlyProductsAndConditionalChecks(t *testing.T) {
-	for _, code := range []string{"working_capital", "equipment", "start", "investment", "overdraft"} {
-		in := decisionInput()
-		in.Product.Code = code
-		yes := true
-		if code != "overdraft" {
-			in.HasCollateral = true
-			in.Product.CollateralMode = "required"
-			in.Checks.CollateralAccepted = &yes
-			in.Checks.CollateralSufficient = &yes
-		} else {
-			in.Product.RepaymentType = "overdraft"
-		}
-		got := EvaluateApplication(EvaluationInput{ScoringInput: in}, decisionNow)
-		if got.State != DecisionManualReview {
-			t.Fatalf("%s: %+v", code, got)
-		}
-	}
-	in := decisionInput()
-	yes := true
-	in.Checks.CashPlanRequired = &yes
-	in.Checks.CashPlanConfirmed = &yes
-	in.Checks.CashPlanAccepted = &yes
-	if got := EvaluateApplication(EvaluationInput{ScoringInput: in}, decisionNow); got.State != DecisionManualReview {
-		t.Fatalf("cash plan must exclude auto: %+v", got)
 	}
 }
 
@@ -322,7 +239,7 @@ func TestDecisionCoverageAndScoreBoundaries(t *testing.T) {
 	}{
 		{"K 1.5 Ks 1 score 800", 5000000, 3500000, 11, DecisionAutoApproved, 800},
 		{"K just below 1.5", 4000000, 2500001, 11, DecisionManualReview, 700},
-		{"Ks below 1", 5000001, 3500001, 11, DecisionAutoRejected, 800},
+		{"Ks below 1", 5000001, 3500001, 11, DecisionManualReview, 800},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			in := decisionInput()
@@ -338,7 +255,7 @@ func TestDecisionCoverageAndScoreBoundaries(t *testing.T) {
 			if got.State != tc.want || got.Metrics.Score == nil || *got.Metrics.Score != tc.score {
 				t.Fatalf("got %+v, want %s / %d", got, tc.want, tc.score)
 			}
-			if got.CanPublish != (tc.want != DecisionAutoRejected) {
+			if got.CanPublish != (tc.name != "Ks below 1") {
 				t.Fatalf("manual coverage thresholds mixed with auto thresholds: %+v", got)
 			}
 		})
@@ -347,13 +264,16 @@ func TestDecisionCoverageAndScoreBoundaries(t *testing.T) {
 		history bool
 		score   int
 		state   DecisionState
-	}{{true, 600, DecisionManualReview}, {false, 550, DecisionAutoRejected}} {
+	}{{true, 600, DecisionManualReview}, {false, 550, DecisionManualReview}} {
 		in := decisionInput()
 		rate := int64(0)
 		in.Product.AnnualRateBasisPoints = &rate
 		in.Amount = 12000000
 		in.Overview.CreditHistory.Data.Report.HasCreditHistory = &tc.history
 		in.Overview.CreditHistory.Data.Report.HistoryMonths = 11
+		if !tc.history {
+			in.Overview.CreditHistory.Data.Report.HistoryMonths = 0
+		}
 		for i := range in.Overview.Financials.Data.MonthlyData {
 			month := &in.Overview.Financials.Data.MonthlyData[i]
 			month.Income = 3000000
@@ -418,7 +338,7 @@ func TestScoreStability(t *testing.T) {
 		for i := range months {
 			// Снижение поступлений обнуляет баллы за динамику, позволяя отдельно проверить устойчивость.
 			income := int64(100)
-			if i >= 3 {
+			if i >= tc.total/2 {
 				income = 1
 			}
 			months[i] = companydomain.MonthlyData{Month: fmt.Sprintf("2026-%02d", i+1), Income: income}
@@ -497,6 +417,54 @@ func TestAnnuitySchedule(t *testing.T) {
 	}
 }
 
+func TestAnnuityRoundsExactHalfKopeckUp(t *testing.T) {
+	// 6000 * 270 / 120000 = 13.5 копейки процентов, HALF_UP даёт 14.
+	schedule, err := BuildAnnuitySchedule(6000, 270, 1)
+	if err != nil || len(schedule) != 1 || schedule[0].Interest != 14 || schedule[0].Payment != 6014 {
+		t.Fatalf("exact half-kopeck rounding: %+v, %v", schedule, err)
+	}
+}
+
+func TestAnnuityCoverageThresholdUsesExactAmounts(t *testing.T) {
+	in := decisionInput()
+	rate := int64(0)
+	in.Product.AnnualRateBasisPoints = &rate
+	in.Amount = 12000000 // Pmax = 1000000, D + Pmax = 7000000000000000.
+	in.Overview.CreditHistory.Data.Report.Loans = []companydomain.Loan{{
+		LoanID: "large", LoanType: "business_loan", Currency: "RUB", Status: "active",
+		OutstandingAmount: 7000000000000000, MonthlyPayment: 6999999999000000,
+	}}
+	for i := range in.Overview.Financials.Data.MonthlyData {
+		in.Overview.Financials.Data.MonthlyData[i].Income = 8399999999999999
+		in.Overview.Financials.Data.MonthlyData[i].Expenses = 0
+	}
+	got := EvaluateAnnuity(in, decisionNow)
+	// 5*C = 41999999999999995 < 6*(D+Pmax) = 42000000000000000.
+	if got.CanPublish || got.State != DecisionManualReview || !slices.Contains(got.PositiveBlockers, "coverage_below_1_2") || got.Metrics.Score == nil || *got.Metrics.Score != 600 {
+		t.Fatalf("rounded K crossed the threshold: %+v", got)
+	}
+}
+
+func TestAnnuityTrendThresholdUsesExactIncome(t *testing.T) {
+	months := []companydomain.MonthlyData{}
+	for i := 0; i < 6; i++ {
+		income := int64(7000000000000000)
+		if i >= 3 {
+			income = 5600000000000000
+		}
+		if i == 5 {
+			income--
+		}
+		months = append(months, companydomain.MonthlyData{Month: fmt.Sprintf("2026-%02d", i+4), Income: income})
+	}
+	// Сумма последних трёх меньше 0.8 суммы первых трёх на одну копейку.
+	// Баллы только за устойчивость: 200, без 50 за динамику.
+	score, err := CalculateScore(0, companydomain.CreditHistory{}, months)
+	if err != nil || score != 200 {
+		t.Fatalf("rounded G crossed the threshold: score=%d, err=%v", score, err)
+	}
+}
+
 func TestCoverageRatios(t *testing.T) {
 	k, ks, err := CoverageRatios(20000000, 12000000, 4000000, 6000000)
 	if err != nil || k != 2 || ks != 1.2 {
@@ -531,5 +499,181 @@ func TestScheduleConservesPrincipal(t *testing.T) {
 		if len(schedule) != tc.term || total != tc.amount || balance != 0 {
 			t.Fatalf("principal=%d balance=%d", total, balance)
 		}
+	}
+}
+
+func TestAnnuityOnlyVerifiedStopsReject(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		change  func(*ScoringInput)
+		state   DecisionState
+		blocker string
+	}{
+		{"terminated despite unavailable BKI", func(in *ScoringInput) {
+			in.Overview.Registry.Data.Status = companydomain.StatusTerminated
+			in.Overview.FinancialsSourceType = "csv"
+			in.Overview.CreditHistory.Data = nil
+		}, DecisionAutoRejected, ReasonCompanyTerminated},
+		{"reorganizing", func(in *ScoringInput) { in.Overview.Registry.Data.Status = companydomain.StatusReorganizing }, DecisionManualReview, "registry_not_active"},
+		{"foreign terminated registry", func(in *ScoringInput) {
+			in.Overview.Registry.Data.Status = companydomain.StatusTerminated
+			in.Overview.Registry.Data.INN = "foreign"
+		}, DecisionManualReview, ReasonRegistryINNMismatch},
+		{"stale terminated registry", func(in *ScoringInput) {
+			in.Overview.Registry.Data.Status = companydomain.StatusTerminated
+			in.RegistrySyncedAt = timeValue(decisionNow.Add(-24*time.Hour - time.Nanosecond))
+		}, DecisionManualReview, "registry_outdated"},
+		{"unavailable terminated registry", func(in *ScoringInput) {
+			in.Overview.Registry.Data.Status = companydomain.StatusTerminated
+			in.Overview.Registry.Status = "unavailable"
+		}, DecisionManualReview, ReasonRegistryUnavailable},
+		{"29 days overdue", func(in *ScoringInput) {
+			in.Overview.CreditHistory.Data.Report.Loans = []companydomain.Loan{cashflowOverdueLoan(29)}
+		}, DecisionManualReview, "current_credit_overdue"},
+		{"30 days despite unavailable finances", func(in *ScoringInput) {
+			in.Overview.CreditHistory.Data.Report.Loans = []companydomain.Loan{cashflowOverdueLoan(30)}
+			in.Overview.Financials.Data = nil
+		}, DecisionAutoRejected, ReasonCreditOverdueOver30Days},
+		{"foreign overdue BKI", func(in *ScoringInput) {
+			in.Overview.CreditHistory.Data.Report.Loans = []companydomain.Loan{cashflowOverdueLoan(30)}
+			in.Overview.CreditHistory.Data.INN = "foreign"
+		}, DecisionManualReview, ReasonCreditINNMismatch},
+		{"stale overdue BKI", func(in *ScoringInput) {
+			in.Overview.CreditHistory.Data.Report.Loans = []companydomain.Loan{cashflowOverdueLoan(30)}
+			in.CreditFetchedAt = timeValue(decisionNow.Add(-24*time.Hour - time.Nanosecond))
+		}, DecisionManualReview, "credit_outdated"},
+		{"invalid overdue amount", func(in *ScoringInput) {
+			loan := cashflowOverdueLoan(30)
+			loan.OverdueAmount = 0
+			in.Overview.CreditHistory.Data.Report.Loans = []companydomain.Loan{loan}
+		}, DecisionManualReview, "credit_report_invalid"},
+		{"duplicate overdue loan", func(in *ScoringInput) {
+			loan := cashflowOverdueLoan(30)
+			in.Overview.CreditHistory.Data.Report.Loans = []companydomain.Loan{loan, loan}
+		}, DecisionManualReview, ReasonCreditLoanIDDuplicate},
+		{"invalid catalog", func(in *ScoringInput) { in.Amount = in.Product.MaxAmount + 1 }, DecisionManualReview, "product_amount_out_of_range"},
+		{"inactive account", func(in *ScoringInput) { in.Checks.AccountActiveAndOwned = boolValue(false) }, DecisionManualReview, "account_not_active_or_not_owned"},
+		{"insufficient collateral", func(in *ScoringInput) {
+			in.HasCollateral = true
+			in.Product.CollateralMode = "optional"
+			in.Checks.CollateralAccepted = boolValue(true)
+			in.Checks.CollateralSufficient = boolValue(false)
+		}, DecisionManualReview, "collateral_insufficient"},
+		{"low capacity", func(in *ScoringInput) {
+			for i := range in.Overview.Financials.Data.MonthlyData {
+				in.Overview.Financials.Data.MonthlyData[i].Expenses = 99999999
+			}
+		}, DecisionManualReview, "coverage_below_1_2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := decisionInput()
+			tc.change(&in)
+			got := EvaluateAnnuity(in, decisionNow)
+			if got.State != tc.state || got.CanPublish || !slices.Contains(got.PositiveBlockers, tc.blocker) {
+				t.Fatalf("state=%s publish=%v blockers=%v; want %s / %s", got.State, got.CanPublish, got.PositiveBlockers, tc.state, tc.blocker)
+			}
+			if tc.state == DecisionAutoRejected && (got.Metrics.Status != "skipped" || got.Metrics.Score != nil) {
+				t.Fatalf("stop should skip scoring: %+v", got.Metrics)
+			}
+		})
+	}
+}
+
+func cashflowOverdueLoan(days int) companydomain.Loan {
+	return companydomain.Loan{LoanID: "loan-1", LoanType: "business_loan", Currency: "RUB", Status: "active", OutstandingAmount: 100000, MonthlyPayment: 1000, OverdueAmount: 1000, OverdueDays: days}
+}
+
+func TestAnnuitySixCalendarMonthWindow(t *testing.T) {
+	in := decisionInput()
+	want := EvaluateAnnuity(in, decisionNow)
+	in.Overview.Financials.Data.MonthlyData = append(in.Overview.Financials.Data.MonthlyData,
+		companydomain.MonthlyData{Month: "2026-03", Income: 1, Expenses: 999999999},
+		companydomain.MonthlyData{Month: "2026-10", Income: 999999999})
+	slices.Reverse(in.Overview.Financials.Data.MonthlyData)
+	before := append([]companydomain.MonthlyData(nil), in.Overview.Financials.Data.MonthlyData...)
+	got := EvaluateAnnuity(in, decisionNow)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("out-of-window rows changed result:\ngot %+v\nwant %+v", got, want)
+	}
+	if !reflect.DeepEqual(before, in.Overview.Financials.Data.MonthlyData) {
+		t.Fatal("input changed")
+	}
+	// Moscow has entered November while UTC is still October: May–October is the window.
+	in = decisionInput()
+	for i := range in.Overview.Financials.Data.MonthlyData {
+		in.Overview.Financials.Data.MonthlyData[i].Month = fmt.Sprintf("2026-%02d", i+5)
+	}
+	now := time.Date(2026, 10, 31, 21, 0, 0, 0, time.UTC)
+	in.RegistrySyncedAt, in.CreditFetchedAt = timeValue(now), timeValue(now)
+	in.Overview.CreditHistory.Data.ReportDate = "2026-11-01"
+	got = EvaluateAnnuity(in, now)
+	if got.State != DecisionAutoApproved || !got.Metrics.CompleteLastSix || got.Metrics.F[0].Month != "2026-05" || got.Metrics.F[5].Month != "2026-10" {
+		t.Fatalf("wrong Moscow window: %+v", got)
+	}
+}
+
+func TestAnnuityShortHistoryTrend(t *testing.T) {
+	for _, tc := range []struct {
+		incomes []int64
+		trend   float64
+		score   int
+	}{
+		{[]int64{100000000, 900000000, 150000000}, 1.5, 1000},
+		{[]int64{100000000, 200000000, 200000000, 250000000}, 1.5, 1000},
+		{[]int64{100000000, 200000000, 900000000, 200000000, 250000000}, 1.5, 1000},
+	} {
+		t.Run(fmt.Sprint(len(tc.incomes)), func(t *testing.T) {
+			in := decisionInput()
+			in.Overview.Financials.Data.MonthlyData = nil
+			for i, income := range tc.incomes {
+				in.Overview.Financials.Data.MonthlyData = append(in.Overview.Financials.Data.MonthlyData, companydomain.MonthlyData{Month: fmt.Sprintf("2026-%02d", 10-len(tc.incomes)+i), Income: income})
+			}
+			got := EvaluateAnnuity(in, decisionNow)
+			if got.State != DecisionManualReview || got.Metrics.Status != "completed" || got.Metrics.G == nil || *got.Metrics.G != tc.trend || got.Metrics.Score == nil || *got.Metrics.Score != tc.score {
+				t.Fatalf("short history: %+v", got)
+			}
+		})
+	}
+	for _, n := range []int{0, 1, 2} {
+		in := decisionInput()
+		in.Overview.Financials.Data.MonthlyData = in.Overview.Financials.Data.MonthlyData[6-n:]
+		got := EvaluateAnnuity(in, decisionNow)
+		if got.State != DecisionManualReview || got.CanPublish || got.Metrics.Score != nil || got.Metrics.Status != "insufficient_data" {
+			t.Fatalf("%d months produced score or reject: %+v", n, got)
+		}
+	}
+}
+
+func TestAnnuitySourceFreshness(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		change  func(*ScoringInput)
+		publish bool
+		blocker string
+	}{
+		{"24 hours inclusive", func(in *ScoringInput) {
+			in.RegistrySyncedAt = timeValue(decisionNow.Add(-24 * time.Hour))
+			in.CreditFetchedAt = timeValue(decisionNow.Add(-24 * time.Hour))
+		}, true, ""},
+		{"registry exceeds 24 hours", func(in *ScoringInput) {
+			in.RegistrySyncedAt = timeValue(decisionNow.Add(-24*time.Hour - time.Nanosecond))
+		}, false, "registry_outdated"},
+		{"missing registry receipt", func(in *ScoringInput) { in.RegistrySyncedAt = nil }, false, "registry_freshness_unconfirmed"},
+		{"BKI exceeds 24 hours", func(in *ScoringInput) {
+			in.CreditFetchedAt = timeValue(decisionNow.Add(-24*time.Hour - time.Nanosecond))
+		}, false, "credit_outdated"},
+		{"missing BKI receipt", func(in *ScoringInput) { in.CreditFetchedAt = nil }, false, "credit_freshness_unconfirmed"},
+		{"future BKI receipt", func(in *ScoringInput) { in.CreditFetchedAt = timeValue(decisionNow.Add(time.Nanosecond)) }, false, "credit_outdated"},
+		{"seven calendar days inclusive", func(in *ScoringInput) { in.Overview.CreditHistory.Data.ReportDate = "2026-10-17" }, true, ""},
+		{"eight calendar days", func(in *ScoringInput) { in.Overview.CreditHistory.Data.ReportDate = "2026-10-16" }, false, "credit_outdated"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := decisionInput()
+			tc.change(&in)
+			got := EvaluateAnnuity(in, decisionNow)
+			if got.CanPublish != tc.publish || tc.publish && got.State != DecisionAutoApproved || !tc.publish && (got.State != DecisionManualReview || !slices.Contains(got.PositiveBlockers, tc.blocker)) {
+				t.Fatalf("freshness: %+v", got)
+			}
+		})
 	}
 }

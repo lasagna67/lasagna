@@ -177,15 +177,20 @@ func validateOverview(o companydomain.Overview, inn string, now time.Time) Valid
 			result.Reasons = append(result.Reasons, ReasonFinancialsINNMismatch)
 		}
 		months := make(map[string]struct{}, len(financials.MonthlyData))
+		monthStart := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
+		windowStart := monthStart.AddDate(0, -6, 0).Format("2006-01")
 		for _, record := range financials.MonthlyData {
 			if _, err := time.Parse("2006-01", record.Month); err != nil || record.Month > date.Format("2006-01") {
 				result.Reasons = append(result.Reasons, ReasonFinancialMonthInvalid)
 				continue
 			}
+			if record.Month < windowStart || record.Month >= monthStart.Format("2006-01") {
+				continue
+			}
 			months[record.Month] = struct{}{}
 		}
 		result.FinancialMonths = len(months)
-		if result.FinancialMonths < 4 {
+		if result.FinancialMonths < 3 {
 			result.Reasons = append(result.Reasons, ReasonFinancialHistoryInsufficient)
 		}
 	}
@@ -264,6 +269,19 @@ func registrySnapshot(in ScoringInput, now time.Time, maxAge time.Duration) (*co
 	}
 	fresh := dataCurrent(in.RegistrySyncedAt, now, maxAge)
 	return r.Data, fresh != nil && *fresh
+}
+
+// validateRegistry проверяет корректность снимка реестра и отдельно его свежесть
+// в пределах 24 часов. Проверка общая для кредитных моделей.
+func validateRegistry(in ScoringInput, now time.Time) (valid, fresh bool) {
+	card, fresh := registrySnapshot(in, now, 24*time.Hour)
+	if card == nil || card.RegistrationDate.IsZero() || businessDay(card.RegistrationDate).After(businessDay(now)) {
+		return false, false
+	}
+	if !slices.Contains([]companydomain.RegistryStatus{companydomain.StatusActive, companydomain.StatusReorganizing, companydomain.StatusTerminated}, card.Status) {
+		return false, false
+	}
+	return true, fresh
 }
 
 // При чтении нормализованных снимков из JSON отличаем явно переданный ноль

@@ -29,7 +29,7 @@ func overdraftInput() OverdraftInput {
 		ScoringInput: in, NeedPeriodUnit: "days", NeedPeriodDays: &days,
 		ExpectedInflowDate: "2026-12-23", ExpectedInflowAmount: &inflow,
 		InflowBasis: "Payment for delivered goods", BankAccountID: uuid.New(),
-		CreditFetchedAt: timeValue(decisionNow), CatalogVersion: "catalog-1", DataRevision: "data-1", SnapshotIDs: []string{"snapshot-1"},
+		CatalogVersion: "catalog-1", DataRevision: "data-1", SnapshotIDs: []string{"snapshot-1"},
 	}
 	return input
 }
