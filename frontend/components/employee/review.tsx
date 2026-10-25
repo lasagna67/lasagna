@@ -16,6 +16,17 @@ import { ReviewSections } from "./review-sections";
 
 type Props = { id: string };
 
+// Статусы, в которых карточка обновляется сама: пайплайн после подачи,
+// ожидание ответа клиента и повторные проверки.
+const POLL = new Set<string>([
+  "submitted",
+  "validation",
+  "enrichment",
+  "scoring",
+  "info_requested",
+  "manual_review",
+]);
+
 export function Review({ id }: Props) {
   const router = useRouter();
   const [card, setCard] = useState<ReviewCard | null>(null);
@@ -24,6 +35,7 @@ export function Review({ id }: Props) {
   const [email, setEmail] = useState<string | undefined>();
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     const session = getSession();
@@ -58,6 +70,22 @@ export function Review({ id }: Props) {
     const timer = setTimeout(() => void load(), 0);
     return () => clearTimeout(timer);
   }, [load]);
+
+  const status = card?.status ?? null;
+  useEffect(() => {
+    if (!status || !POLL.has(status)) return;
+    const timer = setInterval(() => void load(), 3000);
+    return () => clearInterval(timer);
+  }, [status, load]);
+
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   function onConflict() {
     setConflict(true);
@@ -98,6 +126,14 @@ export function Review({ id }: Props) {
                   `${(card.request.amount_kopecks / 100).toLocaleString("ru-RU")} ₽ · `}
                 обновлена {dateRu(card.updated_at)} · v{card.revision}
               </span>
+              <button
+                type="button"
+                disabled={refreshing}
+                onClick={() => void refresh()}
+                className="text-[15px] text-brand hover:underline disabled:opacity-60"
+              >
+                {refreshing ? "Обновляем…" : "Обновить"}
+              </button>
             </div>
 
             {conflict && (

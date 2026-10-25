@@ -103,8 +103,8 @@ function ApplicationDetail({ params }: { params: Promise<{ id: string }> }) {
   const status = state.phase === "ready" ? state.app.status : null;
   useEffect(() => {
     if (!status || !POLL.has(status)) return;
-    const timer = setTimeout(() => void load(true), 3000);
-    return () => clearTimeout(timer);
+    const timer = setInterval(() => void load(true), 3000);
+    return () => clearInterval(timer);
   }, [status, load]);
 
   async function logout() {
