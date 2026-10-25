@@ -15,6 +15,7 @@ import (
 	financialscsvhandler "github.com/lasagna67/lasagna.git/internal/financials-csv/handler"
 	intakehandler "github.com/lasagna67/lasagna.git/internal/intake/handler"
 	offerhandler "github.com/lasagna67/lasagna.git/internal/offer/handler"
+	signhandler "github.com/lasagna67/lasagna.git/internal/sign/handler"
 	underwritinghandler "github.com/lasagna67/lasagna.git/internal/underwriting/handler"
 	userhandler "github.com/lasagna67/lasagna.git/internal/user/handler"
 	"github.com/lasagna67/lasagna.git/pkg/logger"
@@ -62,6 +63,7 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 
 	documents := documenthandler.New(services.Document, logger.Named("document"))
 	documents.RegisterRoutes(api, auth.Authenticate)
+	signhandler.New(services.Sign, logger.Named("sign")).RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 
 	return &Delivery{
 		server: srv,

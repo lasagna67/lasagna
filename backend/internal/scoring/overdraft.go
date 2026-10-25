@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	company "github.com/lasagna67/lasagna.git/internal/company/domain"
+	"github.com/lasagna67/lasagna.git/internal/validation"
 )
 
 const (
@@ -24,7 +25,7 @@ func newOverdraftAssessment(in OverdraftInput, now time.Time) OverdraftAssessmen
 	hashInput := in
 	hashInput.InflowReview = nil
 	hashInput.ConfirmedTermsHash, hashInput.ConfirmedInflowHash = "", ""
-	day := businessDay(now)
+	day := validation.BusinessDay(now)
 	terms := struct {
 		CompanyID                          uuid.UUID
 		INN, Purpose, Date, CatalogVersion string
@@ -92,7 +93,7 @@ func CalculateOverdraft(in OverdraftInput, now time.Time) (a OverdraftAssessment
 		a.block("USAGE_PERIOD_INVALID")
 		return
 	}
-	day := businessDay(now)
+	day := validation.BusinessDay(now)
 	date, err := time.ParseInLocation(time.DateOnly, in.ExpectedInflowDate, day.Location())
 	if in.ExpectedInflowDate == "" {
 		a.block("INFLOW_DATE_MISSING")

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
+	"github.com/lasagna67/lasagna.git/internal/validation"
 )
 
 // challengeTTL — сколько живёт заявление о подключении: хватает, чтобы
@@ -140,7 +141,7 @@ func (s *CompanyService) Connect(ctx context.Context, cmd companydomain.ConnectC
 	if err != nil {
 		return companydomain.Membership{}, err
 	}
-	position, ok := headPosition(card, cert)
+	position, ok := validation.CertificateHeadPosition(card, cert)
 	if !ok {
 		return companydomain.Membership{}, companyerrors.ErrNotCompanyHead
 	}
@@ -262,23 +263,6 @@ func (s *CompanyService) lookup(ctx context.Context, inn string) (companydomain.
 		return companydomain.RegistryCard{}, fmt.Errorf("get registry card: %w", err)
 	}
 	return card, nil
-}
-
-// headPosition сверяет владельца сертификата с руководителем по реестру.
-// ЮЛ: сертификат выдан на эту организацию, и его владелец — руководитель из ЕГРЮЛ.
-// ИП: ИНН владельца сертификата и есть ИНН ИП.
-func headPosition(card companydomain.RegistryCard, cert companydomain.Certificate) (companydomain.Position, bool) {
-	switch card.EntityType {
-	case companydomain.EntityLegal:
-		ok := cert.Type == companydomain.CertificateLegalEntityHead &&
-			cert.OrganizationINN == card.INN &&
-			card.Head != nil && cert.OwnerINN == card.Head.INN
-		return companydomain.PositionCEO, ok
-	case companydomain.EntityIndividualEntrepreneur:
-		ok := cert.Type == companydomain.CertificateIndividualEntrepreneur && cert.OwnerINN == card.INN
-		return companydomain.PositionOwner, ok
-	}
-	return "", false
 }
 
 // statement — текст заявления. Одноразовый код делает каждое заявление

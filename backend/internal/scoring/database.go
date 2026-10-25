@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	collateral "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	products "github.com/lasagna67/lasagna.git/internal/credit_products"
+	"github.com/lasagna67/lasagna.git/internal/validation"
 )
 
 type Scorer struct {
@@ -68,7 +69,7 @@ func (s *Scorer) EvaluateProject(ctx context.Context, applicationID uuid.UUID, i
 	}
 	in.ScoringInput = base
 	in.ExistingDebtPaymentKopecks = nil
-	if _, debt, reason := validatedCreditDebt(base.Overview.CreditHistory, base.INN, businessDay(now)); reason == "" {
+	if _, debt, reason := validatedCreditDebt(base.Overview.CreditHistory, base.INN, validation.BusinessDay(now)); reason == "" {
 		in.ExistingDebtPaymentKopecks = &debt
 	}
 	return EvaluateProject(in, now), nil

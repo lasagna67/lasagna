@@ -478,6 +478,238 @@
                 }
             }
         },
+        "/applications/{id}/sign": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Backend проверяет подпись через esign-mock; PIN и сертификат от клиента не принимает. Атомарно сохраняет артефакт, accepted, signing и задачу выдачи pending. Повтор с тем же ключом и телом не создаёт новую операцию.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Проверить криптографическую подпись договора",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Ключ повтора, до 255 символов",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Контекст, подпись и согласие с условиями",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/signdto.SignRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/signdto.Signature"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Требуется авторизация",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, OFFER_CHANGED, SIGNING_CONTEXT_EXPIRED, IDEMPOTENCY_CONFLICT, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "INVALID_SIGNATURE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "SOURCE_RECHECK_REQUIRED или SERVICE_UNAVAILABLE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/signature": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JSON: подписанные данные, подпись, проверенный сертификат и хеш исходного PDF.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Скачать артефакт подписи",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/signdto.Signature"
+                        }
+                    },
+                    "401": {
+                        "description": "Требуется авторизация",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/signing-context": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "TTL до 5 минут, с учётом срока проверок. Контекст связан с пользователем, revision, Offer, Contract и SHA-256 исходного PDF. При неподтверждённом P14 — 503.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Подготовить контекст подписи договора",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Предложение, договор и версия заявки",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/signdto.PrepareRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/signdto.Context"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Требуется авторизация",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, OFFER_CHANGED, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "SOURCE_RECHECK_REQUIRED или SERVICE_UNAVAILABLE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/applications/{id}/submit": {
             "post": {
                 "security": [
@@ -2794,6 +3026,68 @@
                 }
             }
         },
+        "companydomain.Certificate": {
+            "type": "object",
+            "properties": {
+                "issuer": {
+                    "type": "string"
+                },
+                "organization_inn": {
+                    "description": "пусто, если сертификат не на организацию",
+                    "type": "string"
+                },
+                "organization_name": {
+                    "type": "string"
+                },
+                "owner_full_name": {
+                    "type": "string"
+                },
+                "owner_inn": {
+                    "type": "string"
+                },
+                "owner_position": {
+                    "type": "string"
+                },
+                "serial": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/companydomain.CertificateType"
+                },
+                "valid_from": {
+                    "type": "string"
+                },
+                "valid_to": {
+                    "type": "string"
+                }
+            }
+        },
+        "companydomain.CertificateType": {
+            "type": "string",
+            "enum": [
+                "legal_entity_head",
+                "individual_entrepreneur",
+                "individual"
+            ],
+            "x-enum-comments": {
+                "CertificateIndividual": "физлицо без организации",
+                "CertificateIndividualEntrepreneur": "ИП",
+                "CertificateLegalEntityHead": "руководитель ЮЛ, есть организация"
+            },
+            "x-enum-descriptions": [
+                "руководитель ЮЛ, есть организация",
+                "ИП",
+                "физлицо без организации"
+            ],
+            "x-enum-varnames": [
+                "CertificateLegalEntityHead",
+                "CertificateIndividualEntrepreneur",
+                "CertificateIndividual"
+            ]
+        },
         "companydomain.CreditHistory": {
             "type": "object",
             "properties": {
@@ -3780,6 +4074,113 @@
                 "version": {
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "signdto.Context": {
+            "type": "object",
+            "properties": {
+                "application_id": {
+                    "type": "string"
+                },
+                "certificate_serial": {
+                    "type": "string"
+                },
+                "context_id": {
+                    "type": "string"
+                },
+                "data": {
+                    "type": "string"
+                },
+                "document_id": {
+                    "type": "string"
+                },
+                "document_sha256": {
+                    "type": "string"
+                },
+                "expected_revision": {
+                    "type": "integer"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "offer_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "signdto.PrepareRequest": {
+            "type": "object",
+            "properties": {
+                "document_id": {
+                    "type": "string"
+                },
+                "expected_revision": {
+                    "type": "integer"
+                },
+                "offer_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "signdto.SignRequest": {
+            "type": "object",
+            "properties": {
+                "context_id": {
+                    "type": "string"
+                },
+                "signature": {
+                    "type": "string"
+                },
+                "terms_accepted": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "signdto.Signature": {
+            "type": "object",
+            "properties": {
+                "application_id": {
+                    "type": "string"
+                },
+                "certificate": {
+                    "$ref": "#/definitions/companydomain.Certificate"
+                },
+                "context_id": {
+                    "type": "string"
+                },
+                "data": {
+                    "type": "string"
+                },
+                "document_id": {
+                    "type": "string"
+                },
+                "document_sha256": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "modeled_effective_date": {
+                    "type": "string"
+                },
+                "offer_id": {
+                    "type": "string"
+                },
+                "operation_id": {
+                    "type": "string"
+                },
+                "signature": {
+                    "type": "string"
+                },
+                "signed_at": {
+                    "type": "string"
+                },
+                "signed_by": {
+                    "type": "string"
+                },
+                "terms_accepted": {
+                    "type": "boolean"
                 }
             }
         },

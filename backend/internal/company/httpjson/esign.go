@@ -16,13 +16,20 @@ type verification struct {
 	Valid       bool   `json:"valid"`
 	Reason      string `json:"reason"`
 	Certificate *struct {
-		Serial  string `json:"serial"`
-		Type    string `json:"type"`
-		Subject struct {
-			INN string `json:"inn"`
+		Serial    string `json:"serial"`
+		Type      string `json:"type"`
+		ValidFrom string `json:"valid_from"`
+		ValidTo   string `json:"valid_to"`
+		Status    string `json:"status"`
+		Issuer    string `json:"issuer"`
+		Subject   struct {
+			INN      string `json:"inn"`
+			FullName string `json:"full_name"`
+			Position string `json:"position"`
 		} `json:"subject"`
 		Organization *struct {
-			INN string `json:"inn"`
+			INN  string `json:"inn"`
+			Name string `json:"name"`
 		} `json:"organization"`
 	} `json:"certificate"`
 }
@@ -52,12 +59,19 @@ func (c *Client) VerifySignature(ctx context.Context, data, signature string) (c
 	}
 
 	cert := companydomain.Certificate{
-		Serial:   resp.Certificate.Serial,
-		Type:     companydomain.CertificateType(resp.Certificate.Type),
-		OwnerINN: resp.Certificate.Subject.INN,
+		Serial:        resp.Certificate.Serial,
+		Type:          companydomain.CertificateType(resp.Certificate.Type),
+		OwnerINN:      resp.Certificate.Subject.INN,
+		ValidFrom:     resp.Certificate.ValidFrom,
+		ValidTo:       resp.Certificate.ValidTo,
+		Status:        resp.Certificate.Status,
+		Issuer:        resp.Certificate.Issuer,
+		OwnerFullName: resp.Certificate.Subject.FullName,
+		OwnerPosition: resp.Certificate.Subject.Position,
 	}
 	if resp.Certificate.Organization != nil {
 		cert.OrganizationINN = resp.Certificate.Organization.INN
+		cert.OrganizationName = resp.Certificate.Organization.Name
 	}
 	return cert, nil
 }

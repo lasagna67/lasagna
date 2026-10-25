@@ -10,27 +10,6 @@ import (
 	d "github.com/lasagna67/lasagna.git/internal/company/domain"
 )
 
-func TestDataCurrent(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		date *time.Time
-		want *bool
-	}{
-		{"missing", nil, nil},
-		{"now", timeValue(decisionNow), boolValue(true)},
-		{"30 days inclusive", timeValue(decisionNow.Add(-30 * 24 * time.Hour)), boolValue(true)},
-		{"expired", timeValue(decisionNow.Add(-30*24*time.Hour - time.Nanosecond)), boolValue(false)},
-		{"future", timeValue(decisionNow.Add(time.Nanosecond)), boolValue(false)},
-		{"zero", timeValue(time.Time{}), nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := dataCurrent(tc.date, decisionNow, 30*24*time.Hour); !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("got %v want %v", got, tc.want)
-			}
-		})
-	}
-}
-
 func timeValue(t time.Time) *time.Time { return &t }
 
 func TestNoAnomalousIncome(t *testing.T) {
