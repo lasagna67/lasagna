@@ -2,6 +2,7 @@ package underwritingrepo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -14,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	documentdomain "github.com/lasagna67/lasagna.git/internal/document/domain"
 	documentrepo "github.com/lasagna67/lasagna.git/internal/document/repo"
@@ -489,3 +491,65 @@ func TestChecksSummary(t *testing.T) {
 }
 
 func timeNow() time.Time { return time.Now() }
+
+// Заключение по плану пишется в транзакции изменения заявки: revision + 1,
+// data_revision — нет. Карточка читает план, проект и все версии заключений;
+// версии неизменяемы.
+func TestCashPlanReview(t *testing.T) {
+	f := seed(t, testPool(t))
+	repo := New(f.pool)
+	ctx := context.Background()
+	id := f.application(t, applicationdomain.StatusManualReview)
+
+	plan := cashplandomain.CashPlan{Kind: cashplandomain.KindLiquidity, FirstMonth: "2026-11", OwnReserveKopecks: 5000000,
+		Forecast: []cashplandomain.ForecastRow{{Month: "2026-11", IncomeKopecks: 20000000, ExpensesKopecks: 5000000}}}
+	plan.Confirm(f.applicantID, time.Now())
+	forecast, _ := json.Marshal(plan.Forecast)
+	if _, err := f.pool.Exec(ctx, `INSERT INTO application_cash_plans (application_id, kind, first_month, own_reserve_kopecks, forecast,
+		confirmed_hash, confirmed_by, confirmed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		id, plan.Kind, plan.FirstMonth, plan.OwnReserveKopecks, forecast, plan.ConfirmedHash, plan.ConfirmedBy, plan.ConfirmedAt); err != nil {
+		t.Fatal(err)
+	}
+	terms := cashplandomain.Terms{ProductCode: "express", AmountKopecks: 100000000, TermMonths: ptr(12), CollateralMode: "none"}
+	review, errs := cashplandomain.NewReview(uuid.New(), id, f.reviewerID, 4, 1, 1, plan, terms,
+		cashplandomain.ReviewInput{Result: cashplandomain.ResultAccepted, ValidatedReserveKopecks: ptr(int64(4000000)), Comment: "Выписка", PublicComment: ptr("Принят")}, time.Now())
+	if errs != nil {
+		t.Fatal(errs)
+	}
+	_, err := repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 4, ActorID: &f.reviewerID}, func(*applicationdomain.Application) (underwritingdomain.Change, error) {
+		return underwritingdomain.Change{CashPlanReview: &review}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r, err := repo.GetReview(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Revision != 5 || r.DataRevision != 1 || r.CashPlan == nil || !r.CashPlan.Confirmed() || r.CashPlanReview == nil || len(r.CashPlanReviews) != 1 {
+		t.Fatalf("card = revision %d, data %d, plan %+v, reviews %+v", r.Revision, r.DataRevision, r.CashPlan, r.CashPlanReviews)
+	}
+	got := r.CashPlanReview
+	if got.Version != 1 || got.Terms.Hash() != terms.Hash() || *got.ValidatedReserveKopecks != 4000000 || got.Comment != "Выписка" || *got.PublicComment != "Принят" ||
+		!got.Current(*r.CashPlan, terms, r.DataRevision) || got.CreatedAt.IsZero() {
+		t.Errorf("review = %+v", got)
+	}
+	if _, err := f.pool.Exec(ctx, `UPDATE cash_plan_reviews SET comment = 'x' WHERE id = $1`, review.ID); err == nil {
+		t.Error("cash plan review changed")
+	}
+	// Версия уникальна: повтор номера отвергает БД.
+	_, err = repo.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 5, ActorID: &f.reviewerID}, func(*applicationdomain.Application) (underwritingdomain.Change, error) {
+		dup := review
+		dup.ID = uuid.New()
+		return underwritingdomain.Change{CashPlanReview: &dup}, nil
+	})
+	if err == nil {
+		t.Error("duplicate review version accepted")
+	}
+
+	p, err := repo.Product(ctx, "start")
+	if err != nil || p.BaseRateBps == nil || *p.BaseRateBps != 2400 {
+		t.Errorf("start rate = %v, %v", p.BaseRateBps, err)
+	}
+}

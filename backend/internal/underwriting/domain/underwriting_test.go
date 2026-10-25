@@ -111,7 +111,7 @@ func TestInfoRequestRespond(t *testing.T) {
 }
 
 func TestReviewBlockers(t *testing.T) {
-	r := Review{Details: application(), Checks: readyChecks()}
+	r := Review{Details: application(), Checks: readyChecks(), PlanContext: planContext()}
 	if got := r.Blockers(now); got != nil {
 		t.Errorf("ready express: %v", got)
 	}

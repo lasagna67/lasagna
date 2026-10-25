@@ -1,6 +1,7 @@
-// Package intakerepo — хранение черновика: поля запроса клиента и предмет
-// залога. Статус, историю и revision пишет applicationrepo.Update, проверку
-// залога банком — модуль collateral.
+// Package intakerepo — хранение черновика: поля запроса клиента, предмет
+// залога, поля проекта «Старта» и денежный план (через cashplanrepo). Статус,
+// историю и revision пишет applicationrepo.Update, проверку залога банком —
+// модуль collateral, заключение по плану — underwriting.
 package intakerepo
 
 import (
@@ -14,6 +15,7 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	applicationrepo "github.com/lasagna67/lasagna.git/internal/application/repo"
+	cashplanrepo "github.com/lasagna67/lasagna.git/internal/cashplan/repo"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	intakedomain "github.com/lasagna67/lasagna.git/internal/intake/domain"
 )
@@ -26,17 +28,29 @@ func New(pool *pgxpool.Pool) *Repo {
 	return &Repo{pool: pool}
 }
 
-// Get — заявка с предметом залога. Нет заявки — applicationerrors.ErrNotFound.
+// Get — заявка с предметом залога, полями проекта и планом. Нет заявки —
+// applicationerrors.ErrNotFound.
 func (r *Repo) Get(ctx context.Context, id uuid.UUID) (intakedomain.Details, error) {
-	app, err := applicationrepo.GetDetails(ctx, r.pool, id, false)
+	var d intakedomain.Details
+	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		app, err := applicationrepo.GetDetails(ctx, tx, id, false)
+		if err != nil {
+			return err
+		}
+		d.ApplicationDetails = app
+		if d.Collateral, err = loadCollateral(ctx, tx, id); err != nil {
+			return err
+		}
+		if d.Project, err = cashplanrepo.Project(ctx, tx, id); err != nil {
+			return err
+		}
+		d.CashPlan, err = cashplanrepo.Plan(ctx, tx, id)
+		return err
+	})
 	if err != nil {
 		return intakedomain.Details{}, err
 	}
-	c, err := loadCollateral(ctx, r.pool, id)
-	if err != nil {
-		return intakedomain.Details{}, err
-	}
-	return intakedomain.Details{ApplicationDetails: app, Collateral: c}, nil
+	return d, nil
 }
 
 // Product — условия продукта каталога по коду; нет такого — nil.
@@ -45,7 +59,8 @@ func (r *Repo) Product(ctx context.Context, code string) (*applicationdomain.Pro
 }
 
 // Update меняет заявку через applicationrepo.Update. fn получает черновик с
-// продуктом и залогом, прочитанными в той же транзакции, и возвращает Change.
+// продуктом, залогом, полями проекта и планом, прочитанными в той же
+// транзакции, и возвращает Change.
 func (r *Repo) Update(ctx context.Context, cmd applicationdomain.UpdateCommand, fn func(*intakedomain.Draft) (intakedomain.Change, error)) (replayed bool, err error) {
 	return applicationrepo.Update(ctx, r.pool, cmd, func(tx pgx.Tx, app *applicationdomain.Application) (applicationrepo.History, error) {
 		d := intakedomain.Draft{Application: app}
@@ -56,6 +71,12 @@ func (r *Repo) Update(ctx context.Context, cmd applicationdomain.UpdateCommand, 
 			}
 		}
 		if d.Collateral, err = loadCollateral(ctx, tx, app.ID); err != nil {
+			return applicationrepo.History{}, err
+		}
+		if d.Project, err = cashplanrepo.Project(ctx, tx, app.ID); err != nil {
+			return applicationrepo.History{}, err
+		}
+		if d.CashPlan, err = cashplanrepo.Plan(ctx, tx, app.ID); err != nil {
 			return applicationrepo.History{}, err
 		}
 		change, err := fn(&d)
@@ -69,7 +90,8 @@ func (r *Repo) Update(ctx context.Context, cmd applicationdomain.UpdateCommand, 
 	})
 }
 
-// apply пишет Change: поля запроса, предмет залога, уведомление.
+// apply пишет Change: поля запроса, предмет залога, поля проекта, план,
+// data_revision и уведомление.
 func apply(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, c intakedomain.Change) error {
 	if c.Request {
 		if err := writeRequest(ctx, tx, app); err != nil {
@@ -79,6 +101,21 @@ func apply(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, c 
 	if c.Collateral != nil {
 		if err := upsertCollateral(ctx, tx, app.ID, *c.Collateral); err != nil {
 			return err
+		}
+	}
+	if c.Project != nil {
+		if err := cashplanrepo.SaveProject(ctx, tx, app.ID, c.Project.Value); err != nil {
+			return err
+		}
+	}
+	if c.CashPlan != nil {
+		if err := cashplanrepo.SavePlan(ctx, tx, app.ID, c.CashPlan.Value); err != nil {
+			return err
+		}
+	}
+	if c.DataChanged {
+		if _, err := tx.Exec(ctx, `UPDATE applications SET data_revision = data_revision + 1 WHERE id = $1`, app.ID); err != nil {
+			return fmt.Errorf("update data revision: %w", err)
 		}
 	}
 	if n := c.Notification; n != nil {

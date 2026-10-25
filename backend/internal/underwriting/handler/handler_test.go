@@ -31,10 +31,11 @@ var (
 
 // fakeService отдаёт err, если он задан, иначе заявку на рассмотрении у underwriter.
 type fakeService struct {
-	err    error
-	filter underwritingdomain.Filter
-	take   underwritingdomain.TakeCommand
-	decide underwritingdomain.DecideCommand
+	err     error
+	filter  underwritingdomain.Filter
+	take    underwritingdomain.TakeCommand
+	decide  underwritingdomain.DecideCommand
+	planCmd underwritingdomain.ReviewCashPlanCommand
 }
 
 func review() underwritingdomain.Review {
@@ -67,6 +68,10 @@ func (f *fakeService) Take(_ context.Context, cmd underwritingdomain.TakeCommand
 	return f.result()
 }
 func (f *fakeService) RequestInfo(context.Context, underwritingdomain.RequestInfoCommand) (underwritingdomain.Review, error) {
+	return f.result()
+}
+func (f *fakeService) ReviewCashPlan(_ context.Context, cmd underwritingdomain.ReviewCashPlanCommand) (underwritingdomain.Review, error) {
+	f.planCmd = cmd
 	return f.result()
 }
 func (f *fakeService) Decide(_ context.Context, cmd underwritingdomain.DecideCommand) (underwritingdomain.Review, error) {
@@ -179,7 +184,8 @@ func TestReviewCard(t *testing.T) {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
 	}
 	got := decode(t, rec)
-	for _, field := range []string{"checks", "scoring", "info_requests", "collateral_reviews", "decisions", "history", "decision_blockers", "assignee"} {
+	for _, field := range []string{"checks", "scoring", "info_requests", "collateral_reviews", "cash_plan_reviews", "cash_plan_assessment",
+		"decisions", "history", "decision_blockers", "assignee", "data_revision", "cash_plan", "plan_review"} {
 		if _, ok := got[field]; !ok {
 			t.Errorf("card has no %s", field)
 		}
@@ -202,6 +208,25 @@ func TestDecisionBody(t *testing.T) {
 	if cmd.ApplicationID != appID || cmd.ExpectedRevision != 5 || cmd.Outcome != offerdomain.OutcomeCounterOffer || cmd.Reviewer.ID != underwriter.UserID ||
 		cmd.Reviewer.Admin || cmd.Terms == nil || *cmd.Terms.AmountKopecks != 80000000 || cmd.Terms.ValidUntil == nil || *cmd.Comment != "внутреннее" {
 		t.Errorf("command = %+v, terms %+v", cmd, cmd.Terms)
+	}
+}
+
+func TestCashPlanReviewBody(t *testing.T) {
+	svc := &fakeService{}
+	body := `{"expected_revision":5,"terms":{"amount_kopecks":25000000},"result":"accepted",
+		"validated_reserve_kopecks":10000000,"comment":"Выписка по депозиту","public_comment":"Резерв подтверждён"}`
+	rec := do(newTestServer(underwriter, svc), http.MethodPost, "/underwriter/applications/"+appID.String()+"/cash-plan-review", body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+	}
+	cmd := svc.planCmd
+	if cmd.ApplicationID != appID || cmd.ExpectedRevision != 5 || cmd.Reviewer.ID != underwriter.UserID || cmd.Result != "accepted" ||
+		cmd.Terms == nil || *cmd.Terms.AmountKopecks != 25000000 || cmd.Terms.ProductCode != nil || *cmd.ValidatedReserveKopecks != 10000000 ||
+		cmd.Comment != "Выписка по депозиту" || *cmd.PublicComment != "Резерв подтверждён" {
+		t.Errorf("command = %+v, terms %+v", cmd, cmd.Terms)
+	}
+	if rec := do(newTestServer(client, svc), http.MethodPost, "/underwriter/applications/"+appID.String()+"/cash-plan-review", body); rec.Code != http.StatusForbidden {
+		t.Errorf("client: %d; want 403", rec.Code)
 	}
 }
 

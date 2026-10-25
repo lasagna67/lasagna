@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 )
 
@@ -149,6 +150,10 @@ func TestPatchFields(t *testing.T) {
 		Purpose: null[applicationdomain.Purpose](), PurposeDescription: null[string](), AmountKopecks: null[int64](),
 		NeedPeriod: &applicationdomain.NeedPeriod{}, ProductCode: null[string](), TermMonths: null[int](),
 		CollateralMode: ptr(applicationdomain.CollateralNone), Collateral: machine,
+		ProductDetails: null[cashplandomain.Project](), CashPlan: null[cashplandomain.CashPlan](),
+	}
+	if len(all.Fields()) != len(applicationdomain.DraftFields()) {
+		t.Errorf("fields %v do not cover draft fields %v", all.Fields(), applicationdomain.DraftFields())
 	}
 	for _, f := range all.Fields() {
 		if !slices.Contains(applicationdomain.DraftFields(), f) {

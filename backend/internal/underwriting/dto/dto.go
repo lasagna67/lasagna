@@ -14,8 +14,11 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationdto "github.com/lasagna67/lasagna.git/internal/application/dto"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
+	cashplandto "github.com/lasagna67/lasagna.git/internal/cashplan/dto"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	offerdto "github.com/lasagna67/lasagna.git/internal/offer/dto"
+	"github.com/lasagna67/lasagna.git/internal/scoring"
 	underwritingdomain "github.com/lasagna67/lasagna.git/internal/underwriting/domain"
 )
 
@@ -54,6 +57,38 @@ type DecisionRequest struct {
 	ReasonCode       *string       `json:"reason_code" example:"HIGH_DEBT_LOAD"`
 	Reasons          []string      `json:"reasons"`
 	Comment          *string       `json:"comment"` // внутренний, клиенту не показывается
+}
+
+// PlanTermsRequest — условия, на которых проверяется план; непереданное поле —
+// как в запросе клиента. Ставку задаёт каталог по продукту.
+type PlanTermsRequest struct {
+	ProductCode    *string `json:"product_code" example:"start"`
+	AmountKopecks  *int64  `json:"amount_kopecks" example:"30000000"`
+	TermMonths     *int    `json:"term_months" example:"24"`
+	CollateralMode *string `json:"collateral_mode" enums:"none,pledged"`
+}
+
+// CashPlanReviewRequest — заключение по денежному плану. validated_reserve_kopecks —
+// только при accepted, от 0 до заявленного резерва; comment — внутренний текст о
+// предпосылках проверки, public_comment — для клиента.
+type CashPlanReviewRequest struct {
+	ExpectedRevision        *int              `json:"expected_revision" example:"6"`
+	Terms                   *PlanTermsRequest `json:"terms"`
+	Result                  string            `json:"result" enums:"accepted,needs_info,rejected" example:"accepted"`
+	ValidatedReserveKopecks *int64            `json:"validated_reserve_kopecks" example:"10000000"`
+	Comment                 string            `json:"comment" example:"Резерв на депозите, кредитные средства и деньги бюджета проекта не входят"`
+	PublicComment           *string           `json:"public_comment"`
+}
+
+func (r CashPlanReviewRequest) Command(id uuid.UUID, reviewer underwritingdomain.Reviewer, revision int) underwritingdomain.ReviewCashPlanCommand {
+	cmd := underwritingdomain.ReviewCashPlanCommand{
+		ApplicationID: id, Reviewer: reviewer, ExpectedRevision: revision,
+		Result: r.Result, ValidatedReserveKopecks: r.ValidatedReserveKopecks, Comment: r.Comment, PublicComment: r.PublicComment,
+	}
+	if t := r.Terms; t != nil {
+		cmd.Terms = &underwritingdomain.PlanTermsInput{ProductCode: t.ProductCode, AmountKopecks: t.AmountKopecks, TermMonths: t.TermMonths, CollateralMode: t.CollateralMode}
+	}
+	return cmd
 }
 
 type RetryChecksRequest struct {
@@ -127,6 +162,16 @@ type CollateralResponse struct {
 	Review               *CollateralReviewResponse `json:"review"`
 }
 
+// PlanReviewResponse — заключение банка по плану для клиента, без внутреннего
+// комментария. actual=false — план или данные заявки изменились после проверки.
+type PlanReviewResponse struct {
+	Result                  string    `json:"result" enums:"accepted,needs_info,rejected"`
+	ValidatedReserveKopecks *int64    `json:"validated_reserve_kopecks"`
+	PublicComment           *string   `json:"public_comment"`
+	ReviewedAt              time.Time `json:"reviewed_at"`
+	Actual                  bool      `json:"actual"`
+}
+
 type InfoRequestResponse struct {
 	ID             uuid.UUID  `json:"id" swaggertype:"string" format:"uuid"`
 	Message        string     `json:"message"`
@@ -137,11 +182,22 @@ type InfoRequestResponse struct {
 	AnsweredAt     *time.Time `json:"answered_at"`
 }
 
-// NewApplication — заявка для клиента: залог с проверкой, предложение и договор.
+// NewApplication — заявка для клиента: залог с проверкой, поля проекта, план с
+// заключением банка, предложение и договор.
 func NewApplication(d underwritingdomain.Details) applicationdto.ApplicationResponse {
 	resp := applicationdto.NewApplicationResponse(d.ApplicationDetails)
 	if c := newCollateral(d); c != nil {
 		resp.Collateral = c
+	}
+	if p := cashplandto.NewProject(d.Project); p != nil {
+		resp.ProductDetails = p
+	}
+	if p := cashplandto.NewCashPlan(d.CashPlan); p != nil {
+		resp.CashPlan = p
+	}
+	if r := d.CashPlanReview; r != nil {
+		review := newPlanReview(*r, d)
+		resp.PlanReview = &review
 	}
 	if d.Offer != nil {
 		resp.Offer = offerdto.NewOffer(*d.Offer)
@@ -187,6 +243,16 @@ func newCollateralReview(r collateraldomain.CollateralReview, c *collateraldomai
 		resp.PublicComment = &comment
 	}
 	return resp
+}
+
+func newPlanReview(r cashplandomain.Review, d underwritingdomain.Details) PlanReviewResponse {
+	return PlanReviewResponse{
+		Result:                  r.Result,
+		ValidatedReserveKopecks: r.ValidatedReserveKopecks,
+		PublicComment:           r.PublicComment,
+		ReviewedAt:              r.CreatedAt.UTC(),
+		Actual:                  d.CashPlan != nil && r.CashPlanHash == d.CashPlan.Hash() && r.DataRevision == d.DataRevision,
+	}
 }
 
 func NewInfoRequests(reqs []underwritingdomain.InfoRequest) []InfoRequestResponse {
@@ -256,6 +322,41 @@ type ScoringResponse struct {
 	Factors      json.RawMessage `json:"factors" swaggertype:"array,object"`
 }
 
+// PlanTermsResponse — условия, на которых проверен или считается план.
+type PlanTermsResponse struct {
+	ProductCode    string `json:"product_code"`
+	AmountKopecks  int64  `json:"amount_kopecks"`
+	TermMonths     *int   `json:"term_months"`
+	CollateralMode string `json:"collateral_mode" enums:"none,pledged"`
+}
+
+// StaffPlanReviewResponse — заключение по плану с внутренним комментарием и тем,
+// к чему оно привязано: хеш плана, условия и data_revision заявки.
+type StaffPlanReviewResponse struct {
+	ID      uuid.UUID `json:"id" swaggertype:"string" format:"uuid"`
+	Version int       `json:"version"`
+	PlanReviewResponse
+	ReviewedBy   uuid.UUID         `json:"reviewed_by" swaggertype:"string" format:"uuid"`
+	Terms        PlanTermsResponse `json:"terms"`
+	CashPlanHash string            `json:"cash_plan_hash"`
+	TermsHash    string            `json:"terms_hash"`
+	DataRevision int               `json:"data_revision"`
+	Comment      string            `json:"comment"`
+}
+
+// CashPlanAssessmentResponse — денежный план на запрошенных условиях: нужен ли
+// он (signals — признаки P07), актуально ли заключение банка, расчёт плана
+// ликвидности (liquidity) или проекта «Старта» (project) и блокировки решения.
+type CashPlanAssessmentResponse struct {
+	Required      *bool                               `json:"required"`
+	Signals       []string                            `json:"signals"`
+	Terms         *PlanTermsResponse                  `json:"terms"`
+	ReviewCurrent bool                                `json:"review_current"`
+	Liquidity     *scoring.CashPlanResult             `json:"liquidity"`
+	Project       *scoring.ProjectResult              `json:"project"`
+	Blockers      []applicationdto.FieldErrorResponse `json:"blockers"`
+}
+
 // StaffCollateralReviewResponse — проверка залога с внутренним комментарием.
 type StaffCollateralReviewResponse struct {
 	ID      uuid.UUID `json:"id" swaggertype:"string" format:"uuid"`
@@ -291,11 +392,13 @@ type EventResponse struct {
 // сейчас мешает одобрить заявку на запрошенных условиях.
 type ReviewApplicationResponse struct {
 	UnderwriterApplicationResponse
-	InfoRequests      []InfoRequestResponse               `json:"info_requests"`
-	CollateralReviews []StaffCollateralReviewResponse     `json:"collateral_reviews"`
-	Decisions         []DecisionResponse                  `json:"decisions"`
-	History           []EventResponse                     `json:"history"`
-	DecisionBlockers  []applicationdto.FieldErrorResponse `json:"decision_blockers"`
+	InfoRequests       []InfoRequestResponse               `json:"info_requests"`
+	CollateralReviews  []StaffCollateralReviewResponse     `json:"collateral_reviews"`
+	CashPlanReviews    []StaffPlanReviewResponse           `json:"cash_plan_reviews"`
+	CashPlanAssessment CashPlanAssessmentResponse          `json:"cash_plan_assessment"`
+	Decisions          []DecisionResponse                  `json:"decisions"`
+	History            []EventResponse                     `json:"history"`
+	DecisionBlockers   []applicationdto.FieldErrorResponse `json:"decision_blockers"`
 }
 
 // NewUnderwriterApplication — заявка в очереди глазами сотрудника r.
@@ -330,6 +433,8 @@ func NewReview(rv underwritingdomain.Review, r underwritingdomain.Reviewer) Revi
 		UnderwriterApplicationResponse: NewUnderwriterApplication(rv.Details, r),
 		InfoRequests:                   NewInfoRequests(rv.InfoRequests),
 		CollateralReviews:              make([]StaffCollateralReviewResponse, 0, len(rv.CollateralReviews)),
+		CashPlanReviews:                make([]StaffPlanReviewResponse, 0, len(rv.CashPlanReviews)),
+		CashPlanAssessment:             newPlanAssessment(rv.PlanAssessment),
 		Decisions:                      make([]DecisionResponse, 0, len(rv.Decisions)),
 		History:                        make([]EventResponse, 0, len(rv.History)),
 		DecisionBlockers:               fieldErrors(rv.DecisionBlockers),
@@ -342,6 +447,19 @@ func NewReview(rv underwritingdomain.Review, r underwritingdomain.Reviewer) Revi
 			Version:                  cr.Version,
 			CollateralReviewResponse: newCollateralReview(cr, rv.Collateral),
 			Comment:                  cr.Comment,
+		})
+	}
+	for _, pr := range rv.CashPlanReviews {
+		resp.CashPlanReviews = append(resp.CashPlanReviews, StaffPlanReviewResponse{
+			ID:                 pr.ID,
+			Version:            pr.Version,
+			PlanReviewResponse: newPlanReview(pr, rv.Details),
+			ReviewedBy:         pr.Reviewer,
+			Terms:              newPlanTerms(pr.Terms),
+			CashPlanHash:       pr.CashPlanHash,
+			TermsHash:          pr.TermsHash,
+			DataRevision:       pr.DataRevision,
+			Comment:            pr.Comment,
 		})
 	}
 	for _, d := range rv.Decisions {
@@ -373,6 +491,26 @@ func NewReview(rv underwritingdomain.Review, r underwritingdomain.Reviewer) Revi
 			ActorID:    e.ActorID,
 			CreatedAt:  e.CreatedAt.UTC(),
 		})
+	}
+	return resp
+}
+
+func newPlanTerms(t cashplandomain.Terms) PlanTermsResponse {
+	return PlanTermsResponse{ProductCode: t.ProductCode, AmountKopecks: t.AmountKopecks, TermMonths: t.TermMonths, CollateralMode: t.CollateralMode}
+}
+
+func newPlanAssessment(a underwritingdomain.PlanAssessment) CashPlanAssessmentResponse {
+	resp := CashPlanAssessmentResponse{
+		Required:      a.Required,
+		Signals:       nonNil(a.Signals),
+		ReviewCurrent: a.ReviewCurrent,
+		Liquidity:     a.Liquidity,
+		Project:       a.Project,
+		Blockers:      fieldErrors(a.Blockers),
+	}
+	if a.Terms != nil {
+		t := newPlanTerms(*a.Terms)
+		resp.Terms = &t
 	}
 	return resp
 }

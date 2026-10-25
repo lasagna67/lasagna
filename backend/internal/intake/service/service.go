@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -35,8 +36,8 @@ type DraftRepo interface {
 	// Product — условия продукта по коду; нет такого — nil.
 	Product(ctx context.Context, code string) (*applicationdomain.Product, error)
 	// Update в одной транзакции блокирует заявку, сверяет revision (иначе
-	// RevisionConflictError), читает продукт и залог, вызывает fn и пишет Change.
-	// Повтор по ключу — replayed.
+	// RevisionConflictError), читает продукт, залог, поля проекта и план,
+	// вызывает fn и пишет Change. Повтор по ключу — replayed.
 	Update(ctx context.Context, cmd applicationdomain.UpdateCommand, fn func(*intakedomain.Draft) (intakedomain.Change, error)) (replayed bool, err error)
 }
 
@@ -104,8 +105,10 @@ func (s *ApplicationService) Create(ctx context.Context, cmd applicationdomain.C
 	return details, nil
 }
 
-// Patch — правка заявки своей компании: в черновике — любые поля запроса и
-// залог, в info_requested — открытые банком. Код продукта проверяется по каталогу.
+// Patch — правка заявки своей компании: в черновике — любые поля запроса,
+// залог, поля проекта и план «Старта», в info_requested — открытые банком. Код
+// продукта проверяется по каталогу. data_revision растёт, только если правка
+// изменила входные данные риска.
 func (s *ApplicationService) Patch(ctx context.Context, cmd intakedomain.PatchCommand) (intakedomain.Details, error) {
 	if err := cmd.Validate(); err != nil {
 		return intakedomain.Details{}, err
@@ -113,6 +116,8 @@ func (s *ApplicationService) Patch(ctx context.Context, cmd intakedomain.PatchCo
 	if _, err := s.clientDetails(ctx, cmd.UserID, cmd.ApplicationID); err != nil {
 		return intakedomain.Details{}, err
 	}
+	// Продукт после правки: от него зависят поля проекта и вид плана.
+	var product *applicationdomain.Product
 	if code := cmd.ProductCode.Value; code != nil {
 		p, err := s.drafts.Product(ctx, *code)
 		if err != nil {
@@ -121,13 +126,25 @@ func (s *ApplicationService) Patch(ctx context.Context, cmd intakedomain.PatchCo
 		if p == nil {
 			return intakedomain.Details{}, invalid("request.product_code", "NOT_FOUND", "Продукт не найден")
 		}
+		product = p
 	}
 
 	_, err := s.drafts.Update(ctx, s.update(cmd.ApplicationID, cmd.ExpectedRevision, cmd.UserID), func(d *intakedomain.Draft) (intakedomain.Change, error) {
+		before := d.Application.Request
 		if err := cmd.Apply(d.Application); err != nil {
 			return intakedomain.Change{}, err
 		}
-		return intakedomain.Change{Request: true, Collateral: cmd.Collateral}, nil
+		p := product
+		if !cmd.ProductCode.Set {
+			p = d.Product
+		}
+		project, plan, err := cmd.ApplyPlan(*d, p, s.now())
+		if err != nil {
+			return intakedomain.Change{}, err
+		}
+		change := intakedomain.Change{Request: true, Collateral: cmd.Collateral, Project: project, CashPlan: plan}
+		change.DataChanged = dataChanged(before, *d, change)
+		return change, nil
 	})
 	if err != nil {
 		return intakedomain.Details{}, fmt.Errorf("patch application: %w", err)
@@ -144,7 +161,7 @@ func (s *ApplicationService) Submit(ctx context.Context, cmd intakedomain.Submit
 		if err != nil {
 			return intakedomain.Change{}, err
 		}
-		if err := d.Application.CheckSubmit(d.Product, d.Collateral != nil); err != nil {
+		if err := checkSubmit(d, s.now()); err != nil {
 			return intakedomain.Change{}, err
 		}
 		return intakedomain.Change{Transitions: []applicationdomain.Transition{tr}}, nil
@@ -161,7 +178,7 @@ func (s *ApplicationService) Resubmit(ctx context.Context, cmd intakedomain.Subm
 		if err != nil {
 			return intakedomain.Change{}, err
 		}
-		if err := a.CheckSubmit(d.Product, d.Collateral != nil); err != nil {
+		if err := checkSubmit(d, s.now()); err != nil {
 			return intakedomain.Change{}, err
 		}
 		change := intakedomain.Change{Transitions: []applicationdomain.Transition{tr}}
@@ -217,6 +234,49 @@ func (s *ApplicationService) send(ctx context.Context, cmd intakedomain.SubmitCo
 }
 
 //============================================================================================
+
+// checkSubmit — полнота запроса, условия продукта, поля проекта и план одним
+// списком ошибок полей.
+func checkSubmit(d *intakedomain.Draft, now time.Time) error {
+	var fields []applicationerrors.FieldError
+	if err := d.Application.CheckSubmit(d.Product, d.Collateral != nil); err != nil {
+		var v *applicationerrors.ValidationError
+		if !errors.As(err, &v) {
+			return err
+		}
+		fields = v.Fields
+	}
+	fields = append(fields, d.CheckPlan(now)...)
+	if fields != nil {
+		return &applicationerrors.ValidationError{Fields: fields}
+	}
+	return nil
+}
+
+// dataChanged — правка меняет входные данные риска (C01): запрос, предмет
+// залога, поля проекта или план с его подтверждением. Повтор тех же значений
+// data_revision не двигает.
+func dataChanged(before applicationdomain.Request, d intakedomain.Draft, c intakedomain.Change) bool {
+	if !reflect.DeepEqual(before, d.Application.Request) {
+		return true
+	}
+	if c.Collateral != nil && (d.Collateral == nil || d.Collateral.Hash() != c.Collateral.Hash()) {
+		return true
+	}
+	if w := c.Project; w != nil {
+		old, next := d.Project, w.Value
+		if (old == nil) != (next == nil) || (next != nil && old.Hash() != next.Hash()) {
+			return true
+		}
+	}
+	if w := c.CashPlan; w != nil {
+		old, next := d.CashPlan, w.Value
+		if (old == nil) != (next == nil) || (next != nil && (old.Hash() != next.Hash() || old.Confirmed() != next.Confirmed())) {
+			return true
+		}
+	}
+	return false
+}
 
 func (s *ApplicationService) update(id uuid.UUID, expected int, actorID uuid.UUID) applicationdomain.UpdateCommand {
 	return applicationdomain.UpdateCommand{ID: id, ExpectedRevision: expected, ActorID: &actorID}

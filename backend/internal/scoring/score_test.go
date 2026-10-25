@@ -54,7 +54,7 @@ func TestScoreStability(t *testing.T) {
 		for i := range months {
 			// Declining income keeps trend points at zero, isolating stability.
 			income := int64(100)
-			if i >= 3 {
+			if i >= len(months)/2 {
 				income = 1
 			}
 			months[i] = companydomain.MonthlyData{Month: fmt.Sprintf("2026-%02d", i+1), Income: income}

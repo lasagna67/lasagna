@@ -3,8 +3,10 @@ package scoring
 import (
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
+	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 )
 
@@ -27,6 +29,7 @@ type ScoringInput struct {
 	HasCollateral    bool
 	Checks           ScoringChecks
 	RegistrySyncedAt *time.Time
+	CashPlan         *CashPlanInput // nil — ни плана, ни полей проекта
 }
 
 type ScoringProduct struct {
@@ -43,13 +46,39 @@ type ScoringProduct struct {
 
 // nil — проверка не выполнена. Актуальность рассчитывается по датам данных.
 // Аномалии также проверяются по месячным данным; внешний false учитывается дополнительно.
+// Нужен ли денежный план, EvaluateApplication определяет сам по продукту и окну
+// финансов (CashPlan.Required в решении); подтверждение клиента и принятие
+// банком заполняет Scorer из БД.
 type ScoringChecks struct {
-	RegistryCurrent, CreditCurrent                        *bool
-	AccountActiveAndOwned                                 *bool
-	CollateralAccepted, CollateralSufficient              *bool
-	CashPlanRequired, CashPlanConfirmed, CashPlanAccepted *bool
-	NoAnomalousIncome                                     *bool
+	RegistryCurrent, CreditCurrent           *bool
+	AccountActiveAndOwned                    *bool
+	CollateralAccepted, CollateralSufficient *bool
+	CashPlanConfirmed, CashPlanAccepted      *bool
+	NoAnomalousIncome                        *bool
 }
+
+// CashPlanInput — денежный план и поля проекта заявки. ValidatedReserveKopecks —
+// резерв из принятого актуального заключения банка; nil — такого заключения нет.
+type CashPlanInput struct {
+	Plan                    *cashplandomain.CashPlan
+	Project                 *cashplandomain.Project
+	ValidatedReserveKopecks *int64
+}
+
+// CashPlanAssessment — денежный план в решении: нужен ли он и почему (Signals),
+// расчёт плана ликвидности на проверенном резерве (Plan) или проекта «Старта» (Project).
+type CashPlanAssessment struct {
+	Required *bool           `json:"required"`
+	Signals  []string        `json:"signals"`
+	Plan     *CashPlanResult `json:"plan"`
+	Project  *ProjectResult  `json:"project"`
+}
+
+// Модель расчёта: обычный кредит — по денежному потоку с баллом, «Старт» — проектный расчёт без балла.
+const (
+	KindCashflow = "cashflow"
+	KindProject  = "project"
+)
 
 type MonthlyFlow struct {
 	Month string `json:"month"`
@@ -77,18 +106,26 @@ type DecisionMetrics struct {
 }
 
 type ScoringDecision struct {
-	State      DecisionState    `json:"state"`
-	Metrics    DecisionMetrics  `json:"metrics"`
-	Reasons    []string         `json:"reasons"`
-	Validation ValidationResult `json:"validation"`
+	State      DecisionState      `json:"state"`
+	Kind       string             `json:"kind" enums:"cashflow,project"`
+	Metrics    DecisionMetrics    `json:"metrics"`
+	Reasons    []string           `json:"reasons"`
+	Validation ValidationResult   `json:"validation"`
+	CashPlan   CashPlanAssessment `json:"cash_plan"`
 }
 
 // EvaluateApplication рассчитывает метрики и выбирает маршрут. manual_review не является
 // одобрением сотрудника: положительное решение требует всех обязательных подтверждений.
 // Явные нарушения имеют приоритет над CSV и отсутствующими данными.
+// «Старт» оценивается проектным расчётом без балла (P11): отсутствие фактической
+// истории для него не причина, имеющиеся факты остаются в метриках.
 func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 	now = now.In(time.FixedZone("Europe/Moscow", 3*60*60))
-	result := ScoringDecision{State: DecisionManualReview, Reasons: []string{}}
+	project := in.Product != nil && in.Product.Code == cashplandomain.ProductStart
+	result := ScoringDecision{State: DecisionManualReview, Kind: KindCashflow, Reasons: []string{}}
+	if project {
+		result.Kind = KindProject
+	}
 	add := func(reason string, reject bool) {
 		if !slices.Contains(result.Reasons, reason) {
 			result.Reasons = append(result.Reasons, reason)
@@ -99,6 +136,9 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 	}
 	result.Validation = validateOverview(in.Overview, in.INN, now)
 	for _, reason := range result.Validation.Reasons {
+		if project && slices.Contains([]string{ReasonFinancialsUnavailable, ReasonFinancialHistoryInsufficient, ReasonFinancialHistoryUnderSixMonths}, reason) {
+			continue
+		}
 		missing := slices.Contains([]string{ReasonCompanyINNMissing, ReasonRegistryUnavailable, ReasonCreditHistoryUnavailable, ReasonFinancialsUnavailable, ReasonHasCreditHistoryMissing, ReasonCreditLoansMissing, ReasonCreditLoanIDMissing, ReasonFinancialHistoryUnderSixMonths}, reason)
 		switch reason {
 		case ReasonRegistryStatusInvalid:
@@ -155,12 +195,7 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	var months []companydomain.MonthlyData
 	if report := in.Overview.Financials.Data; report != nil && in.Overview.Financials.Status == "ok" && report.Status == "ok" {
-		for _, month := range report.MonthlyData {
-			if month.Month < monthStart.Format("2006-01") {
-				months = append(months, month)
-			}
-		}
-		sort.Slice(months, func(i, j int) bool { return months[i].Month < months[j].Month })
+		months = FinancialWindow(report.MonthlyData, now)
 		if len(months) > 0 {
 			if c, err := AvailableCashFlow(months); err != nil {
 				add("metrics_calculation_failed", false)
@@ -195,22 +230,16 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 					}
 				}
 			}
+			if oldIncome, recentIncome, ok := incomeHalves(months); ok && oldIncome > 0 {
+				g := float64(recentIncome) / float64(oldIncome)
+				m.G = &g
+			}
 			if len(months) >= 6 {
 				m.CompleteLastSix = true
-				var oldIncome, recentIncome float64
 				for i, month := range months[len(months)-6:] {
 					if month.Month != monthStart.AddDate(0, i-6, 0).Format("2006-01") {
 						m.CompleteLastSix = false
 					}
-					if i < 3 {
-						oldIncome += float64(month.Income)
-					} else {
-						recentIncome += float64(month.Income)
-					}
-				}
-				if oldIncome > 0 {
-					g := recentIncome / oldIncome
-					m.G = &g
 				}
 			}
 		}
@@ -235,7 +264,8 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 			}
 		}
 	}
-	if m.C != nil && m.Cs != nil && m.D != nil && m.Pmax != nil {
+	// У «Старта» балла и порогов покрытия нет: решает проектный расчёт ниже.
+	if !project && m.C != nil && m.Cs != nil && m.D != nil && m.Pmax != nil {
 		if k, ks, err := CoverageRatios(*m.C, *m.Cs, *m.D, *m.Pmax); err != nil {
 			add("metrics_calculation_failed", false)
 		} else {
@@ -255,7 +285,7 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 	if m.Ks != nil && *m.Ks < 1 {
 		add("stress_coverage_below_1", true)
 	}
-	if m.Status != "completed" {
+	if !project && m.Status != "completed" {
 		add("scoring_not_completed", false)
 	}
 
@@ -285,17 +315,16 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 		check(in.Checks.CollateralAccepted, "collateral_acceptance_missing", "collateral_acceptance_missing", false)
 		check(in.Checks.CollateralSufficient, "collateral_sufficiency_unconfirmed", "collateral_insufficient", true)
 	}
-	if in.Checks.CashPlanRequired == nil {
-		add("cash_plan_requirement_unknown", false)
-	} else if *in.Checks.CashPlanRequired {
-		check(in.Checks.CashPlanConfirmed, "cash_plan_confirmation_missing", "cash_plan_confirmation_missing", false)
-		check(in.Checks.CashPlanAccepted, "cash_plan_acceptance_missing", "cash_plan_acceptance_missing", false)
-		add("cash_plan_required", false)
-	}
+	evaluateCashPlan(in, months, &result, add, check)
 	if in.Overview.FinancialsSourceType == "csv" {
 		add("financials_from_csv", false)
-	} else if in.Overview.FinancialsSourceType != "auto" {
+	} else if in.Overview.FinancialsSourceType != "auto" && (!project || len(months) > 0) {
 		add("financials_source_unknown", false)
+	}
+	if project {
+		// Остальные условия — только для автоматического одобрения обычного кредита.
+		add("product_requires_manual_review", false)
+		return result
 	}
 	lastMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).AddDate(0, -1, 0).Format("2006-01")
 	latestPresent := false
@@ -346,9 +375,84 @@ func EvaluateApplication(in ScoringInput, now time.Time) ScoringDecision {
 	return result
 }
 
+// evaluateCashPlan — денежный план в EvaluateApplication (P09, P11). Нужен ли
+// он, решают продукт и окно финансов, а не вызывающий код: фиктивное «не нужен»
+// не подставляется. Подтверждение клиента и принятие банком — из in.Checks.
+// Обязательный план всегда оставляет заявку на ручном рассмотрении.
+func evaluateCashPlan(in ScoringInput, months []companydomain.MonthlyData, result *ScoringDecision, add func(string, bool), check func(*bool, string, string, bool)) {
+	code, overdraft := "", false
+	if in.Product != nil {
+		code, overdraft = in.Product.Code, in.Product.RepaymentType == "overdraft"
+	}
+	required, signals := CashPlanRequirement(code, overdraft, months)
+	// Разовое поступление, подтверждённое внешней проверкой, тоже требует плана.
+	if required != nil && !*required && !overdraft && in.Checks.NoAnomalousIncome != nil && !*in.Checks.NoAnomalousIncome {
+		yes := true
+		required, signals = &yes, append(signals, SignalOneOffIncome)
+	}
+	result.CashPlan = CashPlanAssessment{Required: required, Signals: signals}
+	switch {
+	case required == nil:
+		add("cash_plan_requirement_unknown", false)
+		return
+	case !*required:
+		return
+	}
+	check(in.Checks.CashPlanConfirmed, "cash_plan_confirmation_missing", "cash_plan_confirmation_missing", false)
+	check(in.Checks.CashPlanAccepted, "cash_plan_acceptance_missing", "cash_plan_acceptance_missing", false)
+	add("cash_plan_required", false)
+
+	m := &result.Metrics
+	pi := ProjectInput{Purpose: in.Purpose, AmountKopecks: in.Amount, DebtKopecks: m.D,
+		PlanReady: in.Checks.CashPlanConfirmed != nil && *in.Checks.CashPlanConfirmed}
+	if cp := in.CashPlan; cp != nil {
+		pi.Project, pi.Plan = cp.Project, cp.Plan
+		if in.Checks.CashPlanAccepted != nil && *in.Checks.CashPlanAccepted {
+			pi.ValidatedReserveKopecks = cp.ValidatedReserveKopecks
+		}
+	}
+	if in.TermMonths > 0 {
+		pi.TermMonths = &in.TermMonths
+	}
+	if in.Product != nil && in.Product.AnnualRateBasisPoints != nil {
+		rate := int(*in.Product.AnnualRateBasisPoints)
+		pi.RateBps = &rate
+	}
+
+	if result.Kind == KindProject {
+		res := EvaluateProject(pi)
+		result.CashPlan.Project = &res
+		m.Status = res.Status
+		if res.Result != ProjectPass {
+			add("project_result_"+res.Result, false)
+		}
+		for _, issue := range res.Issues {
+			add("project_"+strings.ToLower(issue.Code), false)
+		}
+		return
+	}
+	if pi.Plan == nil || pi.ValidatedReserveKopecks == nil {
+		return // план не подтверждён или не принят — причины уже добавлены
+	}
+	if m.D == nil || pi.RateBps == nil || pi.TermMonths == nil {
+		add("cash_plan_not_calculable", false)
+		return
+	}
+	res, err := EvaluateCashPlan(*pi.Plan, *pi.ValidatedReserveKopecks, *m.D, in.Amount, *pi.RateBps, in.TermMonths)
+	if err != nil {
+		add("cash_plan_not_calculable", false)
+		return
+	}
+	result.CashPlan.Plan = &res
+	for _, issue := range res.Issues {
+		add(strings.ToLower(issue.Code), false)
+	}
+}
+
 // CalculateScore возвращает 0–1000 баллов по уже проверенным данным.
 // k — коэффициент покрытия; history — БКИ; months — финансовые данные.
-// Динамика считается по шести последним месяцам; при меньшей истории — 0 баллов.
+// Динамика — по половинам шести последних месяцев (P04): при 3–5 месяцах
+// сравниваются по floor(n/2) строк, при меньшей истории — 0 баллов.
 func CalculateScore(k float64, history companydomain.CreditHistory, months []companydomain.MonthlyData) (int, error) {
 	positiveMonths := 0
 	for _, month := range months {
@@ -361,21 +465,11 @@ func CalculateScore(k float64, history companydomain.CreditHistory, months []com
 		}
 	}
 	var g *float64
-	if len(months) >= 6 {
-		ordered := append([]companydomain.MonthlyData(nil), months...)
-		sort.Slice(ordered, func(i, j int) bool { return ordered[i].Month < ordered[j].Month })
-		var oldIncome, recentIncome float64
-		for i, month := range ordered[len(ordered)-6:] {
-			if i < 3 {
-				oldIncome += float64(month.Income)
-			} else {
-				recentIncome += float64(month.Income)
-			}
-		}
-		if oldIncome > 0 {
-			growth := recentIncome / oldIncome
-			g = &growth
-		}
+	ordered := append([]companydomain.MonthlyData(nil), months...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Month < ordered[j].Month })
+	if oldIncome, recentIncome, ok := incomeHalves(ordered[len(ordered)-min(windowMonths, len(ordered)):]); ok && oldIncome > 0 {
+		growth := float64(recentIncome) / float64(oldIncome)
+		g = &growth
 	}
 	return scorePoints(k, history, positiveMonths, len(months), g), nil
 }
