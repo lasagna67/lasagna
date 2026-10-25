@@ -124,6 +124,9 @@ export function AuthFlow() {
         <DemoNotice className="mb-8" />
         <h1 className="text-promo-l">{titles[step].title}</h1>
         <p className="mt-3 text-[16px] leading-6 text-ink-soft">{titles[step].caption}</p>
+        <Link href="/guide" className="mt-2 inline-block text-[16px] text-brand hover:underline">
+          Как это работает — инструкция
+        </Link>
 
         {step === "role" && (
           <div className="mt-8 grid gap-4 sm:grid-cols-3">

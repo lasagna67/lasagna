@@ -113,7 +113,14 @@ export function ApplyWizard({ app, token, onUpdated, onConflict, onRefresh }: Pr
       key: "submit",
       title: "Отправка",
       node: (
-        <SubmitStep app={app} error={error} busy={submitting} onSubmit={submit} />
+        <SubmitStep
+          app={app}
+          token={token}
+          error={error}
+          busy={submitting}
+          onRefresh={onRefresh}
+          onSubmit={submit}
+        />
       ),
     },
   ];

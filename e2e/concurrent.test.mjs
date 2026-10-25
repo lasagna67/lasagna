@@ -96,7 +96,11 @@ test(
       token: client,
       body: { expected_revision: appAfterRequest.revision, answer: "Счёт №123 приложен" },
     });
+    const afterAnswer = await reqOk(`/applications/${id}/info-requests`, { token: client });
+    assert.equal(afterAnswer[0].status, "answered", "запрос остаётся видимым после ответа");
+    assert.equal(afterAnswer[0].answer, "Счёт №123 приложен");
     const appAnswered = await reqOk(`/applications/${id}`, { token: client });
+    assert.equal(appAnswered.status, "info_requested", "ответ не сбрасывает статус заявки");
     const resubmitted = await reqOk(`/applications/${id}/resubmit`, {
       method: "POST",
       token: client,

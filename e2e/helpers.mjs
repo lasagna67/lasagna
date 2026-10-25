@@ -16,14 +16,15 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const idem = () => crypto.randomUUID();
 
 export async function req(path, { method = "GET", token, body, idempotencyKey, base = API } = {}) {
+  const isForm = body instanceof FormData;
   const res = await fetch(base + path, {
     method,
     headers: {
-      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(body && !isForm ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: isForm ? body : body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
   let data;
@@ -122,5 +123,18 @@ export async function esignSign(certificateSerial, data) {
     method: "POST",
     base: ESIGN,
     body: { certificate_serial: certificateSerial, pin: SIGN_PIN, data },
+  });
+}
+
+// multipart: файл финансовых данных + expected_revision
+export async function uploadCsv(id, revision, token, csv) {
+  const form = new FormData();
+  form.append("file", new Blob([csv], { type: "text/csv" }), "financials.csv");
+  form.append("expected_revision", String(revision));
+  return reqOk(`/applications/${id}/financials/csv`, {
+    method: "POST",
+    token,
+    idempotencyKey: idem(),
+    body: form,
   });
 }

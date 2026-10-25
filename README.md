@@ -39,7 +39,7 @@ docker compose cp demo-seed:/data/demo-businesses.json docs/demo-businesses.json
 
 ### Финансовый шаг заявки
 
-Перед отправкой клиент получает финансы: `POST /api/v0/applications/{id}/financials/fetch`. Если автоматический источник данных не дал — CSV (`.../financials/csv`, суммы в рублях) или подтверждение, что истории нет (`.../financials/no-history`, отправить без фактов можно только «Старт»). Принятый снимок неизменяем и после отправки не меняется — по нему считает модель. В демо (`FINANCIALS_DEMO_MODES=true`) сбой источника моделируется для заявки: `"demo_mode": "unavailable" | "not_found" | "invalid_response"`. Подробнее — [backend/internal/financials/.md](backend/internal/financials/.md).
+Перед отправкой клиент получает финансы: `POST /api/v0/applications/{id}/financials/fetch`. Если автоматический источник данных не дал — CSV (`.../financials/csv`, заголовок `inn,month,income,expenses,taxes,owner_withdrawals`, суммы целыми копейками; пример — `backend/internal/financials-csv/parser/testdata/financials_example.csv`) или подтверждение, что истории нет (`.../financials/no-history`, отправить без фактов можно только «Старт»). Принятый снимок неизменяем и после отправки не меняется — по нему считает модель. В демо (`FINANCIALS_DEMO_MODES=true`) сбой источника моделируется для заявки: `"demo_mode": "unavailable" | "not_found" | "invalid_response"`. Подробнее — [backend/internal/financials/.md](backend/internal/financials/.md).
 
 ### Конвейер проверок
 

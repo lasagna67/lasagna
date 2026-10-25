@@ -4,12 +4,14 @@ import assert from "node:assert/strict";
 import {
   TERMINAL,
   clientLogin,
+  idem,
   req,
   reqOk,
   startApplication,
   staffCard,
   staffLogin,
   until,
+  uploadCsv,
 } from "./helpers.mjs";
 
 test(
@@ -94,5 +96,66 @@ test(
     assert.deepEqual(offer.changed_fields, ["amount_kopecks"]);
     assert.ok(contract.id, "контрпредложению создан договор");
     t.diagnostic("клиент видит контрпредложение и договор");
+  },
+);
+
+test(
+  "demo.ooo.no-data: принимает CSV с оборотами на шаге отправки",
+  { timeout: 120_000 },
+  async (t) => {
+    const client = await clientLogin("ooo.no-data");
+    const companies = await reqOk("/companies", { token: client });
+    const inn = companies[0].inn;
+    const app = await reqOk("/applications", {
+      method: "POST",
+      token: client,
+      idempotencyKey: idem(),
+      body: { company_id: companies[0].id },
+    });
+    const patched = await reqOk(`/applications/${app.id}`, {
+      method: "PATCH",
+      token: client,
+      body: {
+        expected_revision: app.revision,
+        request: {
+          purpose: "working_capital",
+          purpose_description: null,
+          amount_kopecks: 300_000_000,
+          need_period: { unit: "months", value: 24 },
+          product_code: "working_capital",
+          term_months: 24,
+          collateral_mode: "none",
+        },
+      },
+    });
+    const fin = await reqOk(`/applications/${app.id}/financials/fetch`, {
+      method: "POST",
+      token: client,
+      idempotencyKey: idem(),
+      body: { expected_revision: patched.revision },
+    });
+    assert.equal(fin.data_status, "missing", "источник не дал данных");
+    assert.equal(fin.allow_csv_upload, true, "после неудачи открыта загрузка CSV");
+    t.diagnostic(`fetch: ${fin.source_status}, CSV открыт`);
+
+    const csv = [
+      "inn,month,income,expenses,taxes,owner_withdrawals",
+      // регистрация 2026-09-08, незавершённые месяцы не принимаются
+      `${inn},2026-09,500000000,310000000,30000000,40000000`,
+    ].join("\n");
+    const uploaded = await uploadCsv(app.id, fin.revision, client, csv);
+    assert.equal(uploaded.data_status, "ready", "CSV принят");
+    assert.equal(uploaded.snapshot.rows.length, 1, "в снимке один месяц");
+    assert.equal(uploaded.allow_csv_upload, false, "снимок принят, резерв закрыт");
+    t.diagnostic("CSV загружен, снимок готов");
+
+    const submitted = await reqOk(`/applications/${app.id}/submit`, {
+      method: "POST",
+      token: client,
+      idempotencyKey: idem(),
+      body: { expected_revision: uploaded.revision },
+    });
+    assert.equal(submitted.status, "submitted", "заявка уходит с CSV-финансами");
+    t.diagnostic("заявка отправлена");
   },
 );

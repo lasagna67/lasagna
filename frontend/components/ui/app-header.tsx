@@ -22,6 +22,9 @@ export function AppHeader({ chip, chipClass = "bg-plate-tomato", email, onLogout
           </span>
         </Link>
         <div className="ml-auto flex items-center gap-4">
+          <Link href="/guide" className="text-[15px] text-ink-soft hover:text-brand">
+            Инструкция
+          </Link>
           {email && <span className="hidden text-[14px] text-ink-soft sm:block">{email}</span>}
           <Button variant="ghost" onClick={onLogout}>
             Выйти

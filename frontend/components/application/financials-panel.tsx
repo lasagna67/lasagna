@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { kopecks } from "@/lib/demo-data";
 import type { Application } from "@/lib/types-application";
 import { FieldErrors, errorFields, errorMessage, primary, secondary } from "./form-ui";
+import { CsvFormat } from "./csv-format";
 
 type Props = {
   app: Application;
@@ -136,6 +137,8 @@ export function FinancialsPanel({ app, token, error, onDone }: Props) {
           </button>
         )}
       </div>
+
+      {fin.allow_csv_upload && <CsvFormat />}
 
       {fin.issues.length > 0 && (
         <ul className="rounded-2xl bg-plate-chardonnay/60 px-4 py-3 text-[14px] leading-5">

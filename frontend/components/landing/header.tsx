@@ -4,10 +4,11 @@ import { Container } from "@/components/ui/container";
 import { Logo } from "@/components/ui/logo";
 
 const nav = [
-  { href: "#conditions", label: "Условия" },
-  { href: "#how", label: "Как получить" },
-  { href: "#calculator", label: "Калькулятор" },
-  { href: "#faq", label: "Вопросы" },
+  { href: "/#conditions", label: "Условия" },
+  { href: "/#how", label: "Как получить" },
+  { href: "/guide", label: "Инструкция" },
+  { href: "/#calculator", label: "Калькулятор" },
+  { href: "/#faq", label: "Вопросы" },
   { href: "/blog", label: "Блог" },
 ];
 
