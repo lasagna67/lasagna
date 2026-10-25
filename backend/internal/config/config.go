@@ -83,6 +83,21 @@ type (
 		ClientID string   `default:"lasagna"`
 	}
 
+	// PipelineConfig — конвейер проверок заявки поверх Kafka.
+	PipelineConfig struct {
+		// Consumer group этапов конвейера: экземпляры бекенда делят партиции.
+		ConsumerGroup string `default:"lasagna-pipeline"`
+		// Партиции топиков при создании; ключ — id заявки.
+		Partitions int32 `default:"3"`
+		// Как часто relay забирает неотправленные события outbox и сколько за раз.
+		OutboxInterval time.Duration `default:"500ms"`
+		OutboxBatch    int           `default:"100"`
+		// Сколько хранить опубликованные события outbox; 0 — не удалять.
+		OutboxRetention time.Duration `default:"168h"`
+		// Пауза перед пересозданием consumer после сбоя обработки.
+		RestartDelay time.Duration `default:"5s"`
+	}
+
 	LoggingConfig struct {
 		Level    string      `default:"info"`
 		Encoding LogEncoding `default:"json"`
@@ -112,6 +127,7 @@ type (
 		Redis       RedisConfig      `prefix:"REDIS_"`
 		S3			S3Config		 `prefix:"S3_"`
 		Kafka       KafkaConfig      `prefix:"KAFKA_"`
+		Pipeline    PipelineConfig   `prefix:"PIPELINE_"`
 		Logging     LoggingConfig    `prefix:"LOGGING_"`
 		Auth        AuthConfig       `prefix:"AUTH_"`
 		Registry    RegistryConfig   `prefix:"REGISTRY_"`

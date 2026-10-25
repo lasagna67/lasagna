@@ -88,6 +88,8 @@ definitions:
         items:
           type: string
         type: array
+      cash_plan:
+        type: object
       checks:
         type: object
       collateral:
@@ -102,6 +104,9 @@ definitions:
         type: object
       created_at:
         type: string
+      data_revision:
+        example: 1
+        type: integer
       editable_fields:
         example:
         - request.amount_kopecks
@@ -121,6 +126,8 @@ definitions:
         example: 1000
         type: integer
       offer:
+        type: object
+      plan_review:
         type: object
       product_details:
         type: object
@@ -216,11 +223,119 @@ definitions:
         example: Выберите компанию
         type: string
     type: object
+  applicationdto.FinancialProvenanceResponse:
+    properties:
+      file_name:
+        type: string
+      financial_cycle_id:
+        example: 1
+        type: integer
+      received_at:
+        type: string
+      source_type:
+        enum:
+        - automatic
+        - csv
+        type: string
+    type: object
+  applicationdto.FinancialQualityResponse:
+    properties:
+      as_of_date:
+        example: "2026-10-25"
+        type: string
+      coverage:
+        enum:
+        - complete
+        - partial
+        example: complete
+        type: string
+      n_months:
+        example: 6
+        type: integer
+      stale:
+        example: false
+        type: boolean
+      window_from:
+        example: 2026-04
+        type: string
+      window_to:
+        example: 2026-09
+        type: string
+    type: object
+  applicationdto.FinancialRowResponse:
+    properties:
+      expenses_kopecks:
+        type: integer
+      free_cash_kopecks:
+        type: integer
+      income_kopecks:
+        type: integer
+      month:
+        example: 2026-09
+        type: string
+      owner_withdrawals_kopecks:
+        type: integer
+      taxes_kopecks:
+        type: integer
+    type: object
+  applicationdto.FinancialSnapshotPageResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/applicationdto.FinancialSnapshotResponse'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  applicationdto.FinancialSnapshotResponse:
+    properties:
+      coverage:
+        enum:
+        - complete
+        - partial
+        type: string
+      coverage_as_of_date:
+        example: "2026-10-25"
+        type: string
+      currency:
+        example: RUB
+        type: string
+      id:
+        format: uuid
+        type: string
+      inn:
+        example: "7705005410"
+        type: string
+      period_from:
+        example: 2026-04
+        type: string
+      period_to:
+        example: 2026-09
+        type: string
+      provenance:
+        $ref: '#/definitions/applicationdto.FinancialProvenanceResponse'
+      received_at:
+        type: string
+      rows:
+        items:
+          $ref: '#/definitions/applicationdto.FinancialRowResponse'
+        type: array
+      semantic_hash:
+        type: string
+    type: object
   applicationdto.FinancialStateResponse:
     properties:
       allow_csv_upload:
         example: false
         type: boolean
+      allow_no_history:
+        example: false
+        type: boolean
+      checked_at:
+        type: string
+      data_revision:
+        example: 1
+        type: integer
       data_status:
         enum:
         - missing
@@ -228,15 +343,26 @@ definitions:
         - no_history
         example: missing
         type: string
+      financial_cycle_id:
+        example: 1
+        type: integer
       issues:
         items:
           $ref: '#/definitions/applicationdto.IssueResponse'
         type: array
+      manual_required:
+        example: false
+        type: boolean
+      quality:
+        $ref: '#/definitions/applicationdto.FinancialQualityResponse'
+      required_refresh:
+        example: false
+        type: boolean
       revision:
         example: 1
         type: integer
       snapshot:
-        type: object
+        $ref: '#/definitions/applicationdto.FinancialSnapshotResponse'
       source_status:
         enum:
         - not_requested
@@ -408,6 +534,50 @@ definitions:
     - expected_revision
     - result
     type: object
+  companydomain.Certificate:
+    properties:
+      issuer:
+        type: string
+      organization_inn:
+        description: пусто, если сертификат не на организацию
+        type: string
+      organization_name:
+        type: string
+      owner_full_name:
+        type: string
+      owner_inn:
+        type: string
+      owner_position:
+        type: string
+      serial:
+        type: string
+      status:
+        type: string
+      type:
+        $ref: '#/definitions/companydomain.CertificateType'
+      valid_from:
+        type: string
+      valid_to:
+        type: string
+    type: object
+  companydomain.CertificateType:
+    enum:
+    - legal_entity_head
+    - individual_entrepreneur
+    - individual
+    type: string
+    x-enum-comments:
+      CertificateIndividual: физлицо без организации
+      CertificateIndividualEntrepreneur: ИП
+      CertificateLegalEntityHead: руководитель ЮЛ, есть организация
+    x-enum-descriptions:
+    - руководитель ЮЛ, есть организация
+    - ИП
+    - физлицо без организации
+    x-enum-varnames:
+    - CertificateLegalEntityHead
+    - CertificateIndividualEntrepreneur
+    - CertificateIndividual
   companydomain.CreditHistory:
     properties:
       has_credit_history:
@@ -938,6 +1108,57 @@ definitions:
         example: client
         type: string
     type: object
+  financialsdto.FetchRequest:
+    properties:
+      demo_mode:
+        enum:
+        - normal
+        - unavailable
+        - not_found
+        - invalid_response
+        type: string
+      expected_revision:
+        example: 3
+        type: integer
+    type: object
+  financialsdto.NoHistoryRequest:
+    properties:
+      confirmed:
+        example: true
+        type: boolean
+      expected_revision:
+        example: 4
+        type: integer
+    type: object
+  intakedto.ApplicationPageResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/applicationdto.ApplicationResponse'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  intakedto.CashPlanPatch:
+    properties:
+      confirmed:
+        type: boolean
+      first_month:
+        example: 2026-11
+        type: string
+      forecast:
+        items:
+          $ref: '#/definitions/intakedto.ForecastRowRequest'
+        type: array
+      kind:
+        enum:
+        - project
+        - liquidity
+        type: string
+      own_reserve_kopecks:
+        example: 10000000
+        type: integer
+    type: object
   intakedto.CollateralRequest:
     properties:
       declared_value_kopecks:
@@ -961,11 +1182,32 @@ definitions:
         example: equipment
         type: string
     type: object
+  intakedto.CostItemRequest:
+    properties:
+      amount_kopecks:
+        example: 40000000
+        type: integer
+      name:
+        example: Печь
+        type: string
+    type: object
   intakedto.CreateApplicationRequest:
     properties:
       company_id:
         example: 9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e
         format: uuid
+        type: string
+    type: object
+  intakedto.ForecastRowRequest:
+    properties:
+      expenses_kopecks:
+        example: 8000000
+        type: integer
+      income_kopecks:
+        example: 15000000
+        type: integer
+      month:
+        example: 2026-11
         type: string
     type: object
   intakedto.NeedPeriodRequest:
@@ -983,11 +1225,15 @@ definitions:
     type: object
   intakedto.PatchApplicationRequest:
     properties:
+      cash_plan:
+        $ref: '#/definitions/intakedto.CashPlanPatch'
       collateral:
         $ref: '#/definitions/intakedto.CollateralRequest'
       expected_revision:
         example: 3
         type: integer
+      product_details:
+        $ref: '#/definitions/intakedto.ProjectPatch'
       request:
         $ref: '#/definitions/intakedto.PatchRequestFields'
     type: object
@@ -1026,31 +1272,29 @@ definitions:
         example: 12
         type: integer
     type: object
+  intakedto.ProjectPatch:
+    properties:
+      cost_items:
+        items:
+          $ref: '#/definitions/intakedto.CostItemRequest'
+        type: array
+      own_funds_kopecks:
+        example: 20000000
+        type: integer
+      project_description:
+        example: Пекарня у метро
+        type: string
+      sales_start_month:
+        example: 2026-12
+        type: string
+    type: object
   intakedto.RevisionRequest:
     properties:
       expected_revision:
         example: 3
         type: integer
     type: object
-  reviewdto.AnswerInfoRequest:
-    properties:
-      answer:
-        example: Счёт поставщика приложили, стоимость 3 млн
-        type: string
-      expected_revision:
-        example: 6
-        type: integer
-    type: object
-  reviewdto.ApplicationPageResponse:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/reviewdto.UnderwriterApplicationResponse'
-        type: array
-      next_cursor:
-        type: string
-    type: object
-  reviewdto.ContractResponse:
+  offerdto.ContractResponse:
     properties:
       content_sha256:
         type: string
@@ -1077,107 +1321,7 @@ definitions:
         example: 1
         type: integer
     type: object
-  reviewdto.DecisionRequest:
-    properties:
-      comment:
-        description: внутренний, клиенту не показывается
-        type: string
-      expected_revision:
-        example: 5
-        type: integer
-      outcome:
-        enum:
-        - approved
-        - counter_offer
-        - rejected
-        example: approved
-        type: string
-      reason_code:
-        example: HIGH_DEBT_LOAD
-        type: string
-      reasons:
-        items:
-          type: string
-        type: array
-      terms:
-        $ref: '#/definitions/reviewdto.TermsRequest'
-    type: object
-  reviewdto.DecisionResponse:
-    properties:
-      comment:
-        type: string
-      contract:
-        $ref: '#/definitions/reviewdto.ContractResponse'
-      created_at:
-        type: string
-      decided_by:
-        format: uuid
-        type: string
-      id:
-        format: uuid
-        type: string
-      offer:
-        $ref: '#/definitions/reviewdto.OfferResponse'
-      outcome:
-        enum:
-        - approved
-        - counter_offer
-        - rejected
-        type: string
-      reason_code:
-        type: string
-      reasons:
-        items:
-          type: string
-        type: array
-      version:
-        type: integer
-    type: object
-  reviewdto.EventResponse:
-    properties:
-      actor_id:
-        format: uuid
-        type: string
-      created_at:
-        type: string
-      from_status:
-        type: string
-      id:
-        type: integer
-      message:
-        type: string
-      to_status:
-        type: string
-      type:
-        enum:
-        - status_changed
-        type: string
-    type: object
-  reviewdto.InfoRequestResponse:
-    properties:
-      answer:
-        type: string
-      answered_at:
-        type: string
-      editable_fields:
-        items:
-          type: string
-        type: array
-      id:
-        format: uuid
-        type: string
-      message:
-        type: string
-      requested_at:
-        type: string
-      status:
-        enum:
-        - open
-        - answered
-        - cancelled
-        type: string
-    type: object
-  reviewdto.OfferResponse:
+  offerdto.OfferResponse:
     properties:
       agreement_term_months:
         type: integer
@@ -1232,7 +1376,331 @@ definitions:
         example: 1
         type: integer
     type: object
-  reviewdto.RequestInfoRequest:
+  scoring.CashPlanResult:
+    properties:
+      c:
+        type: integer
+      cs:
+        type: integer
+      debt_kopecks:
+        type: integer
+      max_payment_kopecks:
+        type: integer
+      min_stress_balance_kopecks:
+        type: integer
+      months:
+        items:
+          $ref: '#/definitions/scoring.PlanMonth'
+        type: array
+      reserve_kopecks:
+        type: integer
+    type: object
+  scoring.PlanMonth:
+    properties:
+      month:
+        type: string
+      payment_kopecks:
+        type: integer
+      stress_balance_kopecks:
+        type: integer
+    type: object
+  scoring.ProjectResult:
+    properties:
+      own_funds_kopecks:
+        type: integer
+      plan:
+        $ref: '#/definitions/scoring.CashPlanResult'
+      preliminary:
+        type: boolean
+      project_cost_kopecks:
+        type: integer
+      required_own_funds_kopecks:
+        type: integer
+      result:
+        enum:
+        - pass
+        - needs_info
+        - fail
+        type: string
+      status:
+        enum:
+        - completed
+        - insufficient_data
+        type: string
+    type: object
+  signdto.Context:
+    properties:
+      application_id:
+        type: string
+      certificate_serial:
+        type: string
+      context_id:
+        type: string
+      data:
+        type: string
+      document_id:
+        type: string
+      document_sha256:
+        type: string
+      expected_revision:
+        type: integer
+      expires_at:
+        type: string
+      offer_id:
+        type: string
+    type: object
+  signdto.PrepareRequest:
+    properties:
+      document_id:
+        type: string
+      expected_revision:
+        type: integer
+      offer_id:
+        type: string
+    type: object
+  signdto.SignRequest:
+    properties:
+      context_id:
+        type: string
+      signature:
+        type: string
+      terms_accepted:
+        type: boolean
+    type: object
+  signdto.Signature:
+    properties:
+      application_id:
+        type: string
+      certificate:
+        $ref: '#/definitions/companydomain.Certificate'
+      context_id:
+        type: string
+      data:
+        type: string
+      document_id:
+        type: string
+      document_sha256:
+        type: string
+      id:
+        type: string
+      modeled_effective_date:
+        type: string
+      offer_id:
+        type: string
+      operation_id:
+        type: string
+      signature:
+        type: string
+      signed_at:
+        type: string
+      signed_by:
+        type: string
+      signed_document_id:
+        type: string
+      terms_accepted:
+        type: boolean
+    type: object
+  swagger.HTTPError:
+    properties:
+      message:
+        example: Неверный email или пароль
+        type: string
+    type: object
+  underwritingdto.AnswerInfoRequest:
+    properties:
+      answer:
+        example: Счёт поставщика приложили, стоимость 3 млн
+        type: string
+      expected_revision:
+        example: 6
+        type: integer
+    type: object
+  underwritingdto.ApplicationPageResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/underwritingdto.UnderwriterApplicationResponse'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  underwritingdto.CashPlanAssessmentResponse:
+    properties:
+      blockers:
+        items:
+          $ref: '#/definitions/applicationdto.FieldErrorResponse'
+        type: array
+      liquidity:
+        $ref: '#/definitions/scoring.CashPlanResult'
+      project:
+        $ref: '#/definitions/scoring.ProjectResult'
+      required:
+        type: boolean
+      review_current:
+        type: boolean
+      signals:
+        items:
+          type: string
+        type: array
+      terms:
+        $ref: '#/definitions/underwritingdto.PlanTermsResponse'
+    type: object
+  underwritingdto.CashPlanReviewRequest:
+    properties:
+      comment:
+        example: Резерв на депозите, кредитные средства и деньги бюджета проекта не
+          входят
+        type: string
+      expected_revision:
+        example: 6
+        type: integer
+      public_comment:
+        type: string
+      result:
+        enum:
+        - accepted
+        - needs_info
+        - rejected
+        example: accepted
+        type: string
+      terms:
+        $ref: '#/definitions/underwritingdto.PlanTermsRequest'
+      validated_reserve_kopecks:
+        example: 10000000
+        type: integer
+    type: object
+  underwritingdto.DecisionRequest:
+    properties:
+      comment:
+        description: внутренний, клиенту не показывается
+        type: string
+      expected_revision:
+        example: 5
+        type: integer
+      outcome:
+        enum:
+        - approved
+        - counter_offer
+        - rejected
+        example: approved
+        type: string
+      reason_code:
+        example: HIGH_DEBT_LOAD
+        type: string
+      reasons:
+        items:
+          type: string
+        type: array
+      terms:
+        $ref: '#/definitions/underwritingdto.TermsRequest'
+    type: object
+  underwritingdto.DecisionResponse:
+    properties:
+      comment:
+        type: string
+      contract:
+        $ref: '#/definitions/offerdto.ContractResponse'
+      created_at:
+        type: string
+      decided_by:
+        format: uuid
+        type: string
+      id:
+        format: uuid
+        type: string
+      offer:
+        $ref: '#/definitions/offerdto.OfferResponse'
+      outcome:
+        enum:
+        - approved
+        - counter_offer
+        - rejected
+        type: string
+      reason_code:
+        type: string
+      reasons:
+        items:
+          type: string
+        type: array
+      version:
+        type: integer
+    type: object
+  underwritingdto.EventResponse:
+    properties:
+      actor_id:
+        format: uuid
+        type: string
+      created_at:
+        type: string
+      from_status:
+        type: string
+      id:
+        type: integer
+      message:
+        type: string
+      to_status:
+        type: string
+      type:
+        enum:
+        - status_changed
+        type: string
+    type: object
+  underwritingdto.InfoRequestResponse:
+    properties:
+      answer:
+        type: string
+      answered_at:
+        type: string
+      editable_fields:
+        items:
+          type: string
+        type: array
+      id:
+        format: uuid
+        type: string
+      message:
+        type: string
+      requested_at:
+        type: string
+      status:
+        enum:
+        - open
+        - answered
+        - cancelled
+        type: string
+    type: object
+  underwritingdto.PlanTermsRequest:
+    properties:
+      amount_kopecks:
+        example: 30000000
+        type: integer
+      collateral_mode:
+        enum:
+        - none
+        - pledged
+        type: string
+      product_code:
+        example: start
+        type: string
+      term_months:
+        example: 24
+        type: integer
+    type: object
+  underwritingdto.PlanTermsResponse:
+    properties:
+      amount_kopecks:
+        type: integer
+      collateral_mode:
+        enum:
+        - none
+        - pledged
+        type: string
+      product_code:
+        type: string
+      term_months:
+        type: integer
+    type: object
+  underwritingdto.RequestInfoRequest:
     properties:
       editable_fields:
         example:
@@ -1248,7 +1716,7 @@ definitions:
         example: Уточните стоимость оборудования и приложите счёт поставщика
         type: string
     type: object
-  reviewdto.RetryChecksRequest:
+  underwritingdto.RetryChecksRequest:
     properties:
       expected_revision:
         example: 5
@@ -1264,7 +1732,7 @@ definitions:
           type: string
         type: array
     type: object
-  reviewdto.ReviewApplicationResponse:
+  underwritingdto.ReviewApplicationResponse:
     properties:
       applicant:
         $ref: '#/definitions/applicationdto.ApplicantResponse'
@@ -1282,13 +1750,21 @@ definitions:
         items:
           type: string
         type: array
+      cash_plan:
+        type: object
+      cash_plan_assessment:
+        $ref: '#/definitions/underwritingdto.CashPlanAssessmentResponse'
+      cash_plan_reviews:
+        items:
+          $ref: '#/definitions/underwritingdto.StaffPlanReviewResponse'
+        type: array
       checks:
         type: object
       collateral:
         type: object
       collateral_reviews:
         items:
-          $ref: '#/definitions/reviewdto.StaffCollateralReviewResponse'
+          $ref: '#/definitions/underwritingdto.StaffCollateralReviewResponse'
         type: array
       company:
         $ref: '#/definitions/applicationdto.CompanyCardResponse'
@@ -1300,13 +1776,16 @@ definitions:
         type: object
       created_at:
         type: string
+      data_revision:
+        example: 1
+        type: integer
       decision_blockers:
         items:
           $ref: '#/definitions/applicationdto.FieldErrorResponse'
         type: array
       decisions:
         items:
-          $ref: '#/definitions/reviewdto.DecisionResponse'
+          $ref: '#/definitions/underwritingdto.DecisionResponse'
         type: array
       editable_fields:
         example:
@@ -1319,7 +1798,7 @@ definitions:
         $ref: '#/definitions/applicationdto.FinancialStateResponse'
       history:
         items:
-          $ref: '#/definitions/reviewdto.EventResponse'
+          $ref: '#/definitions/underwritingdto.EventResponse'
         type: array
       id:
         example: 3f1c2a9e-5b7d-4c11-9a8e-2d6f0b4e7c13
@@ -1327,7 +1806,7 @@ definitions:
         type: string
       info_requests:
         items:
-          $ref: '#/definitions/reviewdto.InfoRequestResponse'
+          $ref: '#/definitions/underwritingdto.InfoRequestResponse'
         type: array
       issue:
         type: object
@@ -1335,6 +1814,8 @@ definitions:
         example: 1000
         type: integer
       offer:
+        type: object
+      plan_review:
         type: object
       product_details:
         type: object
@@ -1368,13 +1849,13 @@ definitions:
       updated_at:
         type: string
     type: object
-  reviewdto.RevisionRequest:
+  underwritingdto.RevisionRequest:
     properties:
       expected_revision:
         example: 5
         type: integer
     type: object
-  reviewdto.StaffCollateralReviewResponse:
+  underwritingdto.StaffCollateralReviewResponse:
     properties:
       accepted_value_kopecks:
         type: integer
@@ -1401,7 +1882,42 @@ definitions:
       version:
         type: integer
     type: object
-  reviewdto.TermsRequest:
+  underwritingdto.StaffPlanReviewResponse:
+    properties:
+      actual:
+        type: boolean
+      cash_plan_hash:
+        type: string
+      comment:
+        type: string
+      data_revision:
+        type: integer
+      id:
+        format: uuid
+        type: string
+      public_comment:
+        type: string
+      result:
+        enum:
+        - accepted
+        - needs_info
+        - rejected
+        type: string
+      reviewed_at:
+        type: string
+      reviewed_by:
+        format: uuid
+        type: string
+      terms:
+        $ref: '#/definitions/underwritingdto.PlanTermsResponse'
+      terms_hash:
+        type: string
+      validated_reserve_kopecks:
+        type: integer
+      version:
+        type: integer
+    type: object
+  underwritingdto.TermsRequest:
     properties:
       agreement_term_months:
         type: integer
@@ -1427,7 +1943,7 @@ definitions:
       valid_until:
         type: string
     type: object
-  reviewdto.UnderwriterApplicationResponse:
+  underwritingdto.UnderwriterApplicationResponse:
     properties:
       applicant:
         $ref: '#/definitions/applicationdto.ApplicantResponse'
@@ -1445,6 +1961,8 @@ definitions:
         items:
           type: string
         type: array
+      cash_plan:
+        type: object
       checks:
         type: object
       collateral:
@@ -1459,6 +1977,9 @@ definitions:
         type: object
       created_at:
         type: string
+      data_revision:
+        example: 1
+        type: integer
       editable_fields:
         example:
         - request.amount_kopecks
@@ -1478,6 +1999,8 @@ definitions:
         example: 1000
         type: integer
       offer:
+        type: object
+      plan_review:
         type: object
       product_details:
         type: object
@@ -1509,12 +2032,6 @@ definitions:
       submitted_at:
         type: string
       updated_at:
-        type: string
-    type: object
-  swagger.HTTPError:
-    properties:
-      message:
-        example: Неверный email или пароль
         type: string
     type: object
   userdto.CreateClientRequest:
@@ -1585,6 +2102,58 @@ info:
   version: "0.1"
 paths:
   /applications:
+    get:
+      description: |-
+        Заявки компании, где пользователь — представитель, новые сверху; иначе 404.
+        После отправки статус меняется по этапам конвейера асинхронно — список и карточка
+        показывают текущий.
+      parameters:
+      - description: Компания
+        format: uuid
+        in: query
+        name: company_id
+        required: true
+        type: string
+      - description: Статус
+        in: query
+        name: status
+        type: string
+      - description: До 100, по умолчанию 20
+        in: query
+        name: limit
+        type: integer
+      - description: next_cursor предыдущей страницы
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/intakedto.ApplicationPageResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: не клиент
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: 'NOT_FOUND: нет компании или пользователь не её участник'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Заявки компании
+      tags:
+      - applications
     post:
       consumes:
       - application/json
@@ -1641,6 +2210,41 @@ paths:
       tags:
       - applications
   /applications/{id}:
+    get:
+      description: |-
+        Заявка своей компании в любом статусе, с залогом, полями проекта и планом.
+        После отправки по ней видно, на каком этапе конвейера заявка.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.ApplicationResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: не клиент
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: 'NOT_FOUND: нет заявки или она чужая'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Заявка
+      tags:
+      - applications
     patch:
       consumes:
       - application/json
@@ -1649,7 +2253,13 @@ paths:
         иначе 409 INVALID_STATE; поле вне editable_fields — 422 NOT_EDITABLE.
         Непереданное поле не меняется, null очищает значение. need_period и collateral
         заменяются целиком; collateral — только при collateral_mode = pledged.
-        Полноту и условия продукта проверяет submit.
+        product_details — поля «Старта», cash_plan — денежный план: заменяются целиком, null удаляет.
+        План в черновике — только у «Старта» (kind = project); план ликвидности (liquidity) —
+        по запросу банка, у овердрафта плана нет. Правка содержимого снимает подтверждение;
+        подтверждение — отдельной правкой {"cash_plan": {"confirmed": true}}, когда прогноз
+        начинается со следующего месяца и покрывает весь срок кредита, иначе 422
+        FORECAST_CONFIRMATION_REQUIRED. data_revision растёт, только если изменились данные.
+        Полноту, бюджет «Старта» и условия продукта проверяет submit.
       parameters:
       - description: Заявка
         format: uuid
@@ -1715,7 +2325,7 @@ paths:
         "200":
           description: null — договора нет
           schema:
-            $ref: '#/definitions/reviewdto.ContractResponse'
+            $ref: '#/definitions/offerdto.ContractResponse'
         "404":
           description: NOT_FOUND
           schema:
@@ -1725,6 +2335,282 @@ paths:
       summary: Договор к предложению
       tags:
       - applications
+  /applications/{id}/financials:
+    get:
+      description: |-
+        Источник, принятый снимок текущего цикла, пригодность на бизнес-дату и доступность
+        резервной ветки (CSV, отсутствие истории).
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialStateResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: не клиент
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: 'NOT_FOUND: нет заявки или она чужая'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Финансовый шаг заявки
+      tags:
+      - financials
+  /applications/{id}/financials/csv:
+    post:
+      consumes:
+      - multipart/form-data
+      description: |-
+        Резервная ветка: только после not_found, unavailable или invalid автоматического источника
+        и без принятого снимка текущего цикла, иначе 409 CSV_NOT_ALLOWED. UTF-8 (BOM допустим),
+        разделитель запятая или точка с запятой; колонки inn,month,income,expenses,taxes,
+        owner_withdrawals и необязательная free_cash; суммы в рублях с точкой, до двух знаков;
+        завершённые месяцы не раньше регистрации, до 120 строк, файл до 5 МиБ. Ошибка любой строки —
+        422 INVALID_CSV со всеми найденными ошибками (file.rows[N].колонка), файл не принимается.
+        Принятый CSV оставляет заявку на ручном рассмотрении.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Ожидаемая revision
+        in: formData
+        name: expected_revision
+        required: true
+        type: integer
+      - description: CSV
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialStateResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: CSV_NOT_ALLOWED, REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "413":
+          description: запрос больше 5 МиБ
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "415":
+          description: ожидается multipart/form-data
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "422":
+          description: INVALID_CSV
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Загрузить финансы из CSV
+      tags:
+      - financials
+  /applications/{id}/financials/fetch:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Одна попытка источника не дольше таймаута (5 с). Успех — новый принятый снимок,
+        data_revision растёт при изменении данных. not_found, unavailable, invalid открывают
+        резервную ветку: CSV или отсутствие истории; прежний снимок цикла при неуспехе остаётся.
+        В draft или в info_requested, если банк открыл financials. demo_mode — только в демо.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Ожидаемая revision
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/financialsdto.FetchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialStateResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "422":
+          description: 'VALIDATION_FAILED: financials NOT_EDITABLE'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Получить финансы автоматически
+      tags:
+      - financials
+  /applications/{id}/financials/history:
+    get:
+      description: Неизменяемые принятые снимки всех финансовых циклов, новые сверху.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: До 100, по умолчанию 20
+        in: query
+        name: limit
+        type: integer
+      - description: next_cursor предыдущей страницы
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialSnapshotPageResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: История финансовых снимков заявки
+      tags:
+      - financials
+  /applications/{id}/financials/no-history:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Только в резервной ветке без принятых данных, иначе 409 INVALID_STATE; confirmed=true
+        обязательно. Отправить заявку без фактов можно только по «Старту». Принятый позже CSV
+        снимает отметку.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Подтверждение
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/financialsdto.NoHistoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialStateResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Подтвердить отсутствие финансовой истории
+      tags:
+      - financials
+  /applications/{id}/financials/template:
+    get:
+      description: 'Колонки и месяцы окна расчёта с ИНН компании, суммы пустые: незаполненный
+        шаблон не принимается.'
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - text/csv
+      responses:
+        "200":
+          description: CSV
+          schema:
+            type: string
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Шаблон CSV
+      tags:
+      - financials
   /applications/{id}/info-requests:
     get:
       parameters:
@@ -1741,7 +2627,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/reviewdto.InfoRequestResponse'
+              $ref: '#/definitions/underwritingdto.InfoRequestResponse'
             type: array
         "401":
           description: Unauthorized
@@ -1780,7 +2666,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/reviewdto.AnswerInfoRequest'
+          $ref: '#/definitions/underwritingdto.AnswerInfoRequest'
       produces:
       - application/json
       responses:
@@ -1824,7 +2710,7 @@ paths:
         "200":
           description: null — предложения нет
           schema:
-            $ref: '#/definitions/reviewdto.OfferResponse'
+            $ref: '#/definitions/offerdto.OfferResponse'
         "404":
           description: NOT_FOUND
           schema:
@@ -1840,7 +2726,8 @@ paths:
       - application/json
       description: |-
         info_requested → submitted после ответов на все запросы банка; запрос проверяется
-        как при отправке. Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.
+        как при отправке. Новый запуск конвейера: этапы идут асинхронно, как после submit. Если банк открыл cash_plan, план должен быть подтверждён на срок кредита.
+        Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.
       parameters:
       - description: Заявка
         format: uuid
@@ -1890,13 +2777,166 @@ paths:
           description: VALIDATION_FAILED
           schema:
             $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Отправить повторно
+      tags:
+      - applications
+  /applications/{id}/sign:
+    post:
+      consumes:
+      - application/json
+      description: Backend проверяет подпись через esign-mock; PIN и сертификат от
+        клиента не принимает. Атомарно сохраняет артефакт, accepted, signing и задачу
+        выдачи pending. Повтор с тем же ключом и телом не создаёт новую операцию.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Контекст, подпись и согласие с условиями
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/signdto.SignRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/signdto.Signature'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: FORBIDDEN
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, OFFER_CHANGED, SIGNING_CONTEXT_EXPIRED,
+            IDEMPOTENCY_CONFLICT, INVALID_STATE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "422":
+          description: INVALID_SIGNATURE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "503":
-          description: 'SERVICE_UNAVAILABLE: конвейер'
+          description: SOURCE_RECHECK_REQUIRED или SERVICE_UNAVAILABLE
           schema:
             $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Отправить повторно
+      summary: Проверить криптографическую подпись договора
+      tags:
+      - applications
+  /applications/{id}/signature:
+    get:
+      description: 'JSON: подписанные данные, подпись, проверенный сертификат и хеш
+        исходного PDF.'
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/signdto.Signature'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: FORBIDDEN
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Скачать артефакт подписи
+      tags:
+      - applications
+  /applications/{id}/signing-context:
+    post:
+      consumes:
+      - application/json
+      description: TTL до 5 минут, с учётом срока проверок. Контекст связан с пользователем,
+        revision, Offer, Contract и SHA-256 исходного PDF. При неподтверждённом P14
+        — 503.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Предложение, договор и версия заявки
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/signdto.PrepareRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/signdto.Context'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: FORBIDDEN
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, OFFER_CHANGED, INVALID_STATE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "503":
+          description: SOURCE_RECHECK_REQUIRED или SERVICE_UNAVAILABLE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Подготовить контекст подписи договора
       tags:
       - applications
   /applications/{id}/submit:
@@ -1904,8 +2944,12 @@ paths:
       consumes:
       - application/json
       description: |-
-        draft → submitted → конвейер проверок. Неполный запрос или нарушение условий
-        продукта — 422 с полями, заявка остаётся draft. Повтор с тем же Idempotency-Key
+        draft → submitted с новым запуском конвейера. Ответ — в submitted: этапы
+        validation → enrichment → scoring → manual_review идут асинхронно, текущий статус —
+        GET /applications/{id}. Неполный запрос или нарушение условий
+        продукта — 422 с полями, заявка остаётся draft. У «Старта» обязательны полные
+        product_details (кредит + собственные средства = стоимость, собственных не меньше 30%)
+        и подтверждённый cash_plan на срок кредита. Повтор с тем же Idempotency-Key
         и телом не создаёт второй отправки.
       parameters:
       - description: Заявка
@@ -1954,10 +2998,6 @@ paths:
             $ref: '#/definitions/applicationdto.ErrorResponse'
         "422":
           description: VALIDATION_FAILED
-          schema:
-            $ref: '#/definitions/applicationdto.ErrorResponse'
-        "503":
-          description: 'SERVICE_UNAVAILABLE: конвейер'
           schema:
             $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
@@ -2143,6 +3183,32 @@ paths:
       tags:
       - companies
   /companies/{id}/financials:
+    get:
+      description: Последний принятый снимок по заявкам компании с источником, датой
+        и периодом; нет — null.
+      parameters:
+      - description: Компания
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialSnapshotResponse'
+        "404":
+          description: 'NOT_FOUND: нет компании или пользователь не её участник'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Финансовый профиль компании
+      tags:
+      - financials
     post:
       consumes:
       - multipart/form-data
@@ -2626,7 +3692,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ApplicationPageResponse'
+            $ref: '#/definitions/underwritingdto.ApplicationPageResponse'
         "400":
           description: INVALID_REQUEST
           schema:
@@ -2662,7 +3728,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
         "401":
           description: Unauthorized
           schema:
@@ -2678,6 +3744,64 @@ paths:
       security:
       - BearerAuth: []
       summary: Карточка заявки
+      tags:
+      - underwriter
+  /underwriter/applications/{id}/cash-plan-review:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Неизменяемая версия заключения в manual_review или info_requested: accepted, needs_info
+        или rejected с внутренним comment о предпосылках. accepted — с validated_reserve_kopecks
+        от 0 до заявленного резерва: кредитные средства и деньги бюджета проекта в него не входят.
+        terms — условия проверки, по умолчанию из запроса; сумма не больше запрошенной. Принять план
+        можно, только если клиент подтвердил его на срок условий, а у «Старта» сумма сходится с
+        бюджетом, — иначе 422: сначала новая ревизия клиента. Заключение действует, пока не
+        изменились план, условия и data_revision заявки; revision + 1, data_revision не меняется.
+        needs_info сам вопрос клиенту не создаёт — для этого request-info.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Заключение
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/underwritingdto.CashPlanReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: 'FORBIDDEN: заявка у другого сотрудника'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "422":
+          description: 'VALIDATION_FAILED: нет плана, не подтверждён, условия, резерв'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Заключение по денежному плану
       tags:
       - underwriter
   /underwriter/applications/{id}/collateral-review:
@@ -2744,8 +3868,11 @@ paths:
       - application/json
       description: |-
         approved — условия как в запросе (ставка не считается), counter_offer — изменён продукт,
-        сумма, срок или обеспечение. Положительное решение требует готовых проверок и принятого
-        залога у обеспеченного продукта; создаёт предложение и PDF договора. Платёж считает сервер.
+        сумма, срок или обеспечение. Положительное решение требует готовых проверок, принятого
+        залога у обеспеченного продукта и, если нужен денежный план, подтверждённого клиентом и
+        принятого на этих условиях плана, который проходит расчёт; создаёт предложение и PDF
+        договора. Предложение по плану действует не дольше 7 суток и до начала следующего месяца.
+        Платёж считает сервер.
         rejected — с reason_code и пояснениями для клиента.
       parameters:
       - description: Заявка
@@ -2759,14 +3886,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/reviewdto.DecisionRequest'
+          $ref: '#/definitions/underwritingdto.DecisionRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
         "400":
           description: INVALID_REQUEST
           schema:
@@ -2815,14 +3942,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/reviewdto.RequestInfoRequest'
+          $ref: '#/definitions/underwritingdto.RequestInfoRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
         "400":
           description: INVALID_REQUEST
           schema:
@@ -2853,8 +3980,8 @@ paths:
       consumes:
       - application/json
       description: |-
-        Перезапрашивает источники; результат придёт асинхронно с новой revision.
-        Пока конвейер не подключён — 503.
+        Перезапрашивает источники в manual_review; результат придёт асинхронно с новой
+        revision: новые снимки, стоп-правило P06 (может дать rejected) и пересчёт модели.
       parameters:
       - description: Заявка
         format: uuid
@@ -2867,14 +3994,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/reviewdto.RetryChecksRequest'
+          $ref: '#/definitions/underwritingdto.RetryChecksRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
         "400":
           description: INVALID_REQUEST
           schema:
@@ -2904,6 +4031,54 @@ paths:
       summary: Повторить проверки
       tags:
       - underwriter
+  /underwriter/applications/{id}/retry-scoring:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Пересчитывает модель в manual_review на текущих снимках реестра и БКИ и принятых
+        финансах — например, после оценки failed. Результат придёт асинхронно с новой revision.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ожидаемая revision
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/underwritingdto.RevisionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: 'FORBIDDEN: заявка у другого сотрудника'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Пересчитать скоринг
+      tags:
+      - underwriter
   /underwriter/applications/{id}/take:
     post:
       consumes:
@@ -2923,14 +4098,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/reviewdto.RevisionRequest'
+          $ref: '#/definitions/underwritingdto.RevisionRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/reviewdto.ReviewApplicationResponse'
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
         "400":
           description: INVALID_REQUEST
           schema:

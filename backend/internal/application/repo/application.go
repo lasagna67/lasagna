@@ -15,13 +15,13 @@ import (
 )
 
 // SelectDetails — заявка с карточками компании и заявителя; читается ScanDetails.
-// Экспортирован для модуля review: заявку он читает так же.
+// Экспортирован для модуля underwriting: заявку он читает так же.
 const SelectDetails = `SELECT ` + detailsColumns + ` ` + detailsFrom
 
-const detailsColumns = `a.id, a.number, a.revision, a.company_id, a.applicant_id, a.status,
+const detailsColumns = `a.id, a.number, a.revision, a.data_revision, a.company_id, a.applicant_id, a.status,
 	a.purpose, a.purpose_description, a.requested_amount_kopecks,
 	a.need_period_unit, a.need_period_value, p.code, a.requested_term_months, a.has_collateral,
-	a.assignee_id,
+	a.assignee_id, a.processing_run_id,
 	a.submitted_at, a.created_at, a.updated_at,
 	c.short_name, c.inn,
 	u.email, u.first_name, u.last_name, u.middle_name`
@@ -113,6 +113,29 @@ func ClaimKey(ctx context.Context, tx pgx.Tx, key applicationdomain.IdempotencyK
 		return uuid.Nil, false, applicationerrors.ErrIdempotencyConflict
 	}
 	return storedID, false, nil
+}
+
+// LookupKey — использован ли уже ключ: true — тем же запросом (повтор);
+// другим запросом — ErrIdempotencyConflict. Нужен операциям с внешним вызовом
+// до транзакции: повтор сетевой попытки не должен вызывать источник снова.
+// Окончательно ключ занимает ClaimKey в транзакции изменения.
+func LookupKey(ctx context.Context, q Querier, key applicationdomain.IdempotencyKey) (bool, error) {
+	var storedHash string
+	err := q.QueryRow(ctx, `
+		SELECT request_sha256 FROM idempotency_keys
+		WHERE user_id = $1 AND operation = $2
+			AND resource_id IS NOT DISTINCT FROM $3 AND idempotency_key = $4`,
+		key.UserID, key.Operation, key.ResourceID, key.Key,
+	).Scan(&storedHash)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("select idempotency key: %w", err)
+	case storedHash != key.RequestHash:
+		return false, applicationerrors.ErrIdempotencyConflict
+	}
+	return true, nil
 }
 
 // InsertTransition пишет переход в историю. actorID == nil — переход
@@ -238,10 +261,10 @@ func ScanDetails(row pgx.CollectableRow) (applicationdomain.ApplicationDetails, 
 	var pledged bool
 	a, req := &d.Application, &d.Application.Request
 	err := row.Scan(
-		&a.ID, &a.Number, &a.Revision, &a.CompanyID, &a.ApplicantID, &a.Status,
+		&a.ID, &a.Number, &a.Revision, &a.DataRevision, &a.CompanyID, &a.ApplicantID, &a.Status,
 		&req.Purpose, &req.PurposeDescription, &req.AmountKopecks,
 		&req.NeedPeriod.Unit, &req.NeedPeriod.Value, &req.ProductCode, &req.TermMonths, &pledged,
-		&a.AssigneeID,
+		&a.AssigneeID, &a.ProcessingRunID,
 		&a.SubmittedAt, &a.CreatedAt, &a.UpdatedAt,
 		&d.Company.Name, &d.Company.INN,
 		&d.Applicant.Email, &d.Applicant.FirstName, &d.Applicant.LastName, &d.Applicant.MiddleName,

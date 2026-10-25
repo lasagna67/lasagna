@@ -9,13 +9,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	"github.com/lasagna67/lasagna.git/internal/outbox"
 )
 
-// History — что Update пишет в историю статусов: совершённые переходы и
-// комментарий к последнему, он виден клиенту.
+// History — что Update пишет вместе с заявкой: совершённые переходы,
+// комментарий к последнему (он виден клиенту) и события для Kafka, которые
+// уйдут только вместе с этим изменением.
 type History struct {
 	Transitions []applicationdomain.Transition
 	Comment     *string
+	Outbox      []outbox.Message
 }
 
 // Update — единственный путь сменить статус существующей заявки. В одной
@@ -27,6 +30,9 @@ type History struct {
 // С ключом идемпотентности повтор того же запроса ничего не меняет и
 // возвращает replayed == true — до сверки revision, потому что первый запрос
 // её уже увеличил.
+//
+// С cmd.RunID (конвейер) сверяется не revision, а запуск конвейера заявки:
+// другой запуск — applicationerrors.ErrStaleRun.
 func Update(ctx context.Context, pool *pgxpool.Pool, cmd applicationdomain.UpdateCommand, fn func(tx pgx.Tx, a *applicationdomain.Application) (History, error)) (replayed bool, err error) {
 	err = pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
 		d, err := GetDetails(ctx, tx, cmd.ID, true)
@@ -43,7 +49,12 @@ func Update(ctx context.Context, pool *pgxpool.Pool, cmd applicationdomain.Updat
 				return nil
 			}
 		}
-		if d.Revision != cmd.ExpectedRevision {
+		switch {
+		case cmd.RunID != nil:
+			if d.ProcessingRunID == nil || *d.ProcessingRunID != *cmd.RunID {
+				return applicationerrors.ErrStaleRun
+			}
+		case d.Revision != cmd.ExpectedRevision:
 			return &applicationerrors.RevisionConflictError{Current: d.Revision}
 		}
 		app := d.Application
@@ -56,8 +67,8 @@ func Update(ctx context.Context, pool *pgxpool.Pool, cmd applicationdomain.Updat
 	return replayed, err
 }
 
-// save пишет историю переходов и саму заявку: статус, ответственного, время
-// отправки и revision + 1.
+// save пишет историю переходов, события outbox и саму заявку: статус,
+// ответственного, время отправки, запуск конвейера и revision + 1.
 func save(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, h History, actorID *uuid.UUID) error {
 	for i, tr := range h.Transitions {
 		var comment *string
@@ -68,10 +79,14 @@ func save(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, h H
 			return err
 		}
 	}
+	if err := outbox.Insert(ctx, tx, h.Outbox...); err != nil {
+		return err
+	}
 	_, err := tx.Exec(ctx, `
-		UPDATE applications SET status = $2, assignee_id = $3, submitted_at = $4, revision = revision + 1
+		UPDATE applications SET status = $2, assignee_id = $3, submitted_at = $4, processing_run_id = $5,
+			revision = revision + 1
 		WHERE id = $1`,
-		app.ID, app.Status, app.AssigneeID, app.SubmittedAt,
+		app.ID, app.Status, app.AssigneeID, app.SubmittedAt, app.ProcessingRunID,
 	)
 	if err != nil {
 		return fmt.Errorf("update application: %w", err)

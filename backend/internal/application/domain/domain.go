@@ -126,8 +126,16 @@ type Application struct {
 	Status      Status
 	Request     Request
 
-	AssigneeID *uuid.UUID // сотрудник, взявший заявку на рассмотрение; назначает модуль review
+	// DataRevision — версия входных данных риска: растёт при изменении запроса,
+	// залога, проекта и денежного плана, но не статуса и банковских заключений.
+	DataRevision int
+
+	AssigneeID *uuid.UUID // сотрудник, взявший заявку на рассмотрение; назначает модуль underwriting
 	Info       InfoRound  // запросы банка текущего раунда; только в info_requested
+
+	// ProcessingRunID — текущий запуск конвейера: новый при каждой отправке.
+	// Результаты чужого запуска отбрасываются; nil — заявку не отправляли.
+	ProcessingRunID *uuid.UUID
 
 	SubmittedAt *time.Time
 	CreatedAt   time.Time
@@ -180,8 +188,10 @@ const (
 	ActionTake             Action = "take"
 	ActionRequestInfo      Action = "request_info"
 	ActionReviewCollateral Action = "review_collateral"
+	ActionReviewCashPlan   Action = "review_cash_plan"
 	ActionDecide           Action = "decide"
 	ActionRetryChecks      Action = "retry_checks"
+	ActionRetryScoring     Action = "retry_scoring"
 	ActionRetryIssue       Action = "retry_issue"
 )
 
@@ -189,9 +199,12 @@ const (
 type Operation string
 
 const (
-	OperationCreate   Operation = "create_application"
-	OperationSubmit   Operation = "submit_application"
-	OperationResubmit Operation = "resubmit_application"
+	OperationCreate           Operation = "create_application"
+	OperationSubmit           Operation = "submit_application"
+	OperationResubmit         Operation = "resubmit_application"
+	OperationFetchFinancials  Operation = "fetch_financials"
+	OperationUploadCSV        Operation = "upload_financials_csv"
+	OperationDeclareNoHistory Operation = "declare_no_history"
 )
 
 // IdempotencyKey — область повтора: пользователь, операция, ресурс и ключ клиента.
@@ -225,9 +238,14 @@ type Notification struct {
 
 // UpdateCommand — изменение заявки с optimistic locking. Key задан — повтор с
 // тем же ключом и телом не меняет заявку, а возвращает replayed.
+//
+// RunID задан — пишет конвейер: вместо ExpectedRevision сверяется запуск
+// конвейера (ProcessingRunID), иначе ErrStaleRun. Записи одного запуска не
+// конфликтуют друг с другом из-за того, что предыдущая увеличила revision.
 type UpdateCommand struct {
 	ID               uuid.UUID
 	ExpectedRevision int
+	RunID            *uuid.UUID
 	ActorID          *uuid.UUID // nil — конвейер
 	Key              *IdempotencyKey
 }
@@ -277,22 +295,30 @@ func (a *Application) transit(to Status, from ...Status) (Transition, error) {
 // Submit — отправка черновика. Полноту запроса и условия продукта сервис
 // проверяет до вызова (CheckSubmit): ошибка возвращает 422 и оставляет draft.
 // SubmittedAt — время первой отправки; повторная после уточнений его не меняет.
-func (a *Application) Submit(now time.Time) (Transition, error) {
+// run — новый запуск конвейера для этой отправки.
+func (a *Application) Submit(now time.Time, run uuid.UUID) (Transition, error) {
 	tr, err := a.transit(StatusSubmitted, StatusDraft)
 	if err != nil {
 		return Transition{}, err
 	}
 	a.SubmittedAt = &now
+	a.ProcessingRunID = &run
 	return tr, nil
 }
 
 // Resubmit — повторная отправка после ответа на все открытые запросы банка.
-// Заявка та же, конвейер повторяет затронутые проверки.
-func (a *Application) Resubmit() (Transition, error) {
+// Заявка та же, конвейер повторяет проверки новым запуском run: результаты
+// прежнего запуска к ней больше не применяются.
+func (a *Application) Resubmit(run uuid.UUID) (Transition, error) {
 	if a.Status == StatusInfoRequested && a.Info.Open > 0 {
 		return Transition{}, fmt.Errorf("%w: %d open", applicationerrors.ErrInfoRequestsOpen, a.Info.Open)
 	}
-	return a.transit(StatusSubmitted, StatusInfoRequested)
+	tr, err := a.transit(StatusSubmitted, StatusInfoRequested)
+	if err != nil {
+		return Transition{}, err
+	}
+	a.ProcessingRunID = &run
+	return tr, nil
 }
 
 // Sign — клиент подписал актуальный договор. Актуальность предложения,
@@ -372,11 +398,16 @@ func (a *Application) Expire(validUntil *time.Time, now time.Time) (Transition, 
 // Что доступно клиенту:
 
 // draftFields — пути полей, которые клиент заполняет в черновике.
-// product_details и collateral — целиком: состав зависит от продукта.
+// product_details, collateral и cash_plan — целиком: состав зависит от продукта.
+// Денежный план в черновике — только у «Старта», у других кредитов его
+// открывает банк запросом уточнений.
+//
+// financials — не поле PATCH, а финансовый шаг: открытый банком в уточнении,
+// он начинает новый финансовый цикл (модуль financials).
 var draftFields = []string{
 	"request.purpose", "request.purpose_description", "request.amount_kopecks",
 	"request.need_period", "request.product_code", "request.term_months",
-	"request.collateral_mode", "product_details", "collateral",
+	"request.collateral_mode", "product_details", "collateral", "cash_plan", "financials",
 }
 
 // DraftFields — поля черновика; из них банк выбирает, что открыть клиенту
@@ -407,6 +438,9 @@ func (a *Application) ClientActions() []Action {
 		actions := []Action{}
 		if len(a.Info.EditableFields) > 0 {
 			actions = append(actions, ActionEdit)
+		}
+		if slices.Contains(a.Info.EditableFields, "financials") {
+			actions = append(actions, ActionFetchFinancials)
 		}
 		if a.Info.Open > 0 {
 			return append(actions, ActionAnswerInfo)

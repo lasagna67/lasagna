@@ -9,4 +9,7 @@ type ReportsConfig struct {
 type FinancialsConfig struct {
 	URL     string        `default:"http://financials-mock:8083"`
 	Timeout time.Duration `default:"5s"`
+	// DemoModes — разрешить demo_mode в financials/fetch: моделировать ответ
+	// источника для заявки. Только в изолированном демо-окружении.
+	DemoModes bool `default:"false"`
 }

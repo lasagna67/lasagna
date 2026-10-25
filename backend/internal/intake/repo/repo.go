@@ -1,12 +1,14 @@
-// Package intakerepo — хранение черновика: поля запроса клиента и предмет
-// залога. Статус, историю и revision пишет applicationrepo.Update, проверку
-// залога банком — модуль collateral.
+// Package intakerepo — хранение черновика: поля запроса клиента, предмет
+// залога, поля проекта «Старта» и денежный план (через cashplanrepo). Статус,
+// историю и revision пишет applicationrepo.Update, проверку залога банком —
+// модуль collateral, заключение по плану — underwriting.
 package intakerepo
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,7 +16,9 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	applicationrepo "github.com/lasagna67/lasagna.git/internal/application/repo"
+	cashplanrepo "github.com/lasagna67/lasagna.git/internal/cashplan/repo"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
+	financialsrepo "github.com/lasagna67/lasagna.git/internal/financials/repo"
 	intakedomain "github.com/lasagna67/lasagna.git/internal/intake/domain"
 )
 
@@ -26,17 +30,87 @@ func New(pool *pgxpool.Pool) *Repo {
 	return &Repo{pool: pool}
 }
 
-// Get — заявка с предметом залога. Нет заявки — applicationerrors.ErrNotFound.
+// Get — заявка с предметом залога, полями проекта, планом и финансовым шагом.
+// Нет заявки — applicationerrors.ErrNotFound.
 func (r *Repo) Get(ctx context.Context, id uuid.UUID) (intakedomain.Details, error) {
-	app, err := applicationrepo.GetDetails(ctx, r.pool, id, false)
+	var d intakedomain.Details
+	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		app, err := applicationrepo.GetDetails(ctx, tx, id, false)
+		if err != nil {
+			return err
+		}
+		d.ApplicationDetails = app
+		if d.Collateral, err = loadCollateral(ctx, tx, id); err != nil {
+			return err
+		}
+		if d.Project, err = cashplanrepo.Project(ctx, tx, id); err != nil {
+			return err
+		}
+		if d.CashPlan, err = cashplanrepo.Plan(ctx, tx, id); err != nil {
+			return err
+		}
+		d.Financials, err = financialsrepo.State(ctx, tx, id)
+		return err
+	})
 	if err != nil {
 		return intakedomain.Details{}, err
 	}
-	c, err := loadCollateral(ctx, r.pool, id)
-	if err != nil {
-		return intakedomain.Details{}, err
+	return d, nil
+}
+
+// List — заявки компании по фильтру, новые сверху, с предметом залога, полями
+// проекта и планом. Читается одним снимком, чтобы страница не разошлась сама с собой.
+func (r *Repo) List(ctx context.Context, f intakedomain.ListFilter) ([]intakedomain.Details, error) {
+	where := []string{`a.company_id = $1`}
+	args := []any{f.CompanyID}
+	arg := func(v any) string {
+		args = append(args, v)
+		return fmt.Sprintf("$%d", len(args))
 	}
-	return intakedomain.Details{ApplicationDetails: app, Collateral: c}, nil
+	if f.Status != nil {
+		where = append(where, `a.status = `+arg(*f.Status))
+	}
+	if f.Before != nil {
+		where = append(where, `a.number < `+arg(*f.Before))
+	}
+	sql := applicationrepo.SelectDetails + ` WHERE ` + strings.Join(where, ` AND `) + ` ORDER BY a.number DESC LIMIT ` + arg(f.Limit)
+
+	var items []intakedomain.Details
+	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, sql, args...)
+		if err != nil {
+			return fmt.Errorf("select applications: %w", err)
+		}
+		apps, err := pgx.CollectRows(rows, applicationrepo.ScanDetails)
+		if err != nil {
+			return fmt.Errorf("scan applications: %w", err)
+		}
+		items = make([]intakedomain.Details, 0, len(apps))
+		for _, app := range apps {
+			if err := applicationrepo.LoadInfoRound(ctx, tx, &app.Application); err != nil {
+				return err
+			}
+			d := intakedomain.Details{ApplicationDetails: app}
+			if d.Collateral, err = loadCollateral(ctx, tx, app.ID); err != nil {
+				return err
+			}
+			if d.Project, err = cashplanrepo.Project(ctx, tx, app.ID); err != nil {
+				return err
+			}
+			if d.CashPlan, err = cashplanrepo.Plan(ctx, tx, app.ID); err != nil {
+				return err
+			}
+			if d.Financials, err = financialsrepo.State(ctx, tx, app.ID); err != nil {
+				return err
+			}
+			items = append(items, d)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 // Product — условия продукта каталога по коду; нет такого — nil.
@@ -45,17 +119,12 @@ func (r *Repo) Product(ctx context.Context, code string) (*applicationdomain.Pro
 }
 
 // Update меняет заявку через applicationrepo.Update. fn получает черновик с
-// продуктом и залогом, прочитанными в той же транзакции, и возвращает Change.
+// продуктом, залогом, полями проекта и планом, прочитанными в той же
+// транзакции, и возвращает Change.
 func (r *Repo) Update(ctx context.Context, cmd applicationdomain.UpdateCommand, fn func(*intakedomain.Draft) (intakedomain.Change, error)) (replayed bool, err error) {
 	return applicationrepo.Update(ctx, r.pool, cmd, func(tx pgx.Tx, app *applicationdomain.Application) (applicationrepo.History, error) {
-		d := intakedomain.Draft{Application: app}
-		var err error
-		if code := app.Request.ProductCode; code != nil {
-			if d.Product, err = applicationrepo.GetProduct(ctx, tx, *code); err != nil {
-				return applicationrepo.History{}, err
-			}
-		}
-		if d.Collateral, err = loadCollateral(ctx, tx, app.ID); err != nil {
+		d, err := LoadDraft(ctx, tx, app)
+		if err != nil {
 			return applicationrepo.History{}, err
 		}
 		change, err := fn(&d)
@@ -65,11 +134,38 @@ func (r *Repo) Update(ctx context.Context, cmd applicationdomain.UpdateCommand, 
 		if err := apply(ctx, tx, *app, change); err != nil {
 			return applicationrepo.History{}, err
 		}
-		return applicationrepo.History{Transitions: change.Transitions}, nil
+		return applicationrepo.History{Transitions: change.Transitions, Outbox: change.Outbox}, nil
 	})
 }
 
-// apply пишет Change: поля запроса, предмет залога, уведомление.
+// LoadDraft читает то, по чему проверяется заявка: продукт по коду из запроса,
+// предмет залога, поля проекта, план и финансовый шаг. Вызывается в транзакции, где заявка
+// заблокирована: так же её проверяет этап validation конвейера.
+func LoadDraft(ctx context.Context, q applicationrepo.Querier, app *applicationdomain.Application) (intakedomain.Draft, error) {
+	d := intakedomain.Draft{Application: app}
+	var err error
+	if code := app.Request.ProductCode; code != nil {
+		if d.Product, err = applicationrepo.GetProduct(ctx, q, *code); err != nil {
+			return intakedomain.Draft{}, err
+		}
+	}
+	if d.Collateral, err = loadCollateral(ctx, q, app.ID); err != nil {
+		return intakedomain.Draft{}, err
+	}
+	if d.Project, err = cashplanrepo.Project(ctx, q, app.ID); err != nil {
+		return intakedomain.Draft{}, err
+	}
+	if d.CashPlan, err = cashplanrepo.Plan(ctx, q, app.ID); err != nil {
+		return intakedomain.Draft{}, err
+	}
+	if d.Financials, err = financialsrepo.State(ctx, q, app.ID); err != nil {
+		return intakedomain.Draft{}, err
+	}
+	return d, nil
+}
+
+// apply пишет Change: поля запроса, предмет залога, поля проекта, план,
+// data_revision и уведомление.
 func apply(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, c intakedomain.Change) error {
 	if c.Request {
 		if err := writeRequest(ctx, tx, app); err != nil {
@@ -79,6 +175,21 @@ func apply(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, c 
 	if c.Collateral != nil {
 		if err := upsertCollateral(ctx, tx, app.ID, *c.Collateral); err != nil {
 			return err
+		}
+	}
+	if c.Project != nil {
+		if err := cashplanrepo.SaveProject(ctx, tx, app.ID, c.Project.Value); err != nil {
+			return err
+		}
+	}
+	if c.CashPlan != nil {
+		if err := cashplanrepo.SavePlan(ctx, tx, app.ID, c.CashPlan.Value); err != nil {
+			return err
+		}
+	}
+	if c.DataChanged {
+		if _, err := tx.Exec(ctx, `UPDATE applications SET data_revision = data_revision + 1 WHERE id = $1`, app.ID); err != nil {
+			return fmt.Errorf("update data revision: %w", err)
 		}
 	}
 	if n := c.Notification; n != nil {

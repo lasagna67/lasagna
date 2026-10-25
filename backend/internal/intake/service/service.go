@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -17,10 +18,16 @@ import (
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 	intakedomain "github.com/lasagna67/lasagna.git/internal/intake/domain"
+	pipelinedomain "github.com/lasagna67/lasagna.git/internal/pipeline/domain"
 )
 
 // maxIdempotencyKeyLen — длина колонки idempotency_keys.idempotency_key.
 const maxIdempotencyKeyLen = 255
+
+const (
+	defaultLimit = 20
+	maxLimit     = 100
+)
 
 type ApplicationRepo interface {
 	// Create в одной транзакции занимает ключ идемпотентности, сохраняет черновик и первую запись истории.
@@ -32,11 +39,13 @@ type ApplicationRepo interface {
 type DraftRepo interface {
 	// Get — нет заявки: applicationerrors.ErrNotFound.
 	Get(ctx context.Context, id uuid.UUID) (intakedomain.Details, error)
+	// List — заявки компании по фильтру, новые сверху; Limit задаёт сервис.
+	List(ctx context.Context, f intakedomain.ListFilter) ([]intakedomain.Details, error)
 	// Product — условия продукта по коду; нет такого — nil.
 	Product(ctx context.Context, code string) (*applicationdomain.Product, error)
 	// Update в одной транзакции блокирует заявку, сверяет revision (иначе
-	// RevisionConflictError), читает продукт и залог, вызывает fn и пишет Change.
-	// Повтор по ключу — replayed.
+	// RevisionConflictError), читает продукт, залог, поля проекта и план,
+	// вызывает fn и пишет Change. Повтор по ключу — replayed.
 	Update(ctx context.Context, cmd applicationdomain.UpdateCommand, fn func(*intakedomain.Draft) (intakedomain.Change, error)) (replayed bool, err error)
 }
 
@@ -46,25 +55,18 @@ type Companies interface {
 	Membership(ctx context.Context, companyID, userID uuid.UUID) (companydomain.Membership, error)
 }
 
-// Pipeline — конвейер проверок после отправки. Run идемпотентен: не делает
-// ничего, если заявка уже не в submitted.
-type Pipeline interface {
-	Run(ctx context.Context, applicationID uuid.UUID) error
-}
-
 type Deps struct {
 	Applications ApplicationRepo
 	Drafts       DraftRepo
 	Companies    Companies
-	Pipeline     Pipeline
 }
 
 type ApplicationService struct {
 	applications ApplicationRepo
 	drafts       DraftRepo
 	companies    Companies
-	pipeline     Pipeline
 	now          func() time.Time
+	newRun       func() uuid.UUID
 }
 
 func New(d Deps) *ApplicationService {
@@ -72,8 +74,8 @@ func New(d Deps) *ApplicationService {
 		applications: d.Applications,
 		drafts:       d.Drafts,
 		companies:    d.Companies,
-		pipeline:     d.Pipeline,
 		now:          time.Now,
+		newRun:       uuid.New,
 	}
 }
 
@@ -104,8 +106,47 @@ func (s *ApplicationService) Create(ctx context.Context, cmd applicationdomain.C
 	return details, nil
 }
 
-// Patch — правка заявки своей компании: в черновике — любые поля запроса и
-// залог, в info_requested — открытые банком. Код продукта проверяется по каталогу.
+// Get — заявка своей компании в любом статусе: так клиент следит за
+// конвейером после отправки. Чужая заявка неотличима от несуществующей.
+func (s *ApplicationService) Get(ctx context.Context, userID, id uuid.UUID) (intakedomain.Details, error) {
+	return s.clientDetails(ctx, userID, id)
+}
+
+// List — заявки компании, где пользователь — представитель, новые сверху.
+// next — курсор следующей страницы, nil — страниц больше нет.
+func (s *ApplicationService) List(ctx context.Context, cmd intakedomain.ListCommand) (items []intakedomain.Details, next *int64, err error) {
+	f := cmd.ListFilter
+	switch {
+	case f.CompanyID == uuid.Nil:
+		return nil, nil, &applicationerrors.RequestError{Message: "Передайте company_id"}
+	case f.Limit == 0:
+		f.Limit = defaultLimit
+	case f.Limit < 0 || f.Limit > maxLimit:
+		return nil, nil, &applicationerrors.RequestError{Message: fmt.Sprintf("limit — от 1 до %d", maxLimit)}
+	}
+	if f.Status != nil && !f.Status.Valid() {
+		return nil, nil, &applicationerrors.RequestError{Message: "Неизвестный статус заявки"}
+	}
+	if err := s.checkMember(ctx, f.CompanyID, cmd.UserID); err != nil {
+		return nil, nil, err
+	}
+	limit := f.Limit
+	f.Limit++ // лишняя строка — признак следующей страницы
+	if items, err = s.drafts.List(ctx, f); err != nil {
+		return nil, nil, fmt.Errorf("list applications: %w", err)
+	}
+	if len(items) > limit {
+		items = items[:limit]
+		last := items[limit-1].Number
+		next = &last
+	}
+	return items, next, nil
+}
+
+// Patch — правка заявки своей компании: в черновике — любые поля запроса,
+// залог, поля проекта и план «Старта», в info_requested — открытые банком. Код
+// продукта проверяется по каталогу. data_revision растёт, только если правка
+// изменила входные данные риска.
 func (s *ApplicationService) Patch(ctx context.Context, cmd intakedomain.PatchCommand) (intakedomain.Details, error) {
 	if err := cmd.Validate(); err != nil {
 		return intakedomain.Details{}, err
@@ -113,6 +154,8 @@ func (s *ApplicationService) Patch(ctx context.Context, cmd intakedomain.PatchCo
 	if _, err := s.clientDetails(ctx, cmd.UserID, cmd.ApplicationID); err != nil {
 		return intakedomain.Details{}, err
 	}
+	// Продукт после правки: от него зависят поля проекта и вид плана.
+	var product *applicationdomain.Product
 	if code := cmd.ProductCode.Value; code != nil {
 		p, err := s.drafts.Product(ctx, *code)
 		if err != nil {
@@ -121,13 +164,25 @@ func (s *ApplicationService) Patch(ctx context.Context, cmd intakedomain.PatchCo
 		if p == nil {
 			return intakedomain.Details{}, invalid("request.product_code", "NOT_FOUND", "Продукт не найден")
 		}
+		product = p
 	}
 
 	_, err := s.drafts.Update(ctx, s.update(cmd.ApplicationID, cmd.ExpectedRevision, cmd.UserID), func(d *intakedomain.Draft) (intakedomain.Change, error) {
+		before := d.Application.Request
 		if err := cmd.Apply(d.Application); err != nil {
 			return intakedomain.Change{}, err
 		}
-		return intakedomain.Change{Request: true, Collateral: cmd.Collateral}, nil
+		p := product
+		if !cmd.ProductCode.Set {
+			p = d.Product
+		}
+		project, plan, err := cmd.ApplyPlan(*d, p, s.now())
+		if err != nil {
+			return intakedomain.Change{}, err
+		}
+		change := intakedomain.Change{Request: true, Collateral: cmd.Collateral, Project: project, CashPlan: plan}
+		change.DataChanged = dataChanged(before, *d, change)
+		return change, nil
 	})
 	if err != nil {
 		return intakedomain.Details{}, fmt.Errorf("patch application: %w", err)
@@ -136,15 +191,15 @@ func (s *ApplicationService) Patch(ctx context.Context, cmd intakedomain.PatchCo
 }
 
 // Submit — отправка черновика. Полнота запроса и условия продукта проверяются
-// на заблокированной заявке: ошибка — 422, заявка остаётся draft. Затем
-// запускается конвейер.
+// на заблокированной заявке: ошибка — 422, заявка остаётся draft. Вместе с
+// переходом пишется событие, которое запускает конвейер.
 func (s *ApplicationService) Submit(ctx context.Context, cmd intakedomain.SubmitCommand) (intakedomain.Details, error) {
-	return s.send(ctx, cmd, applicationdomain.OperationSubmit, func(d *intakedomain.Draft) (intakedomain.Change, error) {
-		tr, err := d.Application.Submit(s.now())
+	return s.send(ctx, cmd, applicationdomain.OperationSubmit, func(d *intakedomain.Draft, run uuid.UUID) (intakedomain.Change, error) {
+		tr, err := d.Application.Submit(s.now(), run)
 		if err != nil {
 			return intakedomain.Change{}, err
 		}
-		if err := d.Application.CheckSubmit(d.Product, d.Collateral != nil); err != nil {
+		if err := d.CheckSubmit(s.now()); err != nil {
 			return intakedomain.Change{}, err
 		}
 		return intakedomain.Change{Transitions: []applicationdomain.Transition{tr}}, nil
@@ -155,13 +210,13 @@ func (s *ApplicationService) Submit(ctx context.Context, cmd intakedomain.Submit
 // проверяется как при первой отправке: клиент мог изменить открытые поля.
 // Ответственный сотрудник получает уведомление.
 func (s *ApplicationService) Resubmit(ctx context.Context, cmd intakedomain.SubmitCommand) (intakedomain.Details, error) {
-	return s.send(ctx, cmd, applicationdomain.OperationResubmit, func(d *intakedomain.Draft) (intakedomain.Change, error) {
+	return s.send(ctx, cmd, applicationdomain.OperationResubmit, func(d *intakedomain.Draft, run uuid.UUID) (intakedomain.Change, error) {
 		a := d.Application
-		tr, err := a.Resubmit()
+		tr, err := a.Resubmit(run)
 		if err != nil {
 			return intakedomain.Change{}, err
 		}
-		if err := a.CheckSubmit(d.Product, d.Collateral != nil); err != nil {
+		if err := d.CheckSubmit(s.now()); err != nil {
 			return intakedomain.Change{}, err
 		}
 		change := intakedomain.Change{Transitions: []applicationdomain.Transition{tr}}
@@ -178,10 +233,12 @@ func (s *ApplicationService) Resubmit(ctx context.Context, cmd intakedomain.Subm
 	})
 }
 
-// send переводит заявку в submitted и запускает конвейер. Повтор с тем же
-// Idempotency-Key и телом не создаёт второй отправки; конвейер запускается,
-// пока заявка в submitted, — и при повторе, если первый запуск не удался.
-func (s *ApplicationService) send(ctx context.Context, cmd intakedomain.SubmitCommand, op applicationdomain.Operation, fn func(*intakedomain.Draft) (intakedomain.Change, error)) (intakedomain.Details, error) {
+// send переводит заявку в submitted с новым запуском конвейера и в той же
+// транзакции пишет в outbox событие отправки: конвейер начнётся, только если
+// отправка записана, и не потеряется, если Kafka или процесс упадут после
+// коммита. Повтор с тем же Idempotency-Key и телом не создаёт второй отправки
+// и второго запуска.
+func (s *ApplicationService) send(ctx context.Context, cmd intakedomain.SubmitCommand, op applicationdomain.Operation, fn func(*intakedomain.Draft, uuid.UUID) (intakedomain.Change, error)) (intakedomain.Details, error) {
 	if err := validateIdempotencyKey(cmd.IdempotencyKey); err != nil {
 		return intakedomain.Details{}, err
 	}
@@ -197,7 +254,16 @@ func (s *ApplicationService) send(ctx context.Context, cmd intakedomain.SubmitCo
 		Key:         cmd.IdempotencyKey,
 		RequestHash: requestHash(id.String(), fmt.Sprint(cmd.ExpectedRevision)),
 	}
-	if _, err := s.drafts.Update(ctx, update, fn); err != nil {
+	run := s.newRun()
+	_, err := s.drafts.Update(ctx, update, func(d *intakedomain.Draft) (intakedomain.Change, error) {
+		change, err := fn(d, run)
+		if err != nil {
+			return intakedomain.Change{}, err
+		}
+		change.Outbox = append(change.Outbox, pipelinedomain.Submitted(id, run))
+		return change, nil
+	})
+	if err != nil {
 		return intakedomain.Details{}, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -205,18 +271,35 @@ func (s *ApplicationService) send(ctx context.Context, cmd intakedomain.SubmitCo
 	if err != nil {
 		return intakedomain.Details{}, fmt.Errorf("get application: %w", err)
 	}
-	if d.Status == applicationdomain.StatusSubmitted {
-		if err := s.pipeline.Run(ctx, id); err != nil {
-			return intakedomain.Details{}, fmt.Errorf("run pipeline: %w", err)
-		}
-		if d, err = s.drafts.Get(ctx, id); err != nil {
-			return intakedomain.Details{}, fmt.Errorf("get application: %w", err)
-		}
-	}
 	return d, nil
 }
 
 //============================================================================================
+
+// dataChanged — правка меняет входные данные риска (C01): запрос, предмет
+// залога, поля проекта или план с его подтверждением. Повтор тех же значений
+// data_revision не двигает.
+func dataChanged(before applicationdomain.Request, d intakedomain.Draft, c intakedomain.Change) bool {
+	if !reflect.DeepEqual(before, d.Application.Request) {
+		return true
+	}
+	if c.Collateral != nil && (d.Collateral == nil || d.Collateral.Hash() != c.Collateral.Hash()) {
+		return true
+	}
+	if w := c.Project; w != nil {
+		old, next := d.Project, w.Value
+		if (old == nil) != (next == nil) || (next != nil && old.Hash() != next.Hash()) {
+			return true
+		}
+	}
+	if w := c.CashPlan; w != nil {
+		old, next := d.CashPlan, w.Value
+		if (old == nil) != (next == nil) || (next != nil && (old.Hash() != next.Hash() || old.Confirmed() != next.Confirmed())) {
+			return true
+		}
+	}
+	return false
+}
 
 func (s *ApplicationService) update(id uuid.UUID, expected int, actorID uuid.UUID) applicationdomain.UpdateCommand {
 	return applicationdomain.UpdateCommand{ID: id, ExpectedRevision: expected, ActorID: &actorID}

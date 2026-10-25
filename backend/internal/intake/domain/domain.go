@@ -3,16 +3,21 @@
 package intakedomain
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
+	financialsdomain "github.com/lasagna67/lasagna.git/internal/financials/domain"
+	"github.com/lasagna67/lasagna.git/internal/outbox"
 )
 
 const (
@@ -24,19 +29,26 @@ const (
 	maxSmallint = 1<<15 - 1
 )
 
-// Details — заявка с предметом залога, как её видит клиент при оформлении.
+// Details — заявка с предметом залога, полями проекта «Старта», денежным
+// планом и финансовым шагом, как её видит клиент при оформлении.
 type Details struct {
 	applicationdomain.ApplicationDetails
 	Collateral *collateraldomain.Collateral
+	Project    *cashplandomain.Project
+	CashPlan   *cashplandomain.CashPlan
+	Financials financialsdomain.State
 }
 
 // Draft — заявка под блокировкой транзакции и то, по чему она проверяется:
-// продукт по коду из запроса (nil — кода нет или такого продукта нет) и
-// предмет залога.
+// продукт по коду из запроса (nil — кода нет или такого продукта нет),
+// предмет залога, поля проекта, денежный план и финансовый шаг.
 type Draft struct {
 	Application *applicationdomain.Application
 	Product     *applicationdomain.Product
 	Collateral  *collateraldomain.Collateral
+	Project     *cashplandomain.Project
+	CashPlan    *cashplandomain.CashPlan
+	Financials  financialsdomain.State
 }
 
 // Change — что записать вместе с заявкой в одной транзакции. Статус и время
@@ -45,8 +57,18 @@ type Change struct {
 	Transitions  []applicationdomain.Transition
 	Request      bool                         // запрос клиента изменён — записать его поля
 	Collateral   *collateraldomain.Collateral // новый предмет залога
+	Project      *ProjectWrite                // nil — поля проекта не меняются
+	CashPlan     *PlanWrite                   // nil — план не меняется
+	DataChanged  bool                         // входные данные риска изменились — data_revision + 1
 	Notification *applicationdomain.Notification
+	Outbox       []outbox.Message // события Kafka: уйдут, только если изменение записано
 }
+
+// ProjectWrite — новые поля проекта; Value == nil — удалить их.
+type ProjectWrite struct{ Value *cashplandomain.Project }
+
+// PlanWrite — новый денежный план; Value == nil — удалить его.
+type PlanWrite struct{ Value *cashplandomain.CashPlan }
 
 //=================================================================================================
 // ПРАВКА:
@@ -72,6 +94,9 @@ type PatchCommand struct {
 	TermMonths         Field[int]
 	CollateralMode     *applicationdomain.CollateralMode // nil — не передан
 	Collateral         *collateraldomain.Collateral      // nil — не передан
+	ProductDetails     Field[cashplandomain.Project]     // поля «Старта» целиком; null — удалить
+	CashPlan           Field[cashplandomain.CashPlan]    // содержимое плана целиком; null — удалить
+	ConfirmCashPlan    bool                              // cash_plan.confirmed = true — отдельной правкой
 }
 
 // Fields — пути переданных полей, как в editable_fields.
@@ -90,6 +115,8 @@ func (c PatchCommand) Fields() []string {
 	add(c.TermMonths.Set, "request.term_months")
 	add(c.CollateralMode != nil, "request.collateral_mode")
 	add(c.Collateral != nil, "collateral")
+	add(c.ProductDetails.Set, "product_details")
+	add(c.CashPlan.Set || c.ConfirmCashPlan, "cash_plan")
 	return fields
 }
 
@@ -136,6 +163,15 @@ func (c PatchCommand) Validate() error {
 	}
 	if col := c.Collateral; col != nil && col.Validate() != nil {
 		add("collateral", "INVALID", "Укажите тип, вид владения, описание и стоимость залога больше нуля")
+	}
+	if p := c.ProductDetails.Value; p != nil {
+		errs = append(errs, p.Validate()...)
+	}
+	if p := c.CashPlan.Value; p != nil {
+		errs = append(errs, p.Validate()...)
+	}
+	if c.CashPlan.Set && c.ConfirmCashPlan {
+		add("cash_plan.confirmed", "NOT_ALLOWED", "Подтвердите план отдельной правкой после сохранения")
 	}
 
 	if len(errs) > 0 {
@@ -192,6 +228,84 @@ func (c PatchCommand) Apply(a *applicationdomain.Application) error {
 	return nil
 }
 
+// ApplyPlan применяет правку полей проекта и денежного плана. product — продукт
+// заявки после правки запроса (nil — не выбран). Поля проекта есть только у
+// «Старта». План в черновике — тоже только у «Старта»: у других разовых кредитов
+// клиент вводит план ликвидности по запросу банка, у овердрафта плана нет.
+// Подтверждение — отдельной правкой сохранённого плана, который покрывает срок
+// кредита с месяца после бизнес-даты; после любой правки содержимого его нет.
+// Вызывается после Apply; при ошибке ничего не меняется.
+func (c PatchCommand) ApplyPlan(d Draft, product *applicationdomain.Product, now time.Time) (*ProjectWrite, *PlanWrite, error) {
+	var errs []applicationerrors.FieldError
+	add := func(field, code, message string) {
+		errs = append(errs, applicationerrors.FieldError{Field: field, Code: code, Message: message})
+	}
+	var project *ProjectWrite
+	if c.ProductDetails.Set {
+		switch {
+		case c.ProductDetails.Value == nil:
+			project = &ProjectWrite{}
+		case product == nil:
+			add("product_details", "PRODUCT_REQUIRED", "Сначала выберите продукт")
+		case product.Code != cashplandomain.ProductStart:
+			add("product_details", "NOT_SUPPORTED", "Поля продукта сейчас заполняются только у «Старта»")
+		default:
+			next := *c.ProductDetails.Value
+			project = &ProjectWrite{Value: &next}
+		}
+	}
+
+	var plan *PlanWrite
+	kind, ok := planKind(product)
+	switch {
+	case c.CashPlan.Set && c.CashPlan.Value == nil:
+		plan = &PlanWrite{}
+	case c.CashPlan.Set:
+		next := *c.CashPlan.Value
+		switch {
+		case product == nil:
+			add("cash_plan", "PRODUCT_REQUIRED", "Сначала выберите продукт")
+		case !ok:
+			add("cash_plan", "NOT_SUPPORTED", "У овердрафта нет денежного плана")
+		case next.Kind != kind:
+			add("cash_plan.kind", "KIND_MISMATCH", "Для этого продукта вид плана — "+string(kind))
+		case kind == cashplandomain.KindLiquidity && d.Application.Status == applicationdomain.StatusDraft:
+			add("cash_plan", "NOT_ALLOWED", "План ликвидности заполняется по запросу банка")
+		default:
+			next = next.Replacing(d.CashPlan)
+			plan = &PlanWrite{Value: &next}
+		}
+	case c.ConfirmCashPlan:
+		current := d.CashPlan
+		switch {
+		case current == nil:
+			add("cash_plan", "NOT_PROVIDED", "Сначала сохраните план")
+		case !ok || current.Kind != kind:
+			add("cash_plan.kind", "KIND_MISMATCH", "Вид плана не подходит продукту — обновите план")
+		default:
+			errs = append(errs, current.HorizonErrors(d.Application.Request.TermMonths, now)...)
+			// Уже подтверждённый план повтор не меняет.
+			if errs == nil && !current.Confirmed() {
+				next := *current
+				next.Confirm(c.UserID, now)
+				plan = &PlanWrite{Value: &next}
+			}
+		}
+	}
+	if errs != nil {
+		return nil, nil, &applicationerrors.ValidationError{Fields: errs}
+	}
+	return project, plan, nil
+}
+
+// planKind — вид денежного плана продукта; ok == false — плана у продукта нет.
+func planKind(p *applicationdomain.Product) (cashplandomain.Kind, bool) {
+	if p == nil {
+		return "", false
+	}
+	return cashplandomain.KindFor(p.Code, p.Overdraft)
+}
+
 // trimmed убирает пробелы по краям; пустая строка — null.
 func trimmed(s *string) *string {
 	if s == nil {
@@ -206,6 +320,112 @@ func trimmed(s *string) *string {
 
 //=================================================================================================
 // ОТПРАВКА:
+
+// CheckSubmit — правила отправки одним списком ошибок полей (ValidationError):
+// полнота запроса и условия продукта (applicationdomain.CheckSubmit), поля
+// проекта и денежный план (CheckPlan), принятые финансы (P02: снимок текущего
+// цикла; без истории — только «Старт»). Их проверяют submit, resubmit и этап
+// validation конвейера — по одним правилам.
+func (d Draft) CheckSubmit(now time.Time) error {
+	var fields []applicationerrors.FieldError
+	if err := d.Application.CheckSubmit(d.Product, d.Collateral != nil); err != nil {
+		var v *applicationerrors.ValidationError
+		if !errors.As(err, &v) {
+			return err
+		}
+		fields = v.Fields
+	}
+	fields = append(fields, d.CheckPlan(now)...)
+	if d.Product != nil {
+		fields = append(fields, d.Financials.SubmitErrors(d.Product.Code)...)
+	}
+	if fields != nil {
+		return &applicationerrors.ValidationError{Fields: fields}
+	}
+	return nil
+}
+
+// CheckPlan — поля проекта и денежный план при отправке (P09, P11). У «Старта»
+// обязательны полные поля проекта с бюджетом (кредит + собственные средства =
+// стоимость, собственных не меньше 30%) и подтверждённый прогноз на срок кредита
+// с месяцем начала продаж внутри него. План ликвидности обязателен, если банк
+// открыл cash_plan в текущем раунде уточнений. У овердрафта плана нет, поля
+// проекта — только у «Старта». Продукт и срок проверяет CheckSubmit.
+func (d Draft) CheckPlan(now time.Time) []applicationerrors.FieldError {
+	p, a := d.Product, d.Application
+	if p == nil {
+		return nil
+	}
+	var errs []applicationerrors.FieldError
+	add := func(field, code, message string) {
+		errs = append(errs, applicationerrors.FieldError{Field: field, Code: code, Message: message})
+	}
+	kind, ok := planKind(p)
+	if kind != cashplandomain.KindProject && d.Project != nil {
+		add("product_details", "NOT_ALLOWED", "Поля проекта — только у «Старта»: удалите их или выберите «Старт»")
+	}
+	if !ok {
+		if d.CashPlan != nil {
+			add("cash_plan", "NOT_ALLOWED", "У овердрафта нет денежного плана — удалите его")
+		}
+		return errs
+	}
+
+	projectComplete := false
+	if kind == cashplandomain.KindProject {
+		if d.Project == nil {
+			add("product_details", "REQUIRED", "Опишите проект")
+		} else if missing := d.Project.MissingErrors(); missing != nil {
+			errs = append(errs, missing...)
+		} else {
+			projectComplete = true
+			if amount := a.Request.AmountKopecks; amount != nil {
+				errs = append(errs, d.Project.BudgetErrors(*amount)...)
+			}
+		}
+	} else if !slices.Contains(a.Info.EditableFields, "cash_plan") {
+		return errs
+	}
+
+	plan := d.CashPlan
+	switch {
+	case plan == nil:
+		add("cash_plan", "REQUIRED", "Заполните денежный план")
+		return errs
+	case plan.Kind != kind:
+		add("cash_plan.kind", "KIND_MISMATCH", "Вид плана не подходит продукту — обновите план")
+		return errs
+	}
+	if a.Request.TermMonths != nil {
+		errs = append(errs, plan.HorizonErrors(a.Request.TermMonths, now)...)
+	}
+	if !plan.Confirmed() {
+		add("cash_plan.confirmed", cashplandomain.CodeForecastConfirmation, "Подтвердите денежный план")
+	}
+	if projectComplete {
+		purpose := ""
+		if a.Request.Purpose != nil {
+			purpose = string(*a.Request.Purpose)
+		}
+		errs = append(errs, d.Project.PlanErrors(*plan, purpose)...)
+	}
+	return errs
+}
+
+// ListFilter — заявки компании для клиента, новые сверху. Before — курсор:
+// номер последней заявки предыдущей страницы.
+type ListFilter struct {
+	CompanyID uuid.UUID
+	Status    *applicationdomain.Status
+	Limit     int
+	Before    *int64
+}
+
+// ListCommand — список заявок компании, где пользователь — представитель.
+type ListCommand struct {
+	UserID uuid.UUID
+	ListFilter
+}
 
 // SubmitCommand — отправка черновика или повторная отправка после уточнений.
 // Повтор с тем же Idempotency-Key и expected_revision не создаёт второй отправки.

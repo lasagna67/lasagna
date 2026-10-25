@@ -18,7 +18,8 @@ import (
 func TestTransitions(t *testing.T) {
 	past := time.Now().Add(-time.Hour)
 	expire := func(a *Application) (Transition, error) { return a.Expire(&past, time.Now()) }
-	submit := func(a *Application) (Transition, error) { return a.Submit(time.Now()) }
+	submit := func(a *Application) (Transition, error) { return a.Submit(time.Now(), uuid.New()) }
+	resubmit := func(a *Application) (Transition, error) { return a.Resubmit(uuid.New()) }
 
 	tests := []struct {
 		name string
@@ -27,7 +28,7 @@ func TestTransitions(t *testing.T) {
 		from []Status
 	}{
 		{"Submit", submit, StatusSubmitted, []Status{StatusDraft}},
-		{"Resubmit", (*Application).Resubmit, StatusSubmitted, []Status{StatusInfoRequested}},
+		{"Resubmit", resubmit, StatusSubmitted, []Status{StatusInfoRequested}},
 		{"StartValidation", (*Application).StartValidation, StatusValidation, []Status{StatusSubmitted}},
 		{"StartEnrichment", (*Application).StartEnrichment, StatusEnrichment, []Status{StatusValidation}},
 		{"StartScoring", (*Application).StartScoring, StatusScoring, []Status{StatusEnrichment}},
@@ -67,8 +68,9 @@ func TestTransitions(t *testing.T) {
 func TestTerminalStatusesHaveNoTransitions(t *testing.T) {
 	past := time.Now().Add(-time.Hour)
 	methods := []func(*Application) (Transition, error){
-		func(a *Application) (Transition, error) { return a.Submit(time.Now()) },
-		(*Application).Resubmit, (*Application).StartValidation, (*Application).StartEnrichment,
+		func(a *Application) (Transition, error) { return a.Submit(time.Now(), uuid.New()) },
+		func(a *Application) (Transition, error) { return a.Resubmit(uuid.New()) },
+		(*Application).StartValidation, (*Application).StartEnrichment,
 		(*Application).StartScoring, (*Application).SendToManualReview, (*Application).RequestInfo, (*Application).Approve,
 		(*Application).CounterOffer, (*Application).Reject, (*Application).Sign, (*Application).Decline, (*Application).Issue,
 		func(a *Application) (Transition, error) { return a.Expire(&past, time.Now()) },
@@ -181,7 +183,7 @@ func TestInfoRequestedRound(t *testing.T) {
 		!slices.Equal(actions, []Action{ActionEdit, ActionAnswerInfo}) {
 		t.Errorf("open round: fields %v, actions %v", fields, actions)
 	}
-	if _, err := a.Resubmit(); !errors.Is(err, applicationerrors.ErrInfoRequestsOpen) || a.Status != StatusInfoRequested {
+	if _, err := a.Resubmit(uuid.New()); !errors.Is(err, applicationerrors.ErrInfoRequestsOpen) || a.Status != StatusInfoRequested {
 		t.Errorf("resubmit with open requests = %v; want ErrInfoRequestsOpen", err)
 	}
 
@@ -190,7 +192,7 @@ func TestInfoRequestedRound(t *testing.T) {
 	if fields, actions := a.EditableFields(), a.ClientActions(); len(fields) != 0 || !slices.Equal(actions, []Action{ActionResubmit}) {
 		t.Errorf("answered round: fields %v, actions %v", fields, actions)
 	}
-	if tr, err := a.Resubmit(); err != nil || tr.To != StatusSubmitted {
+	if tr, err := a.Resubmit(uuid.New()); err != nil || tr.To != StatusSubmitted {
 		t.Errorf("resubmit = %+v, %v", tr, err)
 	}
 }

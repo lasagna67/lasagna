@@ -14,6 +14,7 @@ import (
 type App struct {
 	logger      *logger.Logger
 	delivery    *Delivery
+	workers     *Workers
 
 	repo     	*Repo
 	service 	*Service
@@ -33,9 +34,11 @@ func NewApp(cfg config.Config, logger *logger.Logger) (*App, error) {
 		return nil, err
 	}
 	delivery := NewDelivery(cfg, services, logger.Named("delivery"))
+	workers := NewWorkers(cfg, infra, services, logger.Named("workers"))
 
 	return &App{
 		delivery:       delivery,
+		workers:        workers,
 		logger:         logger,
 		infra:          infra,
 		repo:           repo,
@@ -53,9 +56,12 @@ func (app *App) Healthy(ctx context.Context) error {
 	return app.infra.Healthy(ctx)
 }
 
-// Запуск сервера http и воркера уведомлений
+// Запуск сервера http и фоновых процессов конвейера: relay outbox и consumer этапов
 func (app *App) Run(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error { return app.workers.RunRelay(ctx) })
+	g.Go(func() error { return app.workers.RunPipeline(ctx) })
 
 	g.Go(func() error {
 		err := app.delivery.Start()

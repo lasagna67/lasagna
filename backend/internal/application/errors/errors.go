@@ -22,6 +22,9 @@ var (
 	ErrInfoRequestsOpen = errors.New("info requests are not answered")
 	// ErrServiceUnavailable — недоступна инфраструктура: хранилище файлов, конвейер (503).
 	ErrServiceUnavailable = errors.New("service unavailable")
+	// ErrStaleRun — результат устаревшего запуска конвейера: заявку отправили
+	// заново или запуск ещё не начат. Конвейер такой результат отбрасывает.
+	ErrStaleRun = errors.New("stale pipeline run")
 )
 
 // RevisionConflictError — заявку уже изменили: expected_revision устарел

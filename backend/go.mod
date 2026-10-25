@@ -17,6 +17,7 @@ require (
 	github.com/redis/go-redis/v9 v9.23.0
 	github.com/signintech/gopdf v0.38.1
 	github.com/twmb/franz-go v1.22.2
+	github.com/twmb/franz-go/pkg/kmsg v1.15.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.46.0
 	golang.org/x/sync v0.24.0
@@ -47,7 +48,6 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/sethvargo/go-retry v0.5.0 // indirect
-	github.com/twmb/franz-go/pkg/kmsg v1.15.0 // indirect
 	go.uber.org/atomic v1.12.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect

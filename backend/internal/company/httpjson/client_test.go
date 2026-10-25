@@ -110,7 +110,7 @@ func TestVerifySignature(t *testing.T) {
 		"subject":{"full_name":"Кедрова Анна Викторовна","inn":"770586906621"},
 		"organization":{"name":"ООО «Кедровый контур Демо»","inn":"7705005410"}}}`)
 	cert, err := verify()
-	want := companydomain.Certificate{Serial: "0BFD", Type: companydomain.CertificateLegalEntityHead, OwnerINN: "770586906621", OrganizationINN: "7705005410"}
+	want := companydomain.Certificate{Serial: "0BFD", Type: companydomain.CertificateLegalEntityHead, OwnerINN: "770586906621", OrganizationINN: "7705005410", OwnerFullName: "Кедрова Анна Викторовна", OrganizationName: "ООО «Кедровый контур Демо»"}
 	if err != nil || cert != want {
 		t.Fatalf("valid signature: %+v, %v", cert, err)
 	}

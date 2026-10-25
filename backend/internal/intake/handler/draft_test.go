@@ -200,3 +200,74 @@ func TestSendErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestPatchCashPlanBody(t *testing.T) {
+	path := "/applications/" + appID.String()
+	svc := &fakeService{}
+	body := `{"expected_revision":3,
+		"product_details":{"project_description":"  Пекарня ","cost_items":[{"name":" Печь ","amount_kopecks":40000000}],
+			"own_funds_kopecks":20000000,"sales_start_month":"2026-12"},
+		"cash_plan":{"kind":"project","first_month":"2026-11","own_reserve_kopecks":0,
+			"forecast":[{"month":"2026-11","income_kopecks":0,"expenses_kopecks":3000000}]}}`
+	if rec := do(newTestServer(client, svc), http.MethodPatch, path, body); rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rec.Code, rec.Body)
+	}
+	cmd := svc.patch
+	p, plan := cmd.ProductDetails.Value, cmd.CashPlan.Value
+	if !cmd.ProductDetails.Set || p == nil || *p.Description != "Пекарня" || p.CostItems[0].Name != "Печь" || *p.OwnFundsKopecks != 20000000 ||
+		!cmd.CashPlan.Set || plan == nil || plan.Kind != "project" || plan.OwnReserveKopecks != 0 || len(plan.Forecast) != 1 ||
+		plan.Forecast[0].ExpensesKopecks != 3000000 || cmd.ConfirmCashPlan {
+		t.Errorf("command = %+v, project %+v, plan %+v", cmd, p, plan)
+	}
+
+	if rec := do(newTestServer(client, svc), http.MethodPatch, path, `{"expected_revision":4,"cash_plan":{"confirmed":true}}`); rec.Code != http.StatusOK ||
+		!svc.patch.ConfirmCashPlan || svc.patch.CashPlan.Set {
+		t.Errorf("confirm = %d, %+v", rec.Code, svc.patch)
+	}
+	if rec := do(newTestServer(client, svc), http.MethodPatch, path, `{"expected_revision":5,"cash_plan":null,"product_details":null}`); rec.Code != http.StatusOK ||
+		!svc.patch.CashPlan.Set || svc.patch.CashPlan.Value != nil || !svc.patch.ProductDetails.Set || svc.patch.ProductDetails.Value != nil {
+		t.Errorf("null = %d, %+v", rec.Code, svc.patch)
+	}
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantField  string
+	}{
+		{"content with confirmation", `{"expected_revision":1,"cash_plan":{"kind":"project","first_month":"2026-11","own_reserve_kopecks":0,"forecast":[],"confirmed":true}}`, http.StatusBadRequest, ""},
+		{"confirmation removed by hand", `{"expected_revision":1,"cash_plan":{"confirmed":false}}`, http.StatusBadRequest, ""},
+		{"unknown plan field", `{"expected_revision":1,"cash_plan":{"kind":"project","months":[]}}`, http.StatusBadRequest, ""},
+		{"unknown project field", `{"expected_revision":1,"product_details":{"budget":1}}`, http.StatusBadRequest, ""},
+		{"missing income is not zero", `{"expected_revision":1,"cash_plan":{"kind":"project","first_month":"2026-11","own_reserve_kopecks":0,
+			"forecast":[{"month":"2026-11","expenses_kopecks":1}]}}`, http.StatusUnprocessableEntity, "cash_plan.forecast[0].income_kopecks"},
+		{"missing reserve", `{"expected_revision":1,"cash_plan":{"kind":"project","first_month":"2026-11","forecast":[]}}`, http.StatusUnprocessableEntity, "cash_plan.own_reserve_kopecks"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := do(newTestServer(client, &fakeService{}), http.MethodPatch, path, tt.body)
+			var got errorBody
+			_ = json.Unmarshal(rec.Body.Bytes(), &got)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status %d; want %d, body %s", rec.Code, tt.wantStatus, rec.Body)
+			}
+			if tt.wantField != "" && (len(got.Error.FieldErrors) != 1 || got.Error.FieldErrors[0].Field != tt.wantField || got.Error.FieldErrors[0].Code != "REQUIRED") {
+				t.Errorf("field errors = %+v", got.Error.FieldErrors)
+			}
+		})
+	}
+}
+
+func (f *fakeService) Get(_ context.Context, _ uuid.UUID, id uuid.UUID) (intakedomain.Details, error) {
+	return f.details(id)
+}
+
+func (f *fakeService) List(_ context.Context, cmd intakedomain.ListCommand) ([]intakedomain.Details, *int64, error) {
+	f.list = cmd
+	if f.err != nil {
+		return nil, nil, f.err
+	}
+	d, _ := f.details(appID)
+	next := d.Number
+	return []intakedomain.Details{d}, &next, nil
+}

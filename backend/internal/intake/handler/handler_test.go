@@ -31,6 +31,7 @@ type fakeService struct {
 	last  applicationdomain.CreateCommand
 	patch intakedomain.PatchCommand
 	sent  intakedomain.SubmitCommand
+	list  intakedomain.ListCommand
 }
 
 func (f *fakeService) Create(_ context.Context, cmd applicationdomain.CreateCommand) (applicationdomain.ApplicationDetails, error) {

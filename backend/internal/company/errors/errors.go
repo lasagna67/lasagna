@@ -19,6 +19,11 @@ var (
 	ErrESignUnavailable    = errors.New("esign unavailable")
 	ErrReportNotFound      = errors.New("report not found")
 	ErrOverviewNotFound    = errors.New("saved company overview not found")
+
+	// ErrInvalidReport — источник ответил, но ответ некорректен: чужой ИНН,
+	// неизвестный статус, неверный формат. Снимок такого ответа — invalid, а не
+	// unavailable: данные получены, но использовать их нельзя.
+	ErrInvalidReport = errors.New("invalid source report")
 )
 
 // ValidationError — некорректное значение поля во входных данных.

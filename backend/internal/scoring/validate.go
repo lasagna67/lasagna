@@ -2,14 +2,18 @@ package scoring
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"math/bits"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
+	"github.com/lasagna67/lasagna.git/internal/validation"
 )
 
 type ValidationStatus string
@@ -174,15 +178,20 @@ func validateOverview(o companydomain.Overview, inn string, now time.Time) Valid
 			result.Reasons = append(result.Reasons, ReasonFinancialsINNMismatch)
 		}
 		months := make(map[string]struct{}, len(financials.MonthlyData))
+		monthStart := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
+		windowStart := monthStart.AddDate(0, -6, 0).Format("2006-01")
 		for _, record := range financials.MonthlyData {
 			if _, err := time.Parse("2006-01", record.Month); err != nil || record.Month > date.Format("2006-01") {
 				result.Reasons = append(result.Reasons, ReasonFinancialMonthInvalid)
 				continue
 			}
+			if record.Month < windowStart || record.Month >= monthStart.Format("2006-01") {
+				continue
+			}
 			months[record.Month] = struct{}{}
 		}
 		result.FinancialMonths = len(months)
-		if result.FinancialMonths < 4 {
+		if result.FinancialMonths < 3 {
 			result.Reasons = append(result.Reasons, ReasonFinancialHistoryInsufficient)
 		}
 	}
@@ -198,8 +207,10 @@ func validateOverview(o companydomain.Overview, inn string, now time.Time) Valid
 	return result
 }
 
-// NoAnomalousIncome checks for income strictly greater than three medians.
-// nil means fewer than three months, negative income or a zero median.
+// NoAnomalousIncome — нет разового поступления (P04): ни одна строка не больше
+// двух медиан income; при нулевой медиане разовым считается любое положительное
+// поступление. Ровно две медианы флага не дают. nil — меньше трёх месяцев или
+// отрицательные поступления.
 func NoAnomalousIncome(months []companydomain.MonthlyData) *bool {
 	if len(months) < 3 {
 		return nil
@@ -213,28 +224,125 @@ func NoAnomalousIncome(months []companydomain.MonthlyData) *bool {
 	}
 	slices.Sort(income)
 	lower, upper := income[(len(income)-1)/2], income[len(income)/2]
-	if upper == 0 {
-		return nil
-	}
-	median := lower + (upper-lower)/2
 	clean := true
-	if median > math.MaxInt64/3 {
+	// Две медианы — ровно lower + upper, без половины копейки у чётного ряда.
+	if lower > math.MaxInt64-upper {
 		return &clean
 	}
-	threshold := 3 * median
-	// For a half-kopeck median, floor(3 * median) has one extra kopeck.
-	if (upper-lower)%2 != 0 && threshold < math.MaxInt64 {
-		threshold++
-	}
-	clean = income[len(income)-1] <= threshold
+	clean = income[len(income)-1] <= lower+upper
 	return &clean
 }
 
-// dataCurrent accepts data up to 30 days old, including the exact boundary.
-func dataCurrent(date *time.Time, now time.Time) *bool {
-	if date == nil || date.IsZero() {
+// При чтении нормализованных снимков из JSON отличаем явно переданный ноль
+// от отсутствующей суммы. При вызове из Go значения передаёт вызывающий код.
+func (in *OverdraftInput) UnmarshalJSON(data []byte) error {
+	type input OverdraftInput
+	var decoded input
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields struct {
+		Overview struct {
+			Financials struct {
+				Data *struct {
+					Months []map[string]json.RawMessage `json:"monthly_data"`
+				}
+			}
+			CreditHistory struct {
+				Data *struct {
+					Report struct {
+						Loans []map[string]json.RawMessage `json:"loans"`
+					} `json:"report"`
+				}
+			}
+		}
+	}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	check := func(row map[string]json.RawMessage, names ...string) error {
+		for _, name := range names {
+			if value := strings.TrimSpace(string(row[name])); value == "" || value == "null" {
+				return fmt.Errorf("missing required monetary field %s", name)
+			}
+		}
 		return nil
 	}
-	current := !date.After(now) && !date.Before(now.Add(-30*24*time.Hour))
-	return &current
+	if report := fields.Overview.Financials.Data; report != nil {
+		for _, row := range report.Months {
+			if err := check(row, "income", "expenses", "taxes", "owner_withdrawals"); err != nil {
+				return err
+			}
+		}
+	}
+	if report := fields.Overview.CreditHistory.Data; report != nil {
+		for _, row := range report.Report.Loans {
+			if string(row["status"]) == `"active"` {
+				if err := check(row, "monthly_payment", "outstanding_amount", "overdue_amount"); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	*in = OverdraftInput(decoded)
+	return nil
+}
+
+func overdraftMonths(in OverdraftInput, day time.Time) ([]companydomain.MonthlyData, string) {
+	r := in.Overview.Financials
+	if r.Status != "ok" || r.Data == nil {
+		return nil, "FINANCIALS_UNAVAILABLE"
+	}
+	if r.Data.Status != "ok" || in.INN == "" || r.Data.INN != in.INN || r.Data.Currency != "RUB" {
+		return nil, "FINANCIALS_INVALID"
+	}
+	monthStart := time.Date(day.Year(), day.Month(), 1, 0, 0, 0, 0, day.Location())
+	start, end := monthStart.AddDate(0, -6, 0).Format("2006-01"), monthStart.Format("2006-01")
+	months := []companydomain.MonthlyData{}
+	seen := map[string]bool{}
+	for _, m := range r.Data.MonthlyData {
+		if _, err := time.Parse("2006-01", m.Month); err != nil {
+			return nil, "FINANCIALS_INVALID"
+		}
+		if m.Month < start || m.Month >= end {
+			continue
+		}
+		if seen[m.Month] || m.Income < 0 || m.Expenses < 0 || m.Taxes < 0 || m.OwnerWithdrawals < 0 {
+			return nil, "FINANCIALS_INVALID"
+		}
+		seen[m.Month] = true
+		months = append(months, m)
+	}
+	sort.Slice(months, func(i, j int) bool { return months[i].Month < months[j].Month })
+	return months, ""
+}
+
+// Корректность проверяется отдельно от актуальности: устаревшие данные пригодны
+// для предварительного расчёта, но не для положительной публикации или автоотказа.
+func overdraftCredit(in OverdraftInput, day time.Time) (*companydomain.CreditReport, int64, string) {
+	return validatedCreditDebt(in.Overview.CreditHistory, in.INN, day)
+}
+
+func validatedCreditDebt(r companydomain.SourceResult[companydomain.CreditReport], inn string, day time.Time) (*companydomain.CreditReport, int64, string) {
+	credit, reason := validation.CreditReport(r, inn, day)
+	if reason != "" {
+		return credit, 0, reason
+	}
+	debt, err := ActiveMonthlyDebt(credit.Report.Loans)
+	if err != nil {
+		return credit, 0, "CALCULATION_FAILED"
+	}
+	return credit, debt, ""
+}
+
+func overdraftOneOff(months []companydomain.MonthlyData) bool {
+	incomes := make([]int64, len(months))
+	for i, m := range months {
+		incomes[i] = m.Income
+	}
+	slices.Sort(incomes)
+	lower, upper := incomes[(len(incomes)-1)/2], incomes[len(incomes)/2]
+	// Удвоенная медиана чётного ряда равна точной сумме двух центральных значений.
+	sum, carry := bits.Add64(uint64(lower), uint64(upper), 0)
+	return carry == 0 && uint64(incomes[len(incomes)-1]) > sum
 }

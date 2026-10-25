@@ -9,6 +9,81 @@
     "basePath": "/api/v0",
     "paths": {
         "/applications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Заявки компании, где пользователь — представитель, новые сверху; иначе 404.\nПосле отправки статус меняется по этапам конвейера асинхронно — список и карточка\nпоказывают текущий.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Заявки компании",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Компания",
+                        "name": "company_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Статус",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "До 100, по умолчанию 20",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "next_cursor предыдущей страницы",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/intakedto.ApplicationPageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "не клиент",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND: нет компании или пользователь не её участник",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -91,13 +166,64 @@
             }
         },
         "/applications/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Заявка своей компании в любом статусе, с залогом, полями проекта и планом.\nПосле отправки по ней видно, на каком этапе конвейера заявка.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Заявка",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ApplicationResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "не клиент",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND: нет заявки или она чужая",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "patch": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "В draft — любые поля запроса и залог, в info_requested — только из editable_fields,\nиначе 409 INVALID_STATE; поле вне editable_fields — 422 NOT_EDITABLE.\nНепереданное поле не меняется, null очищает значение. need_period и collateral\nзаменяются целиком; collateral — только при collateral_mode = pledged.\nПолноту и условия продукта проверяет submit.",
+                "description": "В draft — любые поля запроса и залог, в info_requested — только из editable_fields,\nиначе 409 INVALID_STATE; поле вне editable_fields — 422 NOT_EDITABLE.\nНепереданное поле не меняется, null очищает значение. need_period и collateral\nзаменяются целиком; collateral — только при collateral_mode = pledged.\nproduct_details — поля «Старта», cash_plan — денежный план: заменяются целиком, null удаляет.\nПлан в черновике — только у «Старта» (kind = project); план ликвидности (liquidity) —\nпо запросу банка, у овердрафта плана нет. Правка содержимого снимает подтверждение;\nподтверждение — отдельной правкой {\"cash_plan\": {\"confirmed\": true}}, когда прогноз\nначинается со следующего месяца и покрывает весь срок кредита, иначе 422\nFORECAST_CONFIRMATION_REQUIRED. data_revision растёт, только если изменились данные.\nПолноту, бюджет «Старта» и условия продукта проверяет submit.",
                 "consumes": [
                     "application/json"
                 ],
@@ -202,7 +328,405 @@
                     "200": {
                         "description": "null — договора нет",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ContractResponse"
+                            "$ref": "#/definitions/offerdto.ContractResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/financials": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Источник, принятый снимок текущего цикла, пригодность на бизнес-дату и доступность\nрезервной ветки (CSV, отсутствие истории).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Финансовый шаг заявки",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialStateResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "не клиент",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND: нет заявки или она чужая",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/financials/csv": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Резервная ветка: только после not_found, unavailable или invalid автоматического источника\nи без принятого снимка текущего цикла, иначе 409 CSV_NOT_ALLOWED. UTF-8 (BOM допустим),\nразделитель запятая или точка с запятой; колонки inn,month,income,expenses,taxes,\nowner_withdrawals и необязательная free_cash; суммы в рублях с точкой, до двух знаков;\nзавершённые месяцы не раньше регистрации, до 120 строк, файл до 5 МиБ. Ошибка любой строки —\n422 INVALID_CSV со всеми найденными ошибками (file.rows[N].колонка), файл не принимается.\nПринятый CSV оставляет заявку на ручном рассмотрении.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Загрузить финансы из CSV",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Ключ повтора, до 255 символов",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Ожидаемая revision",
+                        "name": "expected_revision",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "CSV",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialStateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "CSV_NOT_ALLOWED, REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "запрос больше 5 МиБ",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "ожидается multipart/form-data",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "INVALID_CSV",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/financials/fetch": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Одна попытка источника не дольше таймаута (5 с). Успех — новый принятый снимок,\ndata_revision растёт при изменении данных. not_found, unavailable, invalid открывают\nрезервную ветку: CSV или отсутствие истории; прежний снимок цикла при неуспехе остаётся.\nВ draft или в info_requested, если банк открыл financials. demo_mode — только в демо.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Получить финансы автоматически",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Ключ повтора, до 255 символов",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Ожидаемая revision",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/financialsdto.FetchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialStateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED: financials NOT_EDITABLE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/financials/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Неизменяемые принятые снимки всех финансовых циклов, новые сверху.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "История финансовых снимков заявки",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "До 100, по умолчанию 20",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "next_cursor предыдущей страницы",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialSnapshotPageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/financials/no-history": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Только в резервной ветке без принятых данных, иначе 409 INVALID_STATE; confirmed=true\nобязательно. Отправить заявку без фактов можно только по «Старту». Принятый позже CSV\nснимает отметку.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Подтвердить отсутствие финансовой истории",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Ключ повтора, до 255 символов",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Подтверждение",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/financialsdto.NoHistoryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialStateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/financials/template": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Колонки и месяцы окна расчёта с ИНН компании, суммы пустые: незаполненный шаблон не принимается.",
+                "produces": [
+                    "text/csv"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Шаблон CSV",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CSV",
+                        "schema": {
+                            "type": "string"
                         }
                     },
                     "404": {
@@ -244,7 +768,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/reviewdto.InfoRequestResponse"
+                                "$ref": "#/definitions/underwritingdto.InfoRequestResponse"
                             }
                         }
                     },
@@ -304,7 +828,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.AnswerInfoRequest"
+                            "$ref": "#/definitions/underwritingdto.AnswerInfoRequest"
                         }
                     }
                 ],
@@ -370,7 +894,7 @@
                     "200": {
                         "description": "null — предложения нет",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.OfferResponse"
+                            "$ref": "#/definitions/offerdto.OfferResponse"
                         }
                     },
                     "404": {
@@ -389,7 +913,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "info_requested → submitted после ответов на все запросы банка; запрос проверяется\nкак при отправке. Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.",
+                "description": "info_requested → submitted после ответов на все запросы банка; запрос проверяется\nкак при отправке. Новый запуск конвейера: этапы идут асинхронно, как после submit. Если банк открыл cash_plan, план должен быть подтверждён на срок кредита.\nПовтор с тем же Idempotency-Key и телом не создаёт второй отправки.",
                 "consumes": [
                     "application/json"
                 ],
@@ -468,9 +992,235 @@
                         "schema": {
                             "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/sign": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Backend проверяет подпись через esign-mock; PIN и сертификат от клиента не принимает. Атомарно сохраняет артефакт, accepted, signing и задачу выдачи pending. Повтор с тем же ключом и телом не создаёт новую операцию.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Проверить криптографическую подпись договора",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Ключ повтора, до 255 символов",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Контекст, подпись и согласие с условиями",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/signdto.SignRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/signdto.Signature"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Требуется авторизация",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, OFFER_CHANGED, SIGNING_CONTEXT_EXPIRED, IDEMPOTENCY_CONFLICT, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "INVALID_SIGNATURE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
                     },
                     "503": {
-                        "description": "SERVICE_UNAVAILABLE: конвейер",
+                        "description": "SOURCE_RECHECK_REQUIRED или SERVICE_UNAVAILABLE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/signature": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "JSON: подписанные данные, подпись, проверенный сертификат и хеш исходного PDF.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Скачать артефакт подписи",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/signdto.Signature"
+                        }
+                    },
+                    "401": {
+                        "description": "Требуется авторизация",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/signing-context": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "TTL до 5 минут, с учётом срока проверок. Контекст связан с пользователем, revision, Offer, Contract и SHA-256 исходного PDF. При неподтверждённом P14 — 503.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "summary": "Подготовить контекст подписи договора",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Предложение, договор и версия заявки",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/signdto.PrepareRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/signdto.Context"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Требуется авторизация",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, OFFER_CHANGED, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "SOURCE_RECHECK_REQUIRED или SERVICE_UNAVAILABLE",
                         "schema": {
                             "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
@@ -485,7 +1235,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "draft → submitted → конвейер проверок. Неполный запрос или нарушение условий\nпродукта — 422 с полями, заявка остаётся draft. Повтор с тем же Idempotency-Key\nи телом не создаёт второй отправки.",
+                "description": "draft → submitted с новым запуском конвейера. Ответ — в submitted: этапы\nvalidation → enrichment → scoring → manual_review идут асинхронно, текущий статус —\nGET /applications/{id}. Неполный запрос или нарушение условий\nпродукта — 422 с полями, заявка остаётся draft. У «Старта» обязательны полные\nproduct_details (кредит + собственные средства = стоимость, собственных не меньше 30%)\nи подтверждённый cash_plan на срок кредита. Повтор с тем же Idempotency-Key\nи телом не создаёт второй отправки.",
                 "consumes": [
                     "application/json"
                 ],
@@ -561,12 +1311,6 @@
                     },
                     "422": {
                         "description": "VALIDATION_FAILED",
-                        "schema": {
-                            "$ref": "#/definitions/applicationdto.ErrorResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "SERVICE_UNAVAILABLE: конвейер",
                         "schema": {
                             "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
@@ -972,6 +1716,45 @@
             }
         },
         "/companies/{id}/financials": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Последний принятый снимок по заявкам компании с источником, датой и периодом; нет — null.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Финансовый профиль компании",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Компания",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialSnapshotResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND: нет компании или пользователь не её участник",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -1546,7 +2329,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ApplicationPageResponse"
+                            "$ref": "#/definitions/underwritingdto.ApplicationPageResponse"
                         }
                     },
                     "400": {
@@ -1599,7 +2382,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
                         }
                     },
                     "401": {
@@ -1616,6 +2399,83 @@
                     },
                     "404": {
                         "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/underwriter/applications/{id}/cash-plan-review": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Неизменяемая версия заключения в manual_review или info_requested: accepted, needs_info\nили rejected с внутренним comment о предпосылках. accepted — с validated_reserve_kopecks\nот 0 до заявленного резерва: кредитные средства и деньги бюджета проекта в него не входят.\nterms — условия проверки, по умолчанию из запроса; сумма не больше запрошенной. Принять план\nможно, только если клиент подтвердил его на срок условий, а у «Старта» сумма сходится с\nбюджетом, — иначе 422: сначала новая ревизия клиента. Заключение действует, пока не\nизменились план, условия и data_revision заявки; revision + 1, data_revision не меняется.\nneeds_info сам вопрос клиенту не создаёт — для этого request-info.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "underwriter"
+                ],
+                "summary": "Заключение по денежному плану",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Заключение",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/underwritingdto.CashPlanReviewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN: заявка у другого сотрудника",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED: нет плана, не подтверждён, условия, резерв",
                         "schema": {
                             "$ref": "#/definitions/applicationdto.ErrorResponse"
                         }
@@ -1713,7 +2573,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "approved — условия как в запросе (ставка не считается), counter_offer — изменён продукт,\nсумма, срок или обеспечение. Положительное решение требует готовых проверок и принятого\nзалога у обеспеченного продукта; создаёт предложение и PDF договора. Платёж считает сервер.\nrejected — с reason_code и пояснениями для клиента.",
+                "description": "approved — условия как в запросе (ставка не считается), counter_offer — изменён продукт,\nсумма, срок или обеспечение. Положительное решение требует готовых проверок, принятого\nзалога у обеспеченного продукта и, если нужен денежный план, подтверждённого клиентом и\nпринятого на этих условиях плана, который проходит расчёт; создаёт предложение и PDF\nдоговора. Предложение по плану действует не дольше 7 суток и до начала следующего месяца.\nПлатёж считает сервер.\nrejected — с reason_code и пояснениями для клиента.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1739,7 +2599,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.DecisionRequest"
+                            "$ref": "#/definitions/underwritingdto.DecisionRequest"
                         }
                     }
                 ],
@@ -1747,7 +2607,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
                         }
                     },
                     "400": {
@@ -1822,7 +2682,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.RequestInfoRequest"
+                            "$ref": "#/definitions/underwritingdto.RequestInfoRequest"
                         }
                     }
                 ],
@@ -1830,7 +2690,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
                         }
                     },
                     "400": {
@@ -1873,7 +2733,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Перезапрашивает источники; результат придёт асинхронно с новой revision.\nПока конвейер не подключён — 503.",
+                "description": "Перезапрашивает источники в manual_review; результат придёт асинхронно с новой\nrevision: новые снимки, стоп-правило P06 (может дать rejected) и пересчёт модели.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1899,7 +2759,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.RetryChecksRequest"
+                            "$ref": "#/definitions/underwritingdto.RetryChecksRequest"
                         }
                     }
                 ],
@@ -1907,7 +2767,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
                         }
                     },
                     "400": {
@@ -1949,6 +2809,77 @@
                 }
             }
         },
+        "/underwriter/applications/{id}/retry-scoring": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Пересчитывает модель в manual_review на текущих снимках реестра и БКИ и принятых\nфинансах — например, после оценки failed. Результат придёт асинхронно с новой revision.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "underwriter"
+                ],
+                "summary": "Пересчитать скоринг",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Ожидаемая revision",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/underwritingdto.RevisionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "FORBIDDEN: заявка у другого сотрудника",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/underwriter/applications/{id}/take": {
             "post": {
                 "security": [
@@ -1982,7 +2913,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.RevisionRequest"
+                            "$ref": "#/definitions/underwritingdto.RevisionRequest"
                         }
                     }
                 ],
@@ -1990,7 +2921,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/reviewdto.ReviewApplicationResponse"
+                            "$ref": "#/definitions/underwritingdto.ReviewApplicationResponse"
                         }
                     },
                     "400": {
@@ -2348,6 +3279,9 @@
                         "submit"
                     ]
                 },
+                "cash_plan": {
+                    "type": "object"
+                },
                 "checks": {
                     "type": "object"
                 },
@@ -2367,6 +3301,10 @@
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "data_revision": {
+                    "type": "integer",
+                    "example": 1
                 },
                 "editable_fields": {
                     "type": "array",
@@ -2394,6 +3332,9 @@
                     "example": 1000
                 },
                 "offer": {
+                    "type": "object"
+                },
+                "plan_review": {
                     "type": "object"
                 },
                 "product_details": {
@@ -2521,12 +3462,167 @@
                 }
             }
         },
+        "applicationdto.FinancialProvenanceResponse": {
+            "type": "object",
+            "properties": {
+                "file_name": {
+                    "type": "string"
+                },
+                "financial_cycle_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "received_at": {
+                    "type": "string"
+                },
+                "source_type": {
+                    "type": "string",
+                    "enum": [
+                        "automatic",
+                        "csv"
+                    ]
+                }
+            }
+        },
+        "applicationdto.FinancialQualityResponse": {
+            "type": "object",
+            "properties": {
+                "as_of_date": {
+                    "type": "string",
+                    "example": "2026-10-25"
+                },
+                "coverage": {
+                    "type": "string",
+                    "enum": [
+                        "complete",
+                        "partial"
+                    ],
+                    "example": "complete"
+                },
+                "n_months": {
+                    "type": "integer",
+                    "example": 6
+                },
+                "stale": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "window_from": {
+                    "type": "string",
+                    "example": "2026-04"
+                },
+                "window_to": {
+                    "type": "string",
+                    "example": "2026-09"
+                }
+            }
+        },
+        "applicationdto.FinancialRowResponse": {
+            "type": "object",
+            "properties": {
+                "expenses_kopecks": {
+                    "type": "integer"
+                },
+                "free_cash_kopecks": {
+                    "type": "integer"
+                },
+                "income_kopecks": {
+                    "type": "integer"
+                },
+                "month": {
+                    "type": "string",
+                    "example": "2026-09"
+                },
+                "owner_withdrawals_kopecks": {
+                    "type": "integer"
+                },
+                "taxes_kopecks": {
+                    "type": "integer"
+                }
+            }
+        },
+        "applicationdto.FinancialSnapshotPageResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/applicationdto.FinancialSnapshotResponse"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "applicationdto.FinancialSnapshotResponse": {
+            "type": "object",
+            "properties": {
+                "coverage": {
+                    "type": "string",
+                    "enum": [
+                        "complete",
+                        "partial"
+                    ]
+                },
+                "coverage_as_of_date": {
+                    "type": "string",
+                    "example": "2026-10-25"
+                },
+                "currency": {
+                    "type": "string",
+                    "example": "RUB"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "inn": {
+                    "type": "string",
+                    "example": "7705005410"
+                },
+                "period_from": {
+                    "type": "string",
+                    "example": "2026-04"
+                },
+                "period_to": {
+                    "type": "string",
+                    "example": "2026-09"
+                },
+                "provenance": {
+                    "$ref": "#/definitions/applicationdto.FinancialProvenanceResponse"
+                },
+                "received_at": {
+                    "type": "string"
+                },
+                "rows": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/applicationdto.FinancialRowResponse"
+                    }
+                },
+                "semantic_hash": {
+                    "type": "string"
+                }
+            }
+        },
         "applicationdto.FinancialStateResponse": {
             "type": "object",
             "properties": {
                 "allow_csv_upload": {
                     "type": "boolean",
                     "example": false
+                },
+                "allow_no_history": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "checked_at": {
+                    "type": "string"
+                },
+                "data_revision": {
+                    "type": "integer",
+                    "example": 1
                 },
                 "data_status": {
                     "type": "string",
@@ -2537,18 +3633,33 @@
                     ],
                     "example": "missing"
                 },
+                "financial_cycle_id": {
+                    "type": "integer",
+                    "example": 1
+                },
                 "issues": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/applicationdto.IssueResponse"
                     }
                 },
+                "manual_required": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "quality": {
+                    "$ref": "#/definitions/applicationdto.FinancialQualityResponse"
+                },
+                "required_refresh": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "revision": {
                     "type": "integer",
                     "example": 1
                 },
                 "snapshot": {
-                    "type": "object"
+                    "$ref": "#/definitions/applicationdto.FinancialSnapshotResponse"
                 },
                 "source_status": {
                     "type": "string",
@@ -2793,6 +3904,68 @@
                     ]
                 }
             }
+        },
+        "companydomain.Certificate": {
+            "type": "object",
+            "properties": {
+                "issuer": {
+                    "type": "string"
+                },
+                "organization_inn": {
+                    "description": "пусто, если сертификат не на организацию",
+                    "type": "string"
+                },
+                "organization_name": {
+                    "type": "string"
+                },
+                "owner_full_name": {
+                    "type": "string"
+                },
+                "owner_inn": {
+                    "type": "string"
+                },
+                "owner_position": {
+                    "type": "string"
+                },
+                "serial": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/companydomain.CertificateType"
+                },
+                "valid_from": {
+                    "type": "string"
+                },
+                "valid_to": {
+                    "type": "string"
+                }
+            }
+        },
+        "companydomain.CertificateType": {
+            "type": "string",
+            "enum": [
+                "legal_entity_head",
+                "individual_entrepreneur",
+                "individual"
+            ],
+            "x-enum-comments": {
+                "CertificateIndividual": "физлицо без организации",
+                "CertificateIndividualEntrepreneur": "ИП",
+                "CertificateLegalEntityHead": "руководитель ЮЛ, есть организация"
+            },
+            "x-enum-descriptions": [
+                "руководитель ЮЛ, есть организация",
+                "ИП",
+                "физлицо без организации"
+            ],
+            "x-enum-varnames": [
+                "CertificateLegalEntityHead",
+                "CertificateIndividualEntrepreneur",
+                "CertificateIndividual"
+            ]
         },
         "companydomain.CreditHistory": {
             "type": "object",
@@ -3537,6 +4710,80 @@
                 }
             }
         },
+        "financialsdto.FetchRequest": {
+            "type": "object",
+            "properties": {
+                "demo_mode": {
+                    "type": "string",
+                    "enum": [
+                        "normal",
+                        "unavailable",
+                        "not_found",
+                        "invalid_response"
+                    ]
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 3
+                }
+            }
+        },
+        "financialsdto.NoHistoryRequest": {
+            "type": "object",
+            "properties": {
+                "confirmed": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 4
+                }
+            }
+        },
+        "intakedto.ApplicationPageResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/applicationdto.ApplicationResponse"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "intakedto.CashPlanPatch": {
+            "type": "object",
+            "properties": {
+                "confirmed": {
+                    "type": "boolean"
+                },
+                "first_month": {
+                    "type": "string",
+                    "example": "2026-11"
+                },
+                "forecast": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/intakedto.ForecastRowRequest"
+                    }
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "project",
+                        "liquidity"
+                    ]
+                },
+                "own_reserve_kopecks": {
+                    "type": "integer",
+                    "example": 10000000
+                }
+            }
+        },
         "intakedto.CollateralRequest": {
             "type": "object",
             "properties": {
@@ -3568,6 +4815,19 @@
                 }
             }
         },
+        "intakedto.CostItemRequest": {
+            "type": "object",
+            "properties": {
+                "amount_kopecks": {
+                    "type": "integer",
+                    "example": 40000000
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Печь"
+                }
+            }
+        },
         "intakedto.CreateApplicationRequest": {
             "type": "object",
             "properties": {
@@ -3575,6 +4835,23 @@
                     "type": "string",
                     "format": "uuid",
                     "example": "9b2f6c1e-4a3d-4f7b-8c2e-1d5a6b7c8d9e"
+                }
+            }
+        },
+        "intakedto.ForecastRowRequest": {
+            "type": "object",
+            "properties": {
+                "expenses_kopecks": {
+                    "type": "integer",
+                    "example": 8000000
+                },
+                "income_kopecks": {
+                    "type": "integer",
+                    "example": 15000000
+                },
+                "month": {
+                    "type": "string",
+                    "example": "2026-11"
                 }
             }
         },
@@ -3599,12 +4876,18 @@
         "intakedto.PatchApplicationRequest": {
             "type": "object",
             "properties": {
+                "cash_plan": {
+                    "$ref": "#/definitions/intakedto.CashPlanPatch"
+                },
                 "collateral": {
                     "$ref": "#/definitions/intakedto.CollateralRequest"
                 },
                 "expected_revision": {
                     "type": "integer",
                     "example": 3
+                },
+                "product_details": {
+                    "$ref": "#/definitions/intakedto.ProjectPatch"
                 },
                 "request": {
                     "$ref": "#/definitions/intakedto.PatchRequestFields"
@@ -3658,6 +4941,29 @@
                 }
             }
         },
+        "intakedto.ProjectPatch": {
+            "type": "object",
+            "properties": {
+                "cost_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/intakedto.CostItemRequest"
+                    }
+                },
+                "own_funds_kopecks": {
+                    "type": "integer",
+                    "example": 20000000
+                },
+                "project_description": {
+                    "type": "string",
+                    "example": "Пекарня у метро"
+                },
+                "sales_start_month": {
+                    "type": "string",
+                    "example": "2026-12"
+                }
+            }
+        },
         "intakedto.RevisionRequest": {
             "type": "object",
             "properties": {
@@ -3667,34 +4973,7 @@
                 }
             }
         },
-        "reviewdto.AnswerInfoRequest": {
-            "type": "object",
-            "properties": {
-                "answer": {
-                    "type": "string",
-                    "example": "Счёт поставщика приложили, стоимость 3 млн"
-                },
-                "expected_revision": {
-                    "type": "integer",
-                    "example": 6
-                }
-            }
-        },
-        "reviewdto.ApplicationPageResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/reviewdto.UnderwriterApplicationResponse"
-                    }
-                },
-                "next_cursor": {
-                    "type": "string"
-                }
-            }
-        },
-        "reviewdto.ContractResponse": {
+        "offerdto.ContractResponse": {
             "type": "object",
             "properties": {
                 "content_sha256": {
@@ -3732,152 +5011,7 @@
                 }
             }
         },
-        "reviewdto.DecisionRequest": {
-            "type": "object",
-            "properties": {
-                "comment": {
-                    "description": "внутренний, клиенту не показывается",
-                    "type": "string"
-                },
-                "expected_revision": {
-                    "type": "integer",
-                    "example": 5
-                },
-                "outcome": {
-                    "type": "string",
-                    "enum": [
-                        "approved",
-                        "counter_offer",
-                        "rejected"
-                    ],
-                    "example": "approved"
-                },
-                "reason_code": {
-                    "type": "string",
-                    "example": "HIGH_DEBT_LOAD"
-                },
-                "reasons": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "terms": {
-                    "$ref": "#/definitions/reviewdto.TermsRequest"
-                }
-            }
-        },
-        "reviewdto.DecisionResponse": {
-            "type": "object",
-            "properties": {
-                "comment": {
-                    "type": "string"
-                },
-                "contract": {
-                    "$ref": "#/definitions/reviewdto.ContractResponse"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "decided_by": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "offer": {
-                    "$ref": "#/definitions/reviewdto.OfferResponse"
-                },
-                "outcome": {
-                    "type": "string",
-                    "enum": [
-                        "approved",
-                        "counter_offer",
-                        "rejected"
-                    ]
-                },
-                "reason_code": {
-                    "type": "string"
-                },
-                "reasons": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "version": {
-                    "type": "integer"
-                }
-            }
-        },
-        "reviewdto.EventResponse": {
-            "type": "object",
-            "properties": {
-                "actor_id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "from_status": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "to_status": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "status_changed"
-                    ]
-                }
-            }
-        },
-        "reviewdto.InfoRequestResponse": {
-            "type": "object",
-            "properties": {
-                "answer": {
-                    "type": "string"
-                },
-                "answered_at": {
-                    "type": "string"
-                },
-                "editable_fields": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "requested_at": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string",
-                    "enum": [
-                        "open",
-                        "answered",
-                        "cancelled"
-                    ]
-                }
-            }
-        },
-        "reviewdto.OfferResponse": {
+        "offerdto.OfferResponse": {
             "type": "object",
             "properties": {
                 "agreement_term_months": {
@@ -3955,7 +5089,485 @@
                 }
             }
         },
-        "reviewdto.RequestInfoRequest": {
+        "scoring.CashPlanResult": {
+            "type": "object",
+            "properties": {
+                "c": {
+                    "type": "integer"
+                },
+                "cs": {
+                    "type": "integer"
+                },
+                "debt_kopecks": {
+                    "type": "integer"
+                },
+                "max_payment_kopecks": {
+                    "type": "integer"
+                },
+                "min_stress_balance_kopecks": {
+                    "type": "integer"
+                },
+                "months": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/scoring.PlanMonth"
+                    }
+                },
+                "reserve_kopecks": {
+                    "type": "integer"
+                }
+            }
+        },
+        "scoring.PlanMonth": {
+            "type": "object",
+            "properties": {
+                "month": {
+                    "type": "string"
+                },
+                "payment_kopecks": {
+                    "type": "integer"
+                },
+                "stress_balance_kopecks": {
+                    "type": "integer"
+                }
+            }
+        },
+        "scoring.ProjectResult": {
+            "type": "object",
+            "properties": {
+                "own_funds_kopecks": {
+                    "type": "integer"
+                },
+                "plan": {
+                    "$ref": "#/definitions/scoring.CashPlanResult"
+                },
+                "preliminary": {
+                    "type": "boolean"
+                },
+                "project_cost_kopecks": {
+                    "type": "integer"
+                },
+                "required_own_funds_kopecks": {
+                    "type": "integer"
+                },
+                "result": {
+                    "type": "string",
+                    "enum": [
+                        "pass",
+                        "needs_info",
+                        "fail"
+                    ]
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "completed",
+                        "insufficient_data"
+                    ]
+                }
+            }
+        },
+        "signdto.Context": {
+            "type": "object",
+            "properties": {
+                "application_id": {
+                    "type": "string"
+                },
+                "certificate_serial": {
+                    "type": "string"
+                },
+                "context_id": {
+                    "type": "string"
+                },
+                "data": {
+                    "type": "string"
+                },
+                "document_id": {
+                    "type": "string"
+                },
+                "document_sha256": {
+                    "type": "string"
+                },
+                "expected_revision": {
+                    "type": "integer"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "offer_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "signdto.PrepareRequest": {
+            "type": "object",
+            "properties": {
+                "document_id": {
+                    "type": "string"
+                },
+                "expected_revision": {
+                    "type": "integer"
+                },
+                "offer_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "signdto.SignRequest": {
+            "type": "object",
+            "properties": {
+                "context_id": {
+                    "type": "string"
+                },
+                "signature": {
+                    "type": "string"
+                },
+                "terms_accepted": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "signdto.Signature": {
+            "type": "object",
+            "properties": {
+                "application_id": {
+                    "type": "string"
+                },
+                "certificate": {
+                    "$ref": "#/definitions/companydomain.Certificate"
+                },
+                "context_id": {
+                    "type": "string"
+                },
+                "data": {
+                    "type": "string"
+                },
+                "document_id": {
+                    "type": "string"
+                },
+                "document_sha256": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "modeled_effective_date": {
+                    "type": "string"
+                },
+                "offer_id": {
+                    "type": "string"
+                },
+                "operation_id": {
+                    "type": "string"
+                },
+                "signature": {
+                    "type": "string"
+                },
+                "signed_at": {
+                    "type": "string"
+                },
+                "signed_by": {
+                    "type": "string"
+                },
+                "signed_document_id": {
+                    "type": "string"
+                },
+                "terms_accepted": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "swagger.HTTPError": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "Неверный email или пароль"
+                }
+            }
+        },
+        "underwritingdto.AnswerInfoRequest": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string",
+                    "example": "Счёт поставщика приложили, стоимость 3 млн"
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 6
+                }
+            }
+        },
+        "underwritingdto.ApplicationPageResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/underwritingdto.UnderwriterApplicationResponse"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "underwritingdto.CashPlanAssessmentResponse": {
+            "type": "object",
+            "properties": {
+                "blockers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/applicationdto.FieldErrorResponse"
+                    }
+                },
+                "liquidity": {
+                    "$ref": "#/definitions/scoring.CashPlanResult"
+                },
+                "project": {
+                    "$ref": "#/definitions/scoring.ProjectResult"
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "review_current": {
+                    "type": "boolean"
+                },
+                "signals": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "terms": {
+                    "$ref": "#/definitions/underwritingdto.PlanTermsResponse"
+                }
+            }
+        },
+        "underwritingdto.CashPlanReviewRequest": {
+            "type": "object",
+            "properties": {
+                "comment": {
+                    "type": "string",
+                    "example": "Резерв на депозите, кредитные средства и деньги бюджета проекта не входят"
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 6
+                },
+                "public_comment": {
+                    "type": "string"
+                },
+                "result": {
+                    "type": "string",
+                    "enum": [
+                        "accepted",
+                        "needs_info",
+                        "rejected"
+                    ],
+                    "example": "accepted"
+                },
+                "terms": {
+                    "$ref": "#/definitions/underwritingdto.PlanTermsRequest"
+                },
+                "validated_reserve_kopecks": {
+                    "type": "integer",
+                    "example": 10000000
+                }
+            }
+        },
+        "underwritingdto.DecisionRequest": {
+            "type": "object",
+            "properties": {
+                "comment": {
+                    "description": "внутренний, клиенту не показывается",
+                    "type": "string"
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "outcome": {
+                    "type": "string",
+                    "enum": [
+                        "approved",
+                        "counter_offer",
+                        "rejected"
+                    ],
+                    "example": "approved"
+                },
+                "reason_code": {
+                    "type": "string",
+                    "example": "HIGH_DEBT_LOAD"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "terms": {
+                    "$ref": "#/definitions/underwritingdto.TermsRequest"
+                }
+            }
+        },
+        "underwritingdto.DecisionResponse": {
+            "type": "object",
+            "properties": {
+                "comment": {
+                    "type": "string"
+                },
+                "contract": {
+                    "$ref": "#/definitions/offerdto.ContractResponse"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "decided_by": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "offer": {
+                    "$ref": "#/definitions/offerdto.OfferResponse"
+                },
+                "outcome": {
+                    "type": "string",
+                    "enum": [
+                        "approved",
+                        "counter_offer",
+                        "rejected"
+                    ]
+                },
+                "reason_code": {
+                    "type": "string"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "underwritingdto.EventResponse": {
+            "type": "object",
+            "properties": {
+                "actor_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "from_status": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "to_status": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "status_changed"
+                    ]
+                }
+            }
+        },
+        "underwritingdto.InfoRequestResponse": {
+            "type": "object",
+            "properties": {
+                "answer": {
+                    "type": "string"
+                },
+                "answered_at": {
+                    "type": "string"
+                },
+                "editable_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "requested_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "open",
+                        "answered",
+                        "cancelled"
+                    ]
+                }
+            }
+        },
+        "underwritingdto.PlanTermsRequest": {
+            "type": "object",
+            "properties": {
+                "amount_kopecks": {
+                    "type": "integer",
+                    "example": 30000000
+                },
+                "collateral_mode": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "pledged"
+                    ]
+                },
+                "product_code": {
+                    "type": "string",
+                    "example": "start"
+                },
+                "term_months": {
+                    "type": "integer",
+                    "example": 24
+                }
+            }
+        },
+        "underwritingdto.PlanTermsResponse": {
+            "type": "object",
+            "properties": {
+                "amount_kopecks": {
+                    "type": "integer"
+                },
+                "collateral_mode": {
+                    "type": "string",
+                    "enum": [
+                        "none",
+                        "pledged"
+                    ]
+                },
+                "product_code": {
+                    "type": "string"
+                },
+                "term_months": {
+                    "type": "integer"
+                }
+            }
+        },
+        "underwritingdto.RequestInfoRequest": {
             "type": "object",
             "properties": {
                 "editable_fields": {
@@ -3978,7 +5590,7 @@
                 }
             }
         },
-        "reviewdto.RetryChecksRequest": {
+        "underwritingdto.RetryChecksRequest": {
             "type": "object",
             "properties": {
                 "expected_revision": {
@@ -4001,7 +5613,7 @@
                 }
             }
         },
-        "reviewdto.ReviewApplicationResponse": {
+        "underwritingdto.ReviewApplicationResponse": {
             "type": "object",
             "properties": {
                 "applicant": {
@@ -4026,6 +5638,18 @@
                         "submit"
                     ]
                 },
+                "cash_plan": {
+                    "type": "object"
+                },
+                "cash_plan_assessment": {
+                    "$ref": "#/definitions/underwritingdto.CashPlanAssessmentResponse"
+                },
+                "cash_plan_reviews": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/underwritingdto.StaffPlanReviewResponse"
+                    }
+                },
                 "checks": {
                     "type": "object"
                 },
@@ -4035,7 +5659,7 @@
                 "collateral_reviews": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/reviewdto.StaffCollateralReviewResponse"
+                        "$ref": "#/definitions/underwritingdto.StaffCollateralReviewResponse"
                     }
                 },
                 "company": {
@@ -4052,6 +5676,10 @@
                 "created_at": {
                     "type": "string"
                 },
+                "data_revision": {
+                    "type": "integer",
+                    "example": 1
+                },
                 "decision_blockers": {
                     "type": "array",
                     "items": {
@@ -4061,7 +5689,7 @@
                 "decisions": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/reviewdto.DecisionResponse"
+                        "$ref": "#/definitions/underwritingdto.DecisionResponse"
                     }
                 },
                 "editable_fields": {
@@ -4080,7 +5708,7 @@
                 "history": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/reviewdto.EventResponse"
+                        "$ref": "#/definitions/underwritingdto.EventResponse"
                     }
                 },
                 "id": {
@@ -4091,7 +5719,7 @@
                 "info_requests": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/reviewdto.InfoRequestResponse"
+                        "$ref": "#/definitions/underwritingdto.InfoRequestResponse"
                     }
                 },
                 "issue": {
@@ -4102,6 +5730,9 @@
                     "example": 1000
                 },
                 "offer": {
+                    "type": "object"
+                },
+                "plan_review": {
                     "type": "object"
                 },
                 "product_details": {
@@ -4145,7 +5776,7 @@
                 }
             }
         },
-        "reviewdto.RevisionRequest": {
+        "underwritingdto.RevisionRequest": {
             "type": "object",
             "properties": {
                 "expected_revision": {
@@ -4154,7 +5785,7 @@
                 }
             }
         },
-        "reviewdto.StaffCollateralReviewResponse": {
+        "underwritingdto.StaffCollateralReviewResponse": {
             "type": "object",
             "properties": {
                 "accepted_value_kopecks": {
@@ -4193,7 +5824,58 @@
                 }
             }
         },
-        "reviewdto.TermsRequest": {
+        "underwritingdto.StaffPlanReviewResponse": {
+            "type": "object",
+            "properties": {
+                "actual": {
+                    "type": "boolean"
+                },
+                "cash_plan_hash": {
+                    "type": "string"
+                },
+                "comment": {
+                    "type": "string"
+                },
+                "data_revision": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "public_comment": {
+                    "type": "string"
+                },
+                "result": {
+                    "type": "string",
+                    "enum": [
+                        "accepted",
+                        "needs_info",
+                        "rejected"
+                    ]
+                },
+                "reviewed_at": {
+                    "type": "string"
+                },
+                "reviewed_by": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "terms": {
+                    "$ref": "#/definitions/underwritingdto.PlanTermsResponse"
+                },
+                "terms_hash": {
+                    "type": "string"
+                },
+                "validated_reserve_kopecks": {
+                    "type": "integer"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "underwritingdto.TermsRequest": {
             "type": "object",
             "properties": {
                 "agreement_term_months": {
@@ -4230,7 +5912,7 @@
                 }
             }
         },
-        "reviewdto.UnderwriterApplicationResponse": {
+        "underwritingdto.UnderwriterApplicationResponse": {
             "type": "object",
             "properties": {
                 "applicant": {
@@ -4255,6 +5937,9 @@
                         "submit"
                     ]
                 },
+                "cash_plan": {
+                    "type": "object"
+                },
                 "checks": {
                     "type": "object"
                 },
@@ -4274,6 +5959,10 @@
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "data_revision": {
+                    "type": "integer",
+                    "example": 1
                 },
                 "editable_fields": {
                     "type": "array",
@@ -4301,6 +5990,9 @@
                     "example": 1000
                 },
                 "offer": {
+                    "type": "object"
+                },
+                "plan_review": {
                     "type": "object"
                 },
                 "product_details": {
@@ -4341,15 +6033,6 @@
                 },
                 "updated_at": {
                     "type": "string"
-                }
-            }
-        },
-        "swagger.HTTPError": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "example": "Неверный email или пароль"
                 }
             }
         },
