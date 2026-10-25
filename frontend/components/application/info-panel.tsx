@@ -77,33 +77,49 @@ export function InfoPanel({ app, token, requests, onUpdated, onConflict, onRefre
   }
 
   const open = requests.filter((r) => r.status === "open");
+  const answered = requests.filter((r) => r.status === "answered");
   const canResubmit = app.available_actions.includes("resubmit") && open.length === 0;
 
   return (
     <div className="mt-8 space-y-8">
-      {open.map((req) => (
+      {requests.map((req) => (
         <section key={req.id} className="rounded-card-lg border border-black/8 p-6">
-          <h3 className="text-[16px] font-medium">Банк запросил уточнения</h3>
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="text-[16px] font-medium">Банк запросил уточнения</h3>
+            {req.status === "answered" && (
+              <span className="rounded-full bg-plate-menthol px-3 py-1 text-[13px]">
+                Ответ отправлен {dateRu(req.answered_at)}
+              </span>
+            )}
+          </div>
           <p className="mt-2 text-[15px] leading-6">{req.message}</p>
           <p className="mt-2 text-[13px] text-ink-soft">
             от {dateRu(req.requested_at)} · правка доступна:{" "}
             {req.editable_fields.join(", ") || "—"}
           </p>
-          <textarea
-            value={answers[req.id] ?? ""}
-            onChange={(e) => setAnswers({ ...answers, [req.id]: e.target.value })}
-            placeholder="Ваш ответ банку"
-            rows={3}
-            className={`${input} mt-4`}
-          />
-          <button
-            type="button"
-            className={`${primary} mt-3`}
-            disabled={busy || !(answers[req.id] ?? "").trim()}
-            onClick={() => void answer(req)}
-          >
-            {busy ? "Отправляем…" : "Ответить"}
-          </button>
+          {req.status === "open" ? (
+            <>
+              <textarea
+                value={answers[req.id] ?? ""}
+                onChange={(e) => setAnswers({ ...answers, [req.id]: e.target.value })}
+                placeholder="Ваш ответ банку"
+                rows={3}
+                className={`${input} mt-4`}
+              />
+              <button
+                type="button"
+                className={`${primary} mt-3`}
+                disabled={busy || !(answers[req.id] ?? "").trim()}
+                onClick={() => void answer(req)}
+              >
+                {busy ? "Отправляем…" : "Ответить"}
+              </button>
+            </>
+          ) : (
+            <p className="mt-3 rounded-2xl bg-plate-pearl px-4 py-3 text-[15px]">
+              {req.answer || "—"}
+            </p>
+          )}
         </section>
       ))}
 
@@ -112,7 +128,7 @@ export function InfoPanel({ app, token, requests, onUpdated, onConflict, onRefre
         <div className="mt-4 space-y-6">
           <AppSummary app={app} />
           {[...editable].some((f) => f.startsWith("request.")) && (
-            <RequestForm app={app} token={token} error={error} onSave={patch} />
+            <RequestForm app={app} token={token} error={error} onSave={patch} only={editable} />
           )}
           {editable.has("collateral") && (
             <CollateralForm app={app} error={error} onSave={patch} />
@@ -155,10 +171,14 @@ export function InfoPanel({ app, token, requests, onUpdated, onConflict, onRefre
         >
           {busy ? "Отправляем…" : "Отправить заявку повторно"}
         </button>
-        {!canResubmit && open.length > 0 && (
-          <span className="text-[14px] text-ink-soft">
-            Осталось ответить: {open.length}
-          </span>
+        {open.length > 0 ? (
+          <span className="text-[14px] text-ink-soft">Осталось ответить: {open.length}</span>
+        ) : (
+          answered.length > 0 && (
+            <span className="text-[14px] text-ink-soft">
+              Все запросы отвечены — отправьте заявку повторно.
+            </span>
+          )
         )}
       </div>
     </div>
