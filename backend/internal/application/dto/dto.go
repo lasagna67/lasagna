@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
+	financialsdomain "github.com/lasagna67/lasagna.git/internal/financials/domain"
 )
 
 type CompanyCardResponse struct {
@@ -40,16 +41,6 @@ type IssueResponse struct {
 	Code    string `json:"code"`
 	Field   string `json:"field"`
 	Message string `json:"message"`
-}
-
-type FinancialStateResponse struct {
-	Revision       int             `json:"revision" example:"1"`
-	SourceStatus   string          `json:"source_status" enums:"not_requested,ok,not_found,unavailable,invalid" example:"not_requested"`
-	DataStatus     string          `json:"data_status" enums:"missing,ready,no_history" example:"missing"`
-	SourceType     *string         `json:"source_type" enums:"automatic,csv"`
-	Snapshot       any             `json:"snapshot" swaggertype:"object"`
-	AllowCSVUpload bool            `json:"allow_csv_upload" example:"false"`
-	Issues         []IssueResponse `json:"issues"`
 }
 
 // ApplicationResponse — объект заявки из контракта lasagna-credit-v1.
@@ -137,14 +128,10 @@ func newRequestResponse(r applicationdomain.Request) RequestResponse {
 }
 
 // newFinancialState — состояние до финансового шага: источник не запрашивался,
-// принятого снимка нет. TODO: читать из заявки вместе с шагом financials.
+// принятого снимка нет. Модули, которые читают шаг заявки, заменяют его
+// NewFinancialState.
 func newFinancialState(a applicationdomain.Application) FinancialStateResponse {
-	return FinancialStateResponse{
-		Revision:     a.Revision,
-		SourceStatus: "not_requested",
-		DataStatus:   "missing",
-		Issues:       []IssueResponse{},
-	}
+	return NewFinancialState(a, financialsdomain.NewState(), time.Now())
 }
 
 // NewApplicantResponse — карточка человека: заявителя или сотрудника банка.

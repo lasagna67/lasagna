@@ -14,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationrepo "github.com/lasagna67/lasagna.git/internal/application/repo"
+	financialsdomain "github.com/lasagna67/lasagna.git/internal/financials/domain"
+	financialsrepo "github.com/lasagna67/lasagna.git/internal/financials/repo"
 	intakerepo "github.com/lasagna67/lasagna.git/internal/intake/repo"
 	offerrepo "github.com/lasagna67/lasagna.git/internal/offer/repo"
 	"github.com/lasagna67/lasagna.git/internal/outbox"
@@ -95,6 +97,12 @@ func (r *Repo) Checks(ctx context.Context, applicationID, run uuid.UUID) (pipeli
 		return pipelinedomain.SourceChecks{}, fmt.Errorf("scan external checks: %w", err)
 	}
 	return checks, nil
+}
+
+// Financials — финансовый шаг заявки: принятый снимок зафиксирован отправкой,
+// после неё финансы не меняются.
+func (r *Repo) Financials(ctx context.Context, applicationID uuid.UUID) (financialsdomain.State, error) {
+	return financialsrepo.State(ctx, r.pool, applicationID)
 }
 
 // RecordSkip пишет отброшенное событие в техническую историю конвейера.

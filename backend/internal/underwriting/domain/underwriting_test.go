@@ -150,8 +150,9 @@ func TestFillFromOverview(t *testing.T) {
 	if c.CreditBureau.Status != SourceOK || c.CreditBureau.HasCreditHistory == nil || *c.CreditBureau.HasCreditHistory {
 		t.Errorf("credit bureau = %+v", c.CreditBureau)
 	}
-	if c.Financials.DataStatus != FinancialsReady || *c.Financials.SourceType != "csv" || *c.Financials.Coverage != "partial" {
-		t.Errorf("financials = %+v", c.Financials)
+	// Финансы сводки компании не подменяют финансовый шаг заявки.
+	if c.Financials.DataStatus != FinancialsMissing || c.Financials.SourceType != nil {
+		t.Errorf("financials from overview = %+v", c.Financials)
 	}
 
 	// Снимки заявки от конвейера главнее сводки компании.

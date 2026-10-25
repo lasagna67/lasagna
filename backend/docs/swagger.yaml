@@ -223,11 +223,119 @@ definitions:
         example: Выберите компанию
         type: string
     type: object
+  applicationdto.FinancialProvenanceResponse:
+    properties:
+      file_name:
+        type: string
+      financial_cycle_id:
+        example: 1
+        type: integer
+      received_at:
+        type: string
+      source_type:
+        enum:
+        - automatic
+        - csv
+        type: string
+    type: object
+  applicationdto.FinancialQualityResponse:
+    properties:
+      as_of_date:
+        example: "2026-10-25"
+        type: string
+      coverage:
+        enum:
+        - complete
+        - partial
+        example: complete
+        type: string
+      n_months:
+        example: 6
+        type: integer
+      stale:
+        example: false
+        type: boolean
+      window_from:
+        example: 2026-04
+        type: string
+      window_to:
+        example: 2026-09
+        type: string
+    type: object
+  applicationdto.FinancialRowResponse:
+    properties:
+      expenses_kopecks:
+        type: integer
+      free_cash_kopecks:
+        type: integer
+      income_kopecks:
+        type: integer
+      month:
+        example: 2026-09
+        type: string
+      owner_withdrawals_kopecks:
+        type: integer
+      taxes_kopecks:
+        type: integer
+    type: object
+  applicationdto.FinancialSnapshotPageResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/applicationdto.FinancialSnapshotResponse'
+        type: array
+      next_cursor:
+        type: string
+    type: object
+  applicationdto.FinancialSnapshotResponse:
+    properties:
+      coverage:
+        enum:
+        - complete
+        - partial
+        type: string
+      coverage_as_of_date:
+        example: "2026-10-25"
+        type: string
+      currency:
+        example: RUB
+        type: string
+      id:
+        format: uuid
+        type: string
+      inn:
+        example: "7705005410"
+        type: string
+      period_from:
+        example: 2026-04
+        type: string
+      period_to:
+        example: 2026-09
+        type: string
+      provenance:
+        $ref: '#/definitions/applicationdto.FinancialProvenanceResponse'
+      received_at:
+        type: string
+      rows:
+        items:
+          $ref: '#/definitions/applicationdto.FinancialRowResponse'
+        type: array
+      semantic_hash:
+        type: string
+    type: object
   applicationdto.FinancialStateResponse:
     properties:
       allow_csv_upload:
         example: false
         type: boolean
+      allow_no_history:
+        example: false
+        type: boolean
+      checked_at:
+        type: string
+      data_revision:
+        example: 1
+        type: integer
       data_status:
         enum:
         - missing
@@ -235,15 +343,26 @@ definitions:
         - no_history
         example: missing
         type: string
+      financial_cycle_id:
+        example: 1
+        type: integer
       issues:
         items:
           $ref: '#/definitions/applicationdto.IssueResponse'
         type: array
+      manual_required:
+        example: false
+        type: boolean
+      quality:
+        $ref: '#/definitions/applicationdto.FinancialQualityResponse'
+      required_refresh:
+        example: false
+        type: boolean
       revision:
         example: 1
         type: integer
       snapshot:
-        type: object
+        $ref: '#/definitions/applicationdto.FinancialSnapshotResponse'
       source_status:
         enum:
         - not_requested
@@ -988,6 +1107,28 @@ definitions:
         - admin
         example: client
         type: string
+    type: object
+  financialsdto.FetchRequest:
+    properties:
+      demo_mode:
+        enum:
+        - normal
+        - unavailable
+        - not_found
+        - invalid_response
+        type: string
+      expected_revision:
+        example: 3
+        type: integer
+    type: object
+  financialsdto.NoHistoryRequest:
+    properties:
+      confirmed:
+        example: true
+        type: boolean
+      expected_revision:
+        example: 4
+        type: integer
     type: object
   intakedto.ApplicationPageResponse:
     properties:
@@ -2194,6 +2335,282 @@ paths:
       summary: Договор к предложению
       tags:
       - applications
+  /applications/{id}/financials:
+    get:
+      description: |-
+        Источник, принятый снимок текущего цикла, пригодность на бизнес-дату и доступность
+        резервной ветки (CSV, отсутствие истории).
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialStateResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: не клиент
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: 'NOT_FOUND: нет заявки или она чужая'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Финансовый шаг заявки
+      tags:
+      - financials
+  /applications/{id}/financials/csv:
+    post:
+      consumes:
+      - multipart/form-data
+      description: |-
+        Резервная ветка: только после not_found, unavailable или invalid автоматического источника
+        и без принятого снимка текущего цикла, иначе 409 CSV_NOT_ALLOWED. UTF-8 (BOM допустим),
+        разделитель запятая или точка с запятой; колонки inn,month,income,expenses,taxes,
+        owner_withdrawals и необязательная free_cash; суммы в рублях с точкой, до двух знаков;
+        завершённые месяцы не раньше регистрации, до 120 строк, файл до 5 МиБ. Ошибка любой строки —
+        422 INVALID_CSV со всеми найденными ошибками (file.rows[N].колонка), файл не принимается.
+        Принятый CSV оставляет заявку на ручном рассмотрении.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Ожидаемая revision
+        in: formData
+        name: expected_revision
+        required: true
+        type: integer
+      - description: CSV
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialStateResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: CSV_NOT_ALLOWED, REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "413":
+          description: запрос больше 5 МиБ
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "415":
+          description: ожидается multipart/form-data
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "422":
+          description: INVALID_CSV
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Загрузить финансы из CSV
+      tags:
+      - financials
+  /applications/{id}/financials/fetch:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Одна попытка источника не дольше таймаута (5 с). Успех — новый принятый снимок,
+        data_revision растёт при изменении данных. not_found, unavailable, invalid открывают
+        резервную ветку: CSV или отсутствие истории; прежний снимок цикла при неуспехе остаётся.
+        В draft или в info_requested, если банк открыл financials. demo_mode — только в демо.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Ожидаемая revision
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/financialsdto.FetchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialStateResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "422":
+          description: 'VALIDATION_FAILED: financials NOT_EDITABLE'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Получить финансы автоматически
+      tags:
+      - financials
+  /applications/{id}/financials/history:
+    get:
+      description: Неизменяемые принятые снимки всех финансовых циклов, новые сверху.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: До 100, по умолчанию 20
+        in: query
+        name: limit
+        type: integer
+      - description: next_cursor предыдущей страницы
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialSnapshotPageResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: История финансовых снимков заявки
+      tags:
+      - financials
+  /applications/{id}/financials/no-history:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Только в резервной ветке без принятых данных, иначе 409 INVALID_STATE; confirmed=true
+        обязательно. Отправить заявку без фактов можно только по «Старту». Принятый позже CSV
+        снимает отметку.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Подтверждение
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/financialsdto.NoHistoryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialStateResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Подтвердить отсутствие финансовой истории
+      tags:
+      - financials
+  /applications/{id}/financials/template:
+    get:
+      description: 'Колонки и месяцы окна расчёта с ИНН компании, суммы пустые: незаполненный
+        шаблон не принимается.'
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - text/csv
+      responses:
+        "200":
+          description: CSV
+          schema:
+            type: string
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Шаблон CSV
+      tags:
+      - financials
   /applications/{id}/info-requests:
     get:
       parameters:
@@ -2766,6 +3183,32 @@ paths:
       tags:
       - companies
   /companies/{id}/financials:
+    get:
+      description: Последний принятый снимок по заявкам компании с источником, датой
+        и периодом; нет — null.
+      parameters:
+      - description: Компания
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.FinancialSnapshotResponse'
+        "404":
+          description: 'NOT_FOUND: нет компании или пользователь не её участник'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Финансовый профиль компании
+      tags:
+      - financials
     post:
       consumes:
       - multipart/form-data

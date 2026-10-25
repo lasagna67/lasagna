@@ -340,6 +340,404 @@
                 }
             }
         },
+        "/applications/{id}/financials": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Источник, принятый снимок текущего цикла, пригодность на бизнес-дату и доступность\nрезервной ветки (CSV, отсутствие истории).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Финансовый шаг заявки",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialStateResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "не клиент",
+                        "schema": {
+                            "$ref": "#/definitions/swagger.HTTPError"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND: нет заявки или она чужая",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/financials/csv": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Резервная ветка: только после not_found, unavailable или invalid автоматического источника\nи без принятого снимка текущего цикла, иначе 409 CSV_NOT_ALLOWED. UTF-8 (BOM допустим),\nразделитель запятая или точка с запятой; колонки inn,month,income,expenses,taxes,\nowner_withdrawals и необязательная free_cash; суммы в рублях с точкой, до двух знаков;\nзавершённые месяцы не раньше регистрации, до 120 строк, файл до 5 МиБ. Ошибка любой строки —\n422 INVALID_CSV со всеми найденными ошибками (file.rows[N].колонка), файл не принимается.\nПринятый CSV оставляет заявку на ручном рассмотрении.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Загрузить финансы из CSV",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Ключ повтора, до 255 символов",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Ожидаемая revision",
+                        "name": "expected_revision",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "CSV",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialStateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "CSV_NOT_ALLOWED, REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "запрос больше 5 МиБ",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "415": {
+                        "description": "ожидается multipart/form-data",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "INVALID_CSV",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/financials/fetch": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Одна попытка источника не дольше таймаута (5 с). Успех — новый принятый снимок,\ndata_revision растёт при изменении данных. not_found, unavailable, invalid открывают\nрезервную ветку: CSV или отсутствие истории; прежний снимок цикла при неуспехе остаётся.\nВ draft или в info_requested, если банк открыл financials. demo_mode — только в демо.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Получить финансы автоматически",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Ключ повтора, до 255 символов",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Ожидаемая revision",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/financialsdto.FetchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialStateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "VALIDATION_FAILED: financials NOT_EDITABLE",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/financials/history": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Неизменяемые принятые снимки всех финансовых циклов, новые сверху.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "История финансовых снимков заявки",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "До 100, по умолчанию 20",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "next_cursor предыдущей страницы",
+                        "name": "cursor",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialSnapshotPageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/financials/no-history": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Только в резервной ветке без принятых данных, иначе 409 INVALID_STATE; confirmed=true\nобязательно. Отправить заявку без фактов можно только по «Старту». Принятый позже CSV\nснимает отметку.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Подтвердить отсутствие финансовой истории",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Ключ повтора, до 255 символов",
+                        "name": "Idempotency-Key",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Подтверждение",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/financialsdto.NoHistoryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialStateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "INVALID_REQUEST",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/applications/{id}/financials/template": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Колонки и месяцы окна расчёта с ИНН компании, суммы пустые: незаполненный шаблон не принимается.",
+                "produces": [
+                    "text/csv"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Шаблон CSV",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Заявка",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "CSV",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/applications/{id}/info-requests": {
             "get": {
                 "security": [
@@ -1318,6 +1716,45 @@
             }
         },
         "/companies/{id}/financials": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Последний принятый снимок по заявкам компании с источником, датой и периодом; нет — null.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "summary": "Финансовый профиль компании",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Компания",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.FinancialSnapshotResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "NOT_FOUND: нет компании или пользователь не её участник",
+                        "schema": {
+                            "$ref": "#/definitions/applicationdto.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -3025,12 +3462,167 @@
                 }
             }
         },
+        "applicationdto.FinancialProvenanceResponse": {
+            "type": "object",
+            "properties": {
+                "file_name": {
+                    "type": "string"
+                },
+                "financial_cycle_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "received_at": {
+                    "type": "string"
+                },
+                "source_type": {
+                    "type": "string",
+                    "enum": [
+                        "automatic",
+                        "csv"
+                    ]
+                }
+            }
+        },
+        "applicationdto.FinancialQualityResponse": {
+            "type": "object",
+            "properties": {
+                "as_of_date": {
+                    "type": "string",
+                    "example": "2026-10-25"
+                },
+                "coverage": {
+                    "type": "string",
+                    "enum": [
+                        "complete",
+                        "partial"
+                    ],
+                    "example": "complete"
+                },
+                "n_months": {
+                    "type": "integer",
+                    "example": 6
+                },
+                "stale": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "window_from": {
+                    "type": "string",
+                    "example": "2026-04"
+                },
+                "window_to": {
+                    "type": "string",
+                    "example": "2026-09"
+                }
+            }
+        },
+        "applicationdto.FinancialRowResponse": {
+            "type": "object",
+            "properties": {
+                "expenses_kopecks": {
+                    "type": "integer"
+                },
+                "free_cash_kopecks": {
+                    "type": "integer"
+                },
+                "income_kopecks": {
+                    "type": "integer"
+                },
+                "month": {
+                    "type": "string",
+                    "example": "2026-09"
+                },
+                "owner_withdrawals_kopecks": {
+                    "type": "integer"
+                },
+                "taxes_kopecks": {
+                    "type": "integer"
+                }
+            }
+        },
+        "applicationdto.FinancialSnapshotPageResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/applicationdto.FinancialSnapshotResponse"
+                    }
+                },
+                "next_cursor": {
+                    "type": "string"
+                }
+            }
+        },
+        "applicationdto.FinancialSnapshotResponse": {
+            "type": "object",
+            "properties": {
+                "coverage": {
+                    "type": "string",
+                    "enum": [
+                        "complete",
+                        "partial"
+                    ]
+                },
+                "coverage_as_of_date": {
+                    "type": "string",
+                    "example": "2026-10-25"
+                },
+                "currency": {
+                    "type": "string",
+                    "example": "RUB"
+                },
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "inn": {
+                    "type": "string",
+                    "example": "7705005410"
+                },
+                "period_from": {
+                    "type": "string",
+                    "example": "2026-04"
+                },
+                "period_to": {
+                    "type": "string",
+                    "example": "2026-09"
+                },
+                "provenance": {
+                    "$ref": "#/definitions/applicationdto.FinancialProvenanceResponse"
+                },
+                "received_at": {
+                    "type": "string"
+                },
+                "rows": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/applicationdto.FinancialRowResponse"
+                    }
+                },
+                "semantic_hash": {
+                    "type": "string"
+                }
+            }
+        },
         "applicationdto.FinancialStateResponse": {
             "type": "object",
             "properties": {
                 "allow_csv_upload": {
                     "type": "boolean",
                     "example": false
+                },
+                "allow_no_history": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "checked_at": {
+                    "type": "string"
+                },
+                "data_revision": {
+                    "type": "integer",
+                    "example": 1
                 },
                 "data_status": {
                     "type": "string",
@@ -3041,18 +3633,33 @@
                     ],
                     "example": "missing"
                 },
+                "financial_cycle_id": {
+                    "type": "integer",
+                    "example": 1
+                },
                 "issues": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/applicationdto.IssueResponse"
                     }
                 },
+                "manual_required": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "quality": {
+                    "$ref": "#/definitions/applicationdto.FinancialQualityResponse"
+                },
+                "required_refresh": {
+                    "type": "boolean",
+                    "example": false
+                },
                 "revision": {
                     "type": "integer",
                     "example": 1
                 },
                 "snapshot": {
-                    "type": "object"
+                    "$ref": "#/definitions/applicationdto.FinancialSnapshotResponse"
                 },
                 "source_status": {
                     "type": "string",
@@ -4100,6 +4707,37 @@
                         "admin"
                     ],
                     "example": "client"
+                }
+            }
+        },
+        "financialsdto.FetchRequest": {
+            "type": "object",
+            "properties": {
+                "demo_mode": {
+                    "type": "string",
+                    "enum": [
+                        "normal",
+                        "unavailable",
+                        "not_found",
+                        "invalid_response"
+                    ]
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 3
+                }
+            }
+        },
+        "financialsdto.NoHistoryRequest": {
+            "type": "object",
+            "properties": {
+                "confirmed": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "expected_revision": {
+                    "type": "integer",
+                    "example": 4
                 }
             }
         },

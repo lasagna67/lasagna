@@ -21,6 +21,7 @@ import (
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	documentdomain "github.com/lasagna67/lasagna.git/internal/document/domain"
+	financialsdomain "github.com/lasagna67/lasagna.git/internal/financials/domain"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 	underwritingerrors "github.com/lasagna67/lasagna.git/internal/underwriting/errors"
 )
@@ -237,10 +238,25 @@ const (
 	FinancialsNoHistory FinancialDataStatus = "no_history"
 )
 
+// FinancialsCheck — финансовый шаг заявки (модуль financials): принятый снимок
+// текущего цикла. Coverage — полнота окна на дату чтения; Rows — месяцы снимка
+// для проверки денежного плана, наружу не отдаются.
 type FinancialsCheck struct {
 	DataStatus FinancialDataStatus
 	SourceType *string // automatic, csv
 	Coverage   *string // complete, partial
+	Rows       []companydomain.MonthlyData
+}
+
+// NewFinancialsCheck — проверка по финансовому шагу заявки на дату now.
+func NewFinancialsCheck(st financialsdomain.State, now time.Time) FinancialsCheck {
+	c := FinancialsCheck{DataStatus: FinancialDataStatus(st.DataStatus())}
+	if s := st.Snapshot; s != nil {
+		source := string(s.SourceType)
+		coverage := string(financialsdomain.QualityOf(s.Rows, now).Coverage)
+		c.SourceType, c.Coverage, c.Rows = &source, &coverage, s.Report().MonthlyData
+	}
+	return c
 }
 
 // ScoringStatus — не статус заявки: not_configured и failed ведут на ручное
@@ -312,10 +328,10 @@ func (c CheckSummary) Blockers(productCode, companyINN string) []applicationerro
 	return errs
 }
 
-// FillFromOverview дополняет проверки сохранённой сводкой компании
-// (company_overviews) — тем же источником, что у scoring.Validator. Сводка
-// используется только там, где конвейер не сохранил снимок заявки; снимков
-// финансов версии заявки в схеме пока нет, так что финансы — всегда из сводки.
+// FillFromOverview дополняет реестр и БКИ сохранённой сводкой компании
+// (company_overviews) там, где конвейер не сохранил снимок заявки, — например,
+// заявка не прошла validation. Финансы — только финансовый шаг заявки: сводка
+// компании их не подменяет.
 func (c *CheckSummary) FillFromOverview(o companydomain.Overview, companyINN string) {
 	if c.Registry.Status == SourceNotRequested {
 		c.Registry = RegistryCheck{SourceCheck: overviewSource(o.Registry.Status, o.Registry.Data)}
@@ -335,24 +351,10 @@ func (c *CheckSummary) FillFromOverview(o companydomain.Overview, companyINN str
 			}
 		}
 	}
-	if c.Financials.DataStatus != "" && c.Financials.DataStatus != FinancialsMissing {
-		return
-	}
-	c.Financials = FinancialsCheck{DataStatus: FinancialsMissing}
-	if report := o.Financials.Data; o.Financials.Status == "ok" && report != nil && len(report.MonthlyData) > 0 {
-		source, coverage := "automatic", "partial"
-		if o.FinancialsSourceType == "csv" {
-			source = "csv"
-		}
-		if len(report.MonthlyData) >= fullHistoryMonths {
-			coverage = "complete"
-		}
-		c.Financials = FinancialsCheck{DataStatus: FinancialsReady, SourceType: &source, Coverage: &coverage}
+	if c.Financials.DataStatus == "" {
+		c.Financials = FinancialsCheck{DataStatus: FinancialsMissing}
 	}
 }
-
-// fullHistoryMonths — плановый период финансовой истории, полные месяцы.
-const fullHistoryMonths = 6
 
 func overviewSource[T any](status string, data *T) SourceCheck {
 	check := SourceCheck{}
@@ -399,6 +401,9 @@ type Change struct {
 	Decision        *offerdomain.Decision
 	CashPlanReview  *cashplandomain.Review // новое заключение по плану; data_revision не меняется
 	Notification    *applicationdomain.Notification
+	// NewFinancialCycle — банк открыл financials в запросе уточнений: новый
+	// финансовый цикл и data_revision + 1, прежний снимок остаётся в истории.
+	NewFinancialCycle bool
 }
 
 //=================================================================================================
@@ -416,6 +421,7 @@ type Details struct {
 	CashPlan         *cashplandomain.CashPlan
 	CashPlanReview   *cashplandomain.Review
 	Offer            *offerdomain.Decision
+	Financials       financialsdomain.State
 }
 
 // Review — карточка заявки для сотрудника: всё, на чём строится решение.

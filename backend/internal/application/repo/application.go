@@ -115,6 +115,29 @@ func ClaimKey(ctx context.Context, tx pgx.Tx, key applicationdomain.IdempotencyK
 	return storedID, false, nil
 }
 
+// LookupKey — использован ли уже ключ: true — тем же запросом (повтор);
+// другим запросом — ErrIdempotencyConflict. Нужен операциям с внешним вызовом
+// до транзакции: повтор сетевой попытки не должен вызывать источник снова.
+// Окончательно ключ занимает ClaimKey в транзакции изменения.
+func LookupKey(ctx context.Context, q Querier, key applicationdomain.IdempotencyKey) (bool, error) {
+	var storedHash string
+	err := q.QueryRow(ctx, `
+		SELECT request_sha256 FROM idempotency_keys
+		WHERE user_id = $1 AND operation = $2
+			AND resource_id IS NOT DISTINCT FROM $3 AND idempotency_key = $4`,
+		key.UserID, key.Operation, key.ResourceID, key.Key,
+	).Scan(&storedHash)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("select idempotency key: %w", err)
+	case storedHash != key.RequestHash:
+		return false, applicationerrors.ErrIdempotencyConflict
+	}
+	return true, nil
+}
+
 // InsertTransition пишет переход в историю. actorID == nil — переход
 // выполнил конвейер; пустой From — первая запись заявки. comment виден клиенту.
 func InsertTransition(ctx context.Context, q Querier, applicationID uuid.UUID, tr applicationdomain.Transition, actorID *uuid.UUID, comment *string) error {

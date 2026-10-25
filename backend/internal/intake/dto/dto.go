@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
@@ -338,6 +339,7 @@ func NewPage(items []intakedomain.Details, next *int64) ApplicationPageResponse 
 
 func NewApplication(d intakedomain.Details) applicationdto.ApplicationResponse {
 	resp := applicationdto.NewApplicationResponse(d.ApplicationDetails)
+	resp.WithFinancials(d.Application, d.Financials, time.Now())
 	if p := cashplandto.NewProject(d.Project); p != nil {
 		resp.ProductDetails = p
 	}

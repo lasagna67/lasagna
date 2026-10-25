@@ -11,6 +11,7 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
+	financialsdomain "github.com/lasagna67/lasagna.git/internal/financials/domain"
 	intakedomain "github.com/lasagna67/lasagna.git/internal/intake/domain"
 	"github.com/lasagna67/lasagna.git/internal/outbox"
 	pipelinedomain "github.com/lasagna67/lasagna.git/internal/pipeline/domain"
@@ -72,7 +73,7 @@ func (f *fakeDrafts) Update(_ context.Context, cmd applicationdomain.UpdateComma
 		return false, &applicationerrors.RevisionConflictError{Current: d.Revision}
 	}
 	app := d.Application
-	draft := intakedomain.Draft{Application: &app, Collateral: d.Collateral, Project: d.Project, CashPlan: d.CashPlan}
+	draft := intakedomain.Draft{Application: &app, Collateral: d.Collateral, Project: d.Project, CashPlan: d.CashPlan, Financials: d.Financials}
 	if code := app.Request.ProductCode; code != nil {
 		if p, ok := f.products[*code]; ok {
 			draft.Product = &p
@@ -117,8 +118,20 @@ func (f *fakeDrafts) Update(_ context.Context, cmd applicationdomain.UpdateComma
 	return false, nil
 }
 
+// add — заявка с принятыми автоматическими финансами: финансовый шаг пройден.
 func (f *fakeDrafts) add(a applicationdomain.Application) {
-	f.apps[a.ID] = intakedomain.Details{ApplicationDetails: applicationdomain.ApplicationDetails{Application: a}}
+	f.apps[a.ID] = intakedomain.Details{ApplicationDetails: applicationdomain.ApplicationDetails{Application: a}, Financials: readyFinancials()}
+}
+
+// readyFinancials — принятый автоматический снимок за полгода.
+func readyFinancials() financialsdomain.State {
+	st := financialsdomain.NewState()
+	snap := financialsdomain.NewSnapshot(financialsdomain.SnapshotInput{
+		ID: uuid.New(), Cycle: 1, SourceType: financialsdomain.SourceAutomatic, INN: "7705005410", Raw: []byte("{}"),
+		Rows: []financialsdomain.Row{{Month: "2026-09", IncomeKopecks: 100}},
+	}, fixedNow)
+	st.ApplyFetch(financialsdomain.FetchResult{Status: financialsdomain.SourceOK}, &snap, fixedNow)
+	return st
 }
 
 // submittedEvents — события запуска конвейера, записанные вместе с заявками.

@@ -12,6 +12,7 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
+	financialsdomain "github.com/lasagna67/lasagna.git/internal/financials/domain"
 	intakedomain "github.com/lasagna67/lasagna.git/internal/intake/domain"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
@@ -111,23 +112,18 @@ func TestCheckRowRoundTrip(t *testing.T) {
 
 func TestOverviewUsesOnlySuccessfulChecks(t *testing.T) {
 	companyID := uuid.New()
-	stored := companydomain.Overview{
-		CompanyID:            companyID,
-		Registry:             companydomain.SourceResult[companydomain.RegistryCard]{Status: "ok", Data: &companydomain.RegistryCard{INN: "old"}},
-		Financials:           companydomain.SourceResult[companydomain.FinancialReport]{Status: "ok", Data: &companydomain.FinancialReport{INN: "7705005410"}},
-		FinancialsSourceType: "csv",
-	}
 	checks := SourceChecks{
 		Registry: CheckResult{Source: underwritingdomain.CheckRegistry, Status: underwritingdomain.SourceUnavailable, CompletedAt: now},
 		Credit:   CheckResult{Source: underwritingdomain.CheckCreditBureau, Status: underwritingdomain.SourceNotFound, CompletedAt: now},
 	}
-	o := checks.Overview(stored)
-	// Прежний реестр из сводки не выдаётся за полученный в этом запуске.
+	o := checks.Overview(companyID)
+	// Неуспешная проверка — источник без данных: прежняя сводка компании не выдаётся за полученную.
 	if o.CompanyID != companyID || o.Registry.Status != "unavailable" || o.Registry.Data != nil || o.CreditHistory.Status != "not_found" {
 		t.Errorf("overview sources = %+v / %+v", o.Registry, o.CreditHistory)
 	}
-	if o.Financials.Data == nil || o.FinancialsSourceType != "csv" {
-		t.Errorf("financials must come from stored snapshot: %+v", o.Financials)
+	// Финансы — не из сводки, их добавляет конвейер из снимка заявки.
+	if o.Financials.Data != nil || o.Financials.Status != "" {
+		t.Errorf("financials leaked into overview: %+v", o.Financials)
 	}
 	if checks.Registry.Fetched() != nil {
 		t.Error("failed check has fetch time")
@@ -159,7 +155,9 @@ func TestValidate(t *testing.T) {
 	}}
 	product := &applicationdomain.Product{Code: "working_capital", Active: true, Purposes: []applicationdomain.Purpose{purpose},
 		MinAmountKopecks: 50_000_000, MaxAmountKopecks: 5_000_000_000, MinTermMonths: 6, MaxTermMonths: 36, Collateral: applicationdomain.ProductCollateralOptional}
-	l := Locked{Draft: intakedomain.Draft{Application: a, Product: product}, CompanyINN: "7705005410"}
+	financials := financialsdomain.NewState()
+	financials.SourceStatus, financials.Snapshot = financialsdomain.SourceOK, &financialsdomain.Snapshot{SourceType: financialsdomain.SourceAutomatic}
+	l := Locked{Draft: intakedomain.Draft{Application: a, Product: product, Financials: financials}, CompanyINN: "7705005410"}
 	if fields, err := Validate(l, now); err != nil || len(fields) != 0 {
 		t.Fatalf("valid = %v, %v", fields, err)
 	}

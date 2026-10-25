@@ -16,6 +16,7 @@ import (
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
+	financialsdomain "github.com/lasagna67/lasagna.git/internal/financials/domain"
 	"github.com/lasagna67/lasagna.git/internal/outbox"
 )
 
@@ -28,24 +29,26 @@ const (
 	maxSmallint = 1<<15 - 1
 )
 
-// Details — заявка с предметом залога, полями проекта «Старта» и денежным
-// планом, как её видит клиент при оформлении.
+// Details — заявка с предметом залога, полями проекта «Старта», денежным
+// планом и финансовым шагом, как её видит клиент при оформлении.
 type Details struct {
 	applicationdomain.ApplicationDetails
 	Collateral *collateraldomain.Collateral
 	Project    *cashplandomain.Project
 	CashPlan   *cashplandomain.CashPlan
+	Financials financialsdomain.State
 }
 
 // Draft — заявка под блокировкой транзакции и то, по чему она проверяется:
 // продукт по коду из запроса (nil — кода нет или такого продукта нет),
-// предмет залога, поля проекта и денежный план.
+// предмет залога, поля проекта, денежный план и финансовый шаг.
 type Draft struct {
 	Application *applicationdomain.Application
 	Product     *applicationdomain.Product
 	Collateral  *collateraldomain.Collateral
 	Project     *cashplandomain.Project
 	CashPlan    *cashplandomain.CashPlan
+	Financials  financialsdomain.State
 }
 
 // Change — что записать вместе с заявкой в одной транзакции. Статус и время
@@ -320,7 +323,8 @@ func trimmed(s *string) *string {
 
 // CheckSubmit — правила отправки одним списком ошибок полей (ValidationError):
 // полнота запроса и условия продукта (applicationdomain.CheckSubmit), поля
-// проекта и денежный план (CheckPlan). Их проверяют submit, resubmit и этап
+// проекта и денежный план (CheckPlan), принятые финансы (P02: снимок текущего
+// цикла; без истории — только «Старт»). Их проверяют submit, resubmit и этап
 // validation конвейера — по одним правилам.
 func (d Draft) CheckSubmit(now time.Time) error {
 	var fields []applicationerrors.FieldError
@@ -332,6 +336,9 @@ func (d Draft) CheckSubmit(now time.Time) error {
 		fields = v.Fields
 	}
 	fields = append(fields, d.CheckPlan(now)...)
+	if d.Product != nil {
+		fields = append(fields, d.Financials.SubmitErrors(d.Product.Code)...)
+	}
 	if fields != nil {
 		return &applicationerrors.ValidationError{Fields: fields}
 	}

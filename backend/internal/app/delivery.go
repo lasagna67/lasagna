@@ -13,6 +13,7 @@ import (
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
 	documenthandler "github.com/lasagna67/lasagna.git/internal/document/handler"
 	financialscsvhandler "github.com/lasagna67/lasagna.git/internal/financials-csv/handler"
+	financialshandler "github.com/lasagna67/lasagna.git/internal/financials/handler"
 	intakehandler "github.com/lasagna67/lasagna.git/internal/intake/handler"
 	offerhandler "github.com/lasagna67/lasagna.git/internal/offer/handler"
 	signhandler "github.com/lasagna67/lasagna.git/internal/sign/handler"
@@ -46,6 +47,8 @@ func NewDelivery(cfg config.Config, services *Service, logger *logger.Logger) *D
 	uploads.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 	collateral := collateralhandler.New(services.Collateral, logger.Named("collateral"))
 	collateral.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleUnderwriter, authdomain.RoleAdmin))
+	financials := financialshandler.New(services.FinancialStep, logger.Named("financials"))
+	financials.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 	intake := intakehandler.New(services.Intake, logger.Named("intake"))
 	intake.RegisterRoutes(api, auth.Authenticate, auth.RequireRole(authdomain.RoleClient))
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 	underwritingdomain "github.com/lasagna67/lasagna.git/internal/underwriting/domain"
@@ -142,17 +143,15 @@ func (s *SourceChecks) Set(c CheckResult) {
 	s.Credit = c
 }
 
-// Overview — данные для модели: реестр и БКИ из проверок заявки, финансы —
-// принятый снимок компании (после отправки фоновый запрос его не перезаписывает).
-// Неуспешная проверка — источник без данных, даже если в сводке компании
-// остались прежние: устаревшие данные не выдаются за новые.
-func (s SourceChecks) Overview(stored companydomain.Overview) companydomain.Overview {
+// Overview — реестр и БКИ для модели из проверок заявки. Неуспешная проверка —
+// источник без данных, даже если в сводке компании остались прежние:
+// устаревшие данные не выдаются за новые. Финансы добавляет вызывающий из
+// принятого снимка заявки.
+func (s SourceChecks) Overview(companyID uuid.UUID) companydomain.Overview {
 	return companydomain.Overview{
-		CompanyID:            stored.CompanyID,
-		Registry:             companydomain.SourceResult[companydomain.RegistryCard]{Status: overviewStatus(s.Registry.Status), Data: s.Registry.Registry},
-		CreditHistory:        companydomain.SourceResult[companydomain.CreditReport]{Status: overviewStatus(s.Credit.Status), Data: s.Credit.Credit},
-		Financials:           stored.Financials,
-		FinancialsSourceType: stored.FinancialsSourceType,
+		CompanyID:     companyID,
+		Registry:      companydomain.SourceResult[companydomain.RegistryCard]{Status: overviewStatus(s.Registry.Status), Data: s.Registry.Registry},
+		CreditHistory: companydomain.SourceResult[companydomain.CreditReport]{Status: overviewStatus(s.Credit.Status), Data: s.Credit.Credit},
 	}
 }
 

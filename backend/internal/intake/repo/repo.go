@@ -18,6 +18,7 @@ import (
 	applicationrepo "github.com/lasagna67/lasagna.git/internal/application/repo"
 	cashplanrepo "github.com/lasagna67/lasagna.git/internal/cashplan/repo"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
+	financialsrepo "github.com/lasagna67/lasagna.git/internal/financials/repo"
 	intakedomain "github.com/lasagna67/lasagna.git/internal/intake/domain"
 )
 
@@ -29,8 +30,8 @@ func New(pool *pgxpool.Pool) *Repo {
 	return &Repo{pool: pool}
 }
 
-// Get — заявка с предметом залога, полями проекта и планом. Нет заявки —
-// applicationerrors.ErrNotFound.
+// Get — заявка с предметом залога, полями проекта, планом и финансовым шагом.
+// Нет заявки — applicationerrors.ErrNotFound.
 func (r *Repo) Get(ctx context.Context, id uuid.UUID) (intakedomain.Details, error) {
 	var d intakedomain.Details
 	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
@@ -45,7 +46,10 @@ func (r *Repo) Get(ctx context.Context, id uuid.UUID) (intakedomain.Details, err
 		if d.Project, err = cashplanrepo.Project(ctx, tx, id); err != nil {
 			return err
 		}
-		d.CashPlan, err = cashplanrepo.Plan(ctx, tx, id)
+		if d.CashPlan, err = cashplanrepo.Plan(ctx, tx, id); err != nil {
+			return err
+		}
+		d.Financials, err = financialsrepo.State(ctx, tx, id)
 		return err
 	})
 	if err != nil {
@@ -96,6 +100,9 @@ func (r *Repo) List(ctx context.Context, f intakedomain.ListFilter) ([]intakedom
 			if d.CashPlan, err = cashplanrepo.Plan(ctx, tx, app.ID); err != nil {
 				return err
 			}
+			if d.Financials, err = financialsrepo.State(ctx, tx, app.ID); err != nil {
+				return err
+			}
 			items = append(items, d)
 		}
 		return nil
@@ -132,7 +139,7 @@ func (r *Repo) Update(ctx context.Context, cmd applicationdomain.UpdateCommand, 
 }
 
 // LoadDraft читает то, по чему проверяется заявка: продукт по коду из запроса,
-// предмет залога, поля проекта и план. Вызывается в транзакции, где заявка
+// предмет залога, поля проекта, план и финансовый шаг. Вызывается в транзакции, где заявка
 // заблокирована: так же её проверяет этап validation конвейера.
 func LoadDraft(ctx context.Context, q applicationrepo.Querier, app *applicationdomain.Application) (intakedomain.Draft, error) {
 	d := intakedomain.Draft{Application: app}
@@ -149,6 +156,9 @@ func LoadDraft(ctx context.Context, q applicationrepo.Querier, app *applicationd
 		return intakedomain.Draft{}, err
 	}
 	if d.CashPlan, err = cashplanrepo.Plan(ctx, q, app.ID); err != nil {
+		return intakedomain.Draft{}, err
+	}
+	if d.Financials, err = financialsrepo.State(ctx, q, app.ID); err != nil {
 		return intakedomain.Draft{}, err
 	}
 	return d, nil

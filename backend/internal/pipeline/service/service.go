@@ -28,8 +28,8 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
-	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
+	financialsdomain "github.com/lasagna67/lasagna.git/internal/financials/domain"
 	"github.com/lasagna67/lasagna.git/internal/outbox"
 	pipelinedomain "github.com/lasagna67/lasagna.git/internal/pipeline/domain"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
@@ -46,6 +46,8 @@ type Repo interface {
 	// иначе ErrStaleRun), вызывает fn и пишет Change.
 	Update(ctx context.Context, cmd applicationdomain.UpdateCommand, fn func(*pipelinedomain.Locked) (pipelinedomain.Change, error)) error
 	Checks(ctx context.Context, applicationID, run uuid.UUID) (pipelinedomain.SourceChecks, error)
+	// Financials — финансовый шаг заявки с принятым снимком текущего цикла.
+	Financials(ctx context.Context, applicationID uuid.UUID) (financialsdomain.State, error)
 	Enqueue(ctx context.Context, msgs ...outbox.Message) error
 	// RecordSkip — отброшенное событие в техническую историю (B03).
 	RecordSkip(ctx context.Context, ev pipelinedomain.Event, topic, reason string) error
@@ -57,10 +59,9 @@ type Sources interface {
 	GetCreditReport(ctx context.Context, inn string) (companydomain.CreditReport, error)
 }
 
-// Overviews — сохранённая сводка компании. Реализация — companyrepo; нет
-// сводки — companyerrors.ErrOverviewNotFound.
+// Overviews — сводка компании: конвейер обновляет в ней реестр и БКИ.
+// Реализация — companyrepo.
 type Overviews interface {
-	GetOverview(ctx context.Context, companyID uuid.UUID) (companydomain.Overview, error)
 	SaveOverview(ctx context.Context, overview companydomain.Overview) error
 }
 
@@ -248,8 +249,8 @@ func (s *Service) Enrich(ctx context.Context, ev pipelinedomain.Event) error {
 	})
 }
 
-// Score — этап scoring: модель продукта на снимках этого запуска и принятых
-// финансах компании, затем рассмотрение сотрудником. Модель лишь рекомендует:
+// Score — этап scoring: модель продукта на снимках этого запуска и принятом
+// финансовом снимке заявки, затем рассмотрение сотрудником. Модель лишь рекомендует:
 // положительное решение публикует сотрудник.
 func (s *Service) Score(ctx context.Context, ev pipelinedomain.Event) error {
 	d, err := s.current(ctx, ev, applicationdomain.StatusScoring)
@@ -442,28 +443,25 @@ func (s *Service) fetchSource(ctx context.Context, inn string, src underwritingd
 // считается свежесть реестра (registry_synced_at). Неудачный источник прежние
 // данные сводки не стирает; финансы не трогаются.
 func (s *Service) saveOverview(ctx context.Context, companyID uuid.UUID, checks pipelinedomain.SourceChecks) error {
-	o := checks.Overview(companydomain.Overview{CompanyID: companyID})
-	o.Financials = companydomain.SourceResult[companydomain.FinancialReport]{}
+	o := checks.Overview(companyID)
 	if err := s.overviews.SaveOverview(ctx, o); err != nil {
 		return fmt.Errorf("save company overview: %w", err)
 	}
 	return nil
 }
 
-// assess — оценка моделью продукта на снимках checks и принятых финансах.
+// assess — оценка моделью продукта на снимках checks и принятом финансовом
+// снимке заявки (после отправки финансы не перезапрашиваются).
 // Сбой самой модели — оценка failed, а не ошибка этапа: иначе детерминированная
 // ошибка вечно перечитывала бы партицию. Ошибки чтения БД и отмена — ошибка
 // этапа, событие перечитается.
 func (s *Service) assess(ctx context.Context, d applicationdomain.ApplicationDetails, checks pipelinedomain.SourceChecks) (pipelinedomain.Assessment, error) {
-	stored, err := s.overviews.GetOverview(ctx, d.CompanyID)
-	switch {
-	case errors.Is(err, companyerrors.ErrOverviewNotFound):
-		stored = companydomain.Overview{CompanyID: d.CompanyID}
-	case err != nil:
-		return pipelinedomain.Assessment{}, fmt.Errorf("get company overview: %w", err)
+	financials, err := s.repo.Financials(ctx, d.ID)
+	if err != nil {
+		return pipelinedomain.Assessment{}, fmt.Errorf("get financials: %w", err)
 	}
 	in := stopInput(d, checks)
-	in.Overview = checks.Overview(stored)
+	in.Overview.Financials, in.Overview.FinancialsSourceType = financials.ScoringSource()
 	code := ""
 	if c := d.Request.ProductCode; c != nil {
 		code = *c
@@ -496,7 +494,7 @@ func (s *Service) assess(ctx context.Context, d applicationdomain.ApplicationDet
 func stopInput(d applicationdomain.ApplicationDetails, checks pipelinedomain.SourceChecks) scoring.ScoringInput {
 	return scoring.ScoringInput{
 		INN:              d.Company.INN,
-		Overview:         checks.Overview(companydomain.Overview{CompanyID: d.CompanyID}),
+		Overview:         checks.Overview(d.CompanyID),
 		RegistrySyncedAt: checks.Registry.Fetched(),
 		CreditFetchedAt:  checks.Credit.Fetched(),
 	}

@@ -9,6 +9,7 @@ import (
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
 	documentservice "github.com/lasagna67/lasagna.git/internal/document/service"
 	financialscsvservice "github.com/lasagna67/lasagna.git/internal/financials-csv/service"
+	financialsservice "github.com/lasagna67/lasagna.git/internal/financials/service"
 	intakeservice "github.com/lasagna67/lasagna.git/internal/intake/service"
 	offercontract "github.com/lasagna67/lasagna.git/internal/offer/contract"
 	offerservice "github.com/lasagna67/lasagna.git/internal/offer/service"
@@ -35,6 +36,7 @@ type Service struct {
 	Document       *documentservice.Service
 	Sign           *signservice.Service
 	Pipeline       *pipelineservice.Service
+	FinancialStep  *financialsservice.Service
 }
 
 func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service, error) {
@@ -107,5 +109,12 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Document:       documents,
 		Sign:           signservice.New(repo.Sign, company, external, underwriting, documents, repo.Files),
 		Pipeline:       pipeline,
+		FinancialStep: financialsservice.New(financialsservice.Deps{
+			Repo:      repo.Financials,
+			Companies: company,
+			Source:    external,
+			DemoModes: cfg.Financials.DemoModes,
+			Logger:    logger.Named("financials"),
+		}),
 	}, nil
 }

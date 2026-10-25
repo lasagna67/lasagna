@@ -20,6 +20,7 @@ import (
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 	documentdomain "github.com/lasagna67/lasagna.git/internal/document/domain"
+	financialsdomain "github.com/lasagna67/lasagna.git/internal/financials/domain"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
 	underwritingdomain "github.com/lasagna67/lasagna.git/internal/underwriting/domain"
@@ -162,7 +163,7 @@ func (s *Service) Get(ctx context.Context, id uuid.UUID) (underwritingdomain.Rev
 		return underwritingdomain.Review{}, fmt.Errorf("get company overview: %w", err)
 	}
 	review.Checks.FillFromOverview(overview, review.Company.INN)
-	if review.PlanContext, err = s.planContext(ctx, review.Details, overview); err != nil {
+	if review.PlanContext, err = s.planContext(ctx, review.Details, overview, review.Checks.Financials.Rows); err != nil {
 		return underwritingdomain.Review{}, err
 	}
 	now := s.now()
@@ -225,6 +226,8 @@ func (s *Service) RequestInfo(ctx context.Context, cmd underwritingdomain.Reques
 			Transitions: []applicationdomain.Transition{tr},
 			Comment:     &req.Message,
 			InfoRequest: &req,
+			// Банк открыл финансы — новый финансовый цикл: сначала снова автоматический запрос.
+			NewFinancialCycle: slices.Contains(req.EditableFields, financialsdomain.EditableField),
 			Notification: &applicationdomain.Notification{
 				UserID:        a.ApplicantID,
 				ApplicationID: a.ID,
@@ -511,13 +514,13 @@ func (s *Service) clientDetails(ctx context.Context, userID, id uuid.UUID) (unde
 	return d, nil
 }
 
-// planContext — что нужно проверке денежного плана: окно финансов и платежи по
-// действующим кредитам из сохранённой сводки компании, ставка и вид погашения
-// запрошенного продукта.
-func (s *Service) planContext(ctx context.Context, d underwritingdomain.Details, o companydomain.Overview) (underwritingdomain.CashPlanContext, error) {
+// planContext — что нужно проверке денежного плана: окно принятого
+// финансового снимка заявки, платежи по действующим кредитам из сохранённой
+// сводки компании, ставка и вид погашения запрошенного продукта.
+func (s *Service) planContext(ctx context.Context, d underwritingdomain.Details, o companydomain.Overview, financials []companydomain.MonthlyData) (underwritingdomain.CashPlanContext, error) {
 	var pc underwritingdomain.CashPlanContext
-	if f := o.Financials.Data; o.Financials.Status == "ok" && f != nil && f.Status == "ok" {
-		pc.Window = scoring.FinancialWindow(f.MonthlyData, s.now())
+	if len(financials) > 0 {
+		pc.Window = scoring.FinancialWindow(financials, s.now())
 	}
 	if c := o.CreditHistory.Data; o.CreditHistory.Status == "ok" && c != nil && c.Status == "ok" && c.Report.Loans != nil {
 		if debt, err := scoring.ActiveMonthlyDebt(c.Report.Loans); err == nil {

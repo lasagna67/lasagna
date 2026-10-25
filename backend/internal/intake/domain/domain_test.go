@@ -145,14 +145,15 @@ func TestPatchFields(t *testing.T) {
 	if got := cmd.Fields(); !slices.Equal(got, []string{"request.amount_kopecks", "request.collateral_mode", "collateral"}) {
 		t.Errorf("fields = %v", got)
 	}
-	// Пути совпадают с полями черновика, из которых банк открывает правку.
+	// Пути совпадают с полями черновика, из которых банк открывает правку, кроме
+	// financials: это не поле PATCH, а финансовый шаг со своими операциями.
 	all := PatchCommand{
 		Purpose: null[applicationdomain.Purpose](), PurposeDescription: null[string](), AmountKopecks: null[int64](),
 		NeedPeriod: &applicationdomain.NeedPeriod{}, ProductCode: null[string](), TermMonths: null[int](),
 		CollateralMode: ptr(applicationdomain.CollateralNone), Collateral: machine,
 		ProductDetails: null[cashplandomain.Project](), CashPlan: null[cashplandomain.CashPlan](),
 	}
-	if len(all.Fields()) != len(applicationdomain.DraftFields()) {
+	if len(all.Fields())+1 != len(applicationdomain.DraftFields()) || !slices.Contains(applicationdomain.DraftFields(), "financials") {
 		t.Errorf("fields %v do not cover draft fields %v", all.Fields(), applicationdomain.DraftFields())
 	}
 	for _, f := range all.Fields() {

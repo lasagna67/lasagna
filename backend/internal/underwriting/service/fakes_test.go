@@ -39,6 +39,7 @@ type fakeRepo struct {
 	accounts      map[uuid.UUID]offerdomain.Account
 	keys          map[string]string
 	notifications []applicationdomain.Notification
+	cycles        map[uuid.UUID]int // новые финансовые циклы по запросам банка
 }
 
 func newFakeRepo() *fakeRepo {
@@ -209,6 +210,13 @@ func (f *fakeRepo) Update(_ context.Context, cmd applicationdomain.UpdateCommand
 	}
 	if change.Notification != nil {
 		f.notifications = append(f.notifications, *change.Notification)
+	}
+	if change.NewFinancialCycle {
+		if f.cycles == nil {
+			f.cycles = map[uuid.UUID]int{}
+		}
+		f.cycles[id]++
+		app.DataRevision++
 	}
 	if scope != "" {
 		f.keys[scope] = cmd.Key.RequestHash

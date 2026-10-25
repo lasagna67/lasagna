@@ -11,6 +11,7 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
+	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 	underwritingdomain "github.com/lasagna67/lasagna.git/internal/underwriting/domain"
 	underwritingerrors "github.com/lasagna67/lasagna.git/internal/underwriting/errors"
@@ -30,11 +31,19 @@ var (
 
 func ptr[T any](v T) *T { return &v }
 
+// readyChecks — проверки готовы, принятый снимок финансов: ровные полгода до
+// текущего месяца, денежный план не нужен.
 func readyChecks() underwritingdomain.CheckSummary {
+	now := time.Now().In(time.FixedZone("Europe/Moscow", 3*60*60))
+	start := time.Date(now.Year(), now.Month()-6, 1, 0, 0, 0, 0, now.Location())
+	rows := make([]companydomain.MonthlyData, 0, 6)
+	for i := range 6 {
+		rows = append(rows, companydomain.MonthlyData{Month: start.AddDate(0, i, 0).Format("2006-01"), Income: 100000000, Expenses: 40000000})
+	}
 	return underwritingdomain.CheckSummary{
 		Registry:     underwritingdomain.RegistryCheck{SourceCheck: underwritingdomain.SourceCheck{Status: underwritingdomain.SourceOK}, INN: ptr(companyINN), CompanyState: ptr("active")},
 		CreditBureau: underwritingdomain.CreditBureauCheck{SourceCheck: underwritingdomain.SourceCheck{Status: underwritingdomain.SourceOK}, HasCreditHistory: ptr(true)},
-		Financials:   underwritingdomain.FinancialsCheck{DataStatus: underwritingdomain.FinancialsReady},
+		Financials:   underwritingdomain.FinancialsCheck{DataStatus: underwritingdomain.FinancialsReady, SourceType: ptr("automatic"), Coverage: ptr("complete"), Rows: rows},
 		Scoring:      underwritingdomain.ScoringCheck{Status: underwritingdomain.ScoringNotConfigured},
 	}
 }
@@ -371,6 +380,29 @@ func TestRetryChecks(t *testing.T) {
 	e.pipeline.err = applicationerrors.ErrServiceUnavailable
 	if _, err := e.svc.RetryChecks(ctx, cmd); !errors.Is(err, applicationerrors.ErrServiceUnavailable) {
 		t.Errorf("retry with failed pipeline = %v; want ErrServiceUnavailable", err)
+	}
+}
+
+// Банк открыл финансы в запросе уточнений — новый финансовый цикл и новая
+// data_revision; без financials цикл не меняется.
+func TestRequestInfoOpensFinancialCycle(t *testing.T) {
+	e := newEnv()
+	app := e.manualReview(1000)
+	e.take(t, app.ID, me)
+	review, err := e.svc.RequestInfo(ctx, underwritingdomain.RequestInfoCommand{ApplicationID: app.ID, Reviewer: me, ExpectedRevision: 5,
+		Message: "Обновите выручку за сентябрь", EditableFields: []string{"financials"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.repo.cycles[app.ID] != 1 || review.DataRevision != app.DataRevision+1 {
+		t.Errorf("cycles %d, data revision %d -> %d", e.repo.cycles[app.ID], app.DataRevision, review.DataRevision)
+	}
+
+	other := e.manualReview(1001)
+	e.take(t, other.ID, me)
+	if _, err := e.svc.RequestInfo(ctx, underwritingdomain.RequestInfoCommand{ApplicationID: other.ID, Reviewer: me, ExpectedRevision: 5,
+		Message: "Уточните сумму", EditableFields: []string{"request.amount_kopecks"}}); err != nil || e.repo.cycles[other.ID] != 0 {
+		t.Errorf("request without financials = %v, cycles %d", err, e.repo.cycles[other.ID])
 	}
 }
 

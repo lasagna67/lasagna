@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	financialsrepo "github.com/lasagna67/lasagna.git/internal/financials/repo"
 	underwritingdomain "github.com/lasagna67/lasagna.git/internal/underwriting/domain"
 )
 
@@ -27,8 +28,8 @@ import (
 // строки до конвейера (NULL): после повторной отправки результаты прежнего
 // запуска не выдаются за текущие, даже если новый запуск ещё их не записал.
 //
-// Финансовых снимков версии заявки в схеме ещё нет: до финансового шага
-// данные считаются отсутствующими, и положительное решение блокируется.
+// Финансы — финансовый шаг заявки (модуль financials): принятый снимок текущего
+// цикла; до финансового шага данные отсутствуют, и положительное решение блокируется.
 type ChecksRepo struct {
 	pool *pgxpool.Pool
 }
@@ -79,6 +80,12 @@ func (r *ChecksRepo) Summary(ctx context.Context, applicationID uuid.UUID) (unde
 	if err != nil {
 		return underwritingdomain.CheckSummary{}, fmt.Errorf("scan external checks: %w", err)
 	}
+
+	st, err := financialsrepo.State(ctx, r.pool, applicationID)
+	if err != nil {
+		return underwritingdomain.CheckSummary{}, err
+	}
+	summary.Financials = underwritingdomain.NewFinancialsCheck(st, time.Now())
 
 	var s underwritingdomain.ScoringCheck
 	var calculatedAt time.Time

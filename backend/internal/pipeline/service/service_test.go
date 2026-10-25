@@ -3,6 +3,7 @@ package pipelineservice
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
+	financialsdomain "github.com/lasagna67/lasagna.git/internal/financials/domain"
 	pipelinedomain "github.com/lasagna67/lasagna.git/internal/pipeline/domain"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
 	underwritingdomain "github.com/lasagna67/lasagna.git/internal/underwriting/domain"
@@ -49,11 +51,7 @@ func newEnv() *env {
 			credit:   []func() (companydomain.CreditReport, error){func() (companydomain.CreditReport, error) { return report(), nil }},
 			calls:    map[underwritingdomain.CheckSource]int{},
 		},
-		overviews: &fakeOverviews{stored: &companydomain.Overview{
-			CompanyID:            companyID,
-			Financials:           companydomain.SourceResult[companydomain.FinancialReport]{Status: "ok", Data: &companydomain.FinancialReport{INN: inn, Status: "ok", Currency: "RUB"}},
-			FinancialsSourceType: "auto",
-		}},
+		overviews: &fakeOverviews{},
 		scorer: &fakeScorer{decision: scoring.ScoringDecision{
 			State:            scoring.DecisionAutoApproved,
 			CanPublish:       true,
@@ -61,6 +59,7 @@ func newEnv() *env {
 			Metrics:          scoring.DecisionMetrics{Status: "completed", Score: ptr(860)},
 		}},
 	}
+	e.repo.financials = readyFinancials()
 	e.repo.products["working_capital"] = applicationdomain.Product{
 		Code: "working_capital", Active: true, Purposes: []applicationdomain.Purpose{applicationdomain.PurposeWorkingCapital},
 		MinAmountKopecks: 50_000_000, MaxAmountKopecks: 5_000_000_000, MinTermMonths: 6, MaxTermMonths: 36,
@@ -83,6 +82,20 @@ func newEnv() *env {
 		return nil
 	}
 	return e
+}
+
+// readyFinancials — принятый автоматический снимок заявки за полгода.
+func readyFinancials() financialsdomain.State {
+	st := financialsdomain.NewState()
+	rows := make([]financialsdomain.Row, 6)
+	for i := range rows {
+		rows[i] = financialsdomain.Row{Month: fmt.Sprintf("2026-%02d", 4+i), IncomeKopecks: 100_000_000, ExpensesKopecks: 40_000_000, FreeCashKopecks: 60_000_000}
+	}
+	snap := financialsdomain.NewSnapshot(financialsdomain.SnapshotInput{
+		ID: uuid.New(), Cycle: 1, SourceType: financialsdomain.SourceAutomatic, INN: inn, Rows: rows, Raw: []byte("{}"),
+	}, fixedNow)
+	st.ApplyFetch(financialsdomain.FetchResult{Status: financialsdomain.SourceOK, Rows: rows}, &snap, fixedNow)
+	return st
 }
 
 func card(status companydomain.RegistryStatus) companydomain.RegistryCard {
@@ -168,7 +181,7 @@ func TestPipelineToManualReview(t *testing.T) {
 		}
 	}
 	// Сводка компании обновлена реестром и БКИ; финансы не перезаписаны.
-	if len(e.overviews.saved) != 1 || e.overviews.saved[0].Registry.Data == nil || e.overviews.saved[0].Financials.Data != nil {
+	if len(e.overviews.saved) != 1 || e.overviews.saved[0].Registry.Data == nil || e.overviews.saved[0].Financials.Status != "" {
 		t.Errorf("saved overview = %+v", e.overviews.saved)
 	}
 
@@ -177,8 +190,10 @@ func TestPipelineToManualReview(t *testing.T) {
 		t.Fatalf("scorer calls = %d", len(e.scorer.inputs))
 	}
 	in := e.scorer.inputs[0]
+	// Финансы — принятый снимок заявки, а не сводка компании.
 	if in.INN != inn || in.Overview.Registry.Status != "ok" || in.Overview.CreditHistory.Data == nil ||
-		in.Overview.Financials.Data == nil || in.CreditFetchedAt == nil || in.RegistrySyncedAt == nil ||
+		in.Overview.Financials.Data == nil || len(in.Overview.Financials.Data.MonthlyData) != 6 || in.Overview.FinancialsSourceType != "auto" ||
+		in.CreditFetchedAt == nil || in.RegistrySyncedAt == nil ||
 		in.Product == nil || in.Product.Code != "working_capital" || *in.Product.AnnualRateBasisPoints != 1990 {
 		t.Errorf("scoring input = %+v", in)
 	}
@@ -331,6 +346,17 @@ func TestPipelineValidationFailureGoesToReview(t *testing.T) {
 	// Нарушение условий после отправки — не кредитный отказ, клиент видит, что уточнить.
 	if len(e.repo.decisions) != 0 || len(e.repo.comments) != 1 || e.sources.calls[underwritingdomain.CheckRegistry] != 0 {
 		t.Errorf("decisions %d, comments %v, registry calls %d", len(e.repo.decisions), e.repo.comments, e.sources.calls[underwritingdomain.CheckRegistry])
+	}
+}
+
+// Финансы проверяются и на этапе validation: правила те же, что у submit.
+func TestPipelineValidationNeedsFinancials(t *testing.T) {
+	e := newEnv()
+	e.repo.financials = financialsdomain.NewState()
+	d := e.submitted()
+	e.repo.deliver(t, e.svc)
+	if got := e.app(d.ID); got.Status != applicationdomain.StatusManualReview || len(e.repo.comments) != 1 || e.sources.calls[underwritingdomain.CheckRegistry] != 0 {
+		t.Errorf("status %s, comments %v", got.Status, e.repo.comments)
 	}
 }
 

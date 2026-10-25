@@ -10,8 +10,8 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
-	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 	creditproducts "github.com/lasagna67/lasagna.git/internal/credit_products"
+	financialsdomain "github.com/lasagna67/lasagna.git/internal/financials/domain"
 	intakedomain "github.com/lasagna67/lasagna.git/internal/intake/domain"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 	"github.com/lasagna67/lasagna.git/internal/outbox"
@@ -39,6 +39,7 @@ type fakeRepo struct {
 	notifications []applicationdomain.Notification
 	outbox        []outbox.Message
 	skips         []string // топики отброшенных событий
+	financials    financialsdomain.State
 	updateErr     error
 }
 
@@ -71,7 +72,7 @@ func (r *fakeRepo) Update(_ context.Context, cmd applicationdomain.UpdateCommand
 		return applicationerrors.ErrStaleRun
 	}
 	app := d.Application
-	l := pipelinedomain.Locked{Draft: intakedomain.Draft{Application: &app}, CompanyINN: d.Company.INN, NextDecisionVersion: len(r.decisionsOf(app.ID)) + 1}
+	l := pipelinedomain.Locked{Draft: intakedomain.Draft{Application: &app, Financials: r.financials}, CompanyINN: d.Company.INN, NextDecisionVersion: len(r.decisionsOf(app.ID)) + 1}
 	if code := app.Request.ProductCode; code != nil {
 		if p, ok := r.products[*code]; ok {
 			l.Product = &p
@@ -121,6 +122,10 @@ func (r *fakeRepo) Checks(_ context.Context, applicationID, run uuid.UUID) (pipe
 		}
 	}
 	return checks, nil
+}
+
+func (r *fakeRepo) Financials(context.Context, uuid.UUID) (financialsdomain.State, error) {
+	return r.financials, nil
 }
 
 func (r *fakeRepo) RecordSkip(_ context.Context, ev pipelinedomain.Event, topic, _ string) error {
@@ -186,15 +191,7 @@ func (f *fakeSources) GetCreditReport(context.Context, string) (companydomain.Cr
 }
 
 type fakeOverviews struct {
-	stored *companydomain.Overview
-	saved  []companydomain.Overview
-}
-
-func (f *fakeOverviews) GetOverview(context.Context, uuid.UUID) (companydomain.Overview, error) {
-	if f.stored == nil {
-		return companydomain.Overview{}, companyerrors.ErrOverviewNotFound
-	}
-	return *f.stored, nil
+	saved []companydomain.Overview
 }
 
 func (f *fakeOverviews) SaveOverview(_ context.Context, o companydomain.Overview) error {

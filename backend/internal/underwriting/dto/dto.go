@@ -171,6 +171,7 @@ type InfoRequestResponse struct {
 // заключением банка, предложение и договор.
 func NewApplication(d underwritingdomain.Details) applicationdto.ApplicationResponse {
 	resp := applicationdto.NewApplicationResponse(d.ApplicationDetails)
+	resp.WithFinancials(d.Application, d.Financials, time.Now())
 	if c := newCollateral(d); c != nil {
 		resp.Collateral = c
 	}

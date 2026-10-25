@@ -20,6 +20,7 @@ import (
 	cashplanrepo "github.com/lasagna67/lasagna.git/internal/cashplan/repo"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	documentrepo "github.com/lasagna67/lasagna.git/internal/document/repo"
+	financialsrepo "github.com/lasagna67/lasagna.git/internal/financials/repo"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 	offerrepo "github.com/lasagna67/lasagna.git/internal/offer/repo"
 	underwritingdomain "github.com/lasagna67/lasagna.git/internal/underwriting/domain"
@@ -129,7 +130,7 @@ func (r *Repo) Update(ctx context.Context, cmd applicationdomain.UpdateCommand, 
 		if err != nil {
 			return applicationrepo.History{}, err
 		}
-		if err := apply(ctx, tx, change); err != nil {
+		if err := apply(ctx, tx, *app, change); err != nil {
 			return applicationrepo.History{}, err
 		}
 		return applicationrepo.History{Transitions: change.Transitions, Comment: change.Comment}, nil
@@ -205,7 +206,7 @@ func (r *Repo) account(ctx context.Context, where string, arg uuid.UUID) (offerd
 
 // apply пишет данные рассмотрения из Change. Переходы и саму заявку сохраняет
 // applicationrepo.Update.
-func apply(ctx context.Context, tx pgx.Tx, c underwritingdomain.Change) error {
+func apply(ctx context.Context, tx pgx.Tx, app applicationdomain.Application, c underwritingdomain.Change) error {
 	if c.Document != nil {
 		if err := documentrepo.InsertDocument(ctx, tx, *c.Document); err != nil {
 			return err
@@ -243,6 +244,14 @@ func apply(ctx context.Context, tx pgx.Tx, c underwritingdomain.Change) error {
 		}
 		if tag.RowsAffected() != 1 {
 			return fmt.Errorf("%w: info request is not open", applicationerrors.ErrInvalidState)
+		}
+	}
+	if c.NewFinancialCycle {
+		if err := financialsrepo.StartCycle(ctx, tx, app.ID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE applications SET data_revision = data_revision + 1 WHERE id = $1`, app.ID); err != nil {
+			return fmt.Errorf("update data revision: %w", err)
 		}
 	}
 	if n := c.Notification; n != nil {
@@ -305,6 +314,9 @@ func withExtras(ctx context.Context, q applicationrepo.Querier, app applicationd
 	}
 	if len(decisions) > 0 && decisions[0].Positive() {
 		d.Offer = &decisions[0]
+	}
+	if d.Financials, err = financialsrepo.State(ctx, q, app.ID); err != nil {
+		return underwritingdomain.Details{}, err
 	}
 	return d, nil
 }

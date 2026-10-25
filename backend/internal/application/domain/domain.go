@@ -199,9 +199,12 @@ const (
 type Operation string
 
 const (
-	OperationCreate   Operation = "create_application"
-	OperationSubmit   Operation = "submit_application"
-	OperationResubmit Operation = "resubmit_application"
+	OperationCreate           Operation = "create_application"
+	OperationSubmit           Operation = "submit_application"
+	OperationResubmit         Operation = "resubmit_application"
+	OperationFetchFinancials  Operation = "fetch_financials"
+	OperationUploadCSV        Operation = "upload_financials_csv"
+	OperationDeclareNoHistory Operation = "declare_no_history"
 )
 
 // IdempotencyKey — область повтора: пользователь, операция, ресурс и ключ клиента.
@@ -398,10 +401,13 @@ func (a *Application) Expire(validUntil *time.Time, now time.Time) (Transition, 
 // product_details, collateral и cash_plan — целиком: состав зависит от продукта.
 // Денежный план в черновике — только у «Старта», у других кредитов его
 // открывает банк запросом уточнений.
+//
+// financials — не поле PATCH, а финансовый шаг: открытый банком в уточнении,
+// он начинает новый финансовый цикл (модуль financials).
 var draftFields = []string{
 	"request.purpose", "request.purpose_description", "request.amount_kopecks",
 	"request.need_period", "request.product_code", "request.term_months",
-	"request.collateral_mode", "product_details", "collateral", "cash_plan",
+	"request.collateral_mode", "product_details", "collateral", "cash_plan", "financials",
 }
 
 // DraftFields — поля черновика; из них банк выбирает, что открыть клиенту
@@ -432,6 +438,9 @@ func (a *Application) ClientActions() []Action {
 		actions := []Action{}
 		if len(a.Info.EditableFields) > 0 {
 			actions = append(actions, ActionEdit)
+		}
+		if slices.Contains(a.Info.EditableFields, "financials") {
+			actions = append(actions, ActionFetchFinancials)
 		}
 		if a.Info.Open > 0 {
 			return append(actions, ActionAnswerInfo)
