@@ -70,9 +70,10 @@ export async function until(fn, { timeout = 60_000, interval = 1_500, label = "c
   }
 }
 
-// Создаёт заявку, заполняет параметры, тянет финансы и отправляет.
+// Создаёт заявку: request — параметры, extras — дополнительные PATCH-тела
+// (collateral, product_details, cash_plan…) по порядку, затем финансы и submit.
 // Возвращает { id, rev, status, company }.
-export async function startApplication(token, overrides = {}) {
+export async function startApplication(token, { request: overrides = {}, extras = [] } = {}) {
   const request = {
     purpose: "working_capital",
     purpose_description: null,
@@ -98,6 +99,14 @@ export async function startApplication(token, overrides = {}) {
     body: { expected_revision: rev, request },
   });
   rev = patched.revision;
+  for (const body of extras) {
+    const res = await reqOk(`/applications/${app.id}`, {
+      method: "PATCH",
+      token,
+      body: { expected_revision: rev, ...body },
+    });
+    rev = res.revision;
+  }
   const fin = await reqOk(`/applications/${app.id}/financials/fetch`, {
     method: "POST",
     token,
@@ -116,6 +125,47 @@ export async function startApplication(token, overrides = {}) {
 
 export async function staffCard(id, staffToken) {
   return reqOk(`/underwriter/applications/${id}`, { token: staffToken });
+}
+
+// Действие сотрудника. Внимание: collateral-review/cash-plan-review возвращают
+// не карточку — после вызова перечитывайте staffCard.
+export async function staffPost(id, staffToken, action, body = {}) {
+  return reqOk(`/underwriter/applications/${id}/${action}`, {
+    method: "POST",
+    token: staffToken,
+    body,
+  });
+}
+
+// Полный цикл подписи клиентом: контекст → esign-mock → подпись в банк.
+export async function signLoan(client, id, { revision, offerId, documentId }) {
+  const ctx = await reqOk(`/applications/${id}/signing-context`, {
+    method: "POST",
+    token: client,
+    body: { expected_revision: revision, offer_id: offerId, document_id: documentId },
+  });
+  const signed = await esignSign(ctx.certificate_serial, ctx.data);
+  return reqOk(`/applications/${id}/sign`, {
+    method: "POST",
+    token: client,
+    idempotencyKey: idem(),
+    body: { context_id: ctx.context_id, signature: signed.signature, terms_accepted: true },
+  });
+}
+
+// N месяцев подряд начиная с "YYYY-MM" — для прогноза денежного плана.
+export function months(from, count) {
+  const [y, m] = from.split("-").map(Number);
+  return Array.from({ length: count }, (_, i) => {
+    const t = m - 1 + i;
+    return `${y + Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`;
+  });
+}
+
+// Последний завершёншийся месяц (для CSV: незавершённые не принимаются).
+export function lastCompletedMonth() {
+  const prev = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);
+  return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export async function esignSign(certificateSerial, data) {
