@@ -14,6 +14,7 @@ import (
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	applicationrepo "github.com/lasagna67/lasagna.git/internal/application/repo"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
+	documentdomain "github.com/lasagna67/lasagna.git/internal/document/domain"
 	signdto "github.com/lasagna67/lasagna.git/internal/sign/dto"
 	signservice "github.com/lasagna67/lasagna.git/internal/sign/service"
 )
@@ -41,12 +42,41 @@ func (r *Repo) Context(ctx context.Context, id, userID, appID uuid.UUID) (signdt
 
 func (r *Repo) Signature(ctx context.Context, appID uuid.UUID) (signdto.Signature, error) {
 	var s signdto.Signature
-	err := r.pool.QueryRow(ctx, `SELECT s.id,s.context_id,s.application_id,s.offer_id,s.document_id,s.document_sha256,s.signed_data,s.signature,s.certificate,s.signed_by,s.signed_at,s.modeled_effective_date::text,s.terms_accepted,j.operation_id
-		FROM contract_signatures s JOIN application_issue_jobs j ON j.signature_id=s.id WHERE s.application_id=$1`, appID).Scan(&s.ID, &s.ContextID, &s.ApplicationID, &s.OfferID, &s.DocumentID, &s.DocumentSHA256, &s.Data, &s.Signature, &s.Certificate, &s.SignedBy, &s.SignedAt, &s.ModeledEffectiveDate, &s.TermsAccepted, &s.OperationID)
+	err := r.pool.QueryRow(ctx, `SELECT s.id,s.context_id,s.application_id,s.offer_id,s.document_id,s.signed_document_id,s.document_sha256,s.signed_data,s.signature,s.certificate,s.signed_by,s.signed_at,s.modeled_effective_date::text,s.terms_accepted,j.operation_id
+		FROM contract_signatures s JOIN application_issue_jobs j ON j.signature_id=s.id WHERE s.application_id=$1`, appID).Scan(&s.ID, &s.ContextID, &s.ApplicationID, &s.OfferID, &s.DocumentID, &s.SignedDocumentID, &s.DocumentSHA256, &s.Data, &s.Signature, &s.Certificate, &s.SignedBy, &s.SignedAt, &s.ModeledEffectiveDate, &s.TermsAccepted, &s.OperationID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = applicationerrors.ErrNotFound
 	}
 	return s, err
+}
+
+func (r *Repo) SaveSignedDocument(ctx context.Context, s signdto.Signature, doc documentdomain.Document) (uuid.UUID, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	defer tx.Rollback(ctx)
+	var existing *uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT signed_document_id FROM contract_signatures WHERE id=$1 AND application_id=$2 FOR UPDATE`, s.ID, s.ApplicationID).Scan(&existing)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if existing != nil {
+		return *existing, nil
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO application_documents(id,application_id,type,file_name,content_type,size_bytes,storage_key,sha256,signed_by,signed_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, doc.ID, s.ApplicationID, documentdomain.DocumentLoanAgreement, doc.FileName, doc.ContentType, doc.SizeBytes, doc.StorageKey, doc.SHA256, s.SignedBy, s.SignedAt)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	_, err = tx.Exec(ctx, `UPDATE contract_signatures SET signed_document_id=$2 WHERE id=$1`, s.ID, doc.ID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return uuid.Nil, err
+	}
+	return doc.ID, nil
 }
 
 func (r *Repo) Replay(ctx context.Context, k applicationdomain.IdempotencyKey) (bool, error) {
