@@ -200,6 +200,10 @@ export function Guide() {
           <code className="font-mono">inn,month,income,expenses,taxes,owner_withdrawals</code>,
           суммы целыми копейками, только завершённые месяцы не раньше регистрации компании.
         </p>
+        <p className="text-ink-soft">
+          Пройти тот же путь с подсказками прямо в интерфейсе можно кнопкой «Показать туториал» —
+          она есть в кабинете и на странице заявки.
+        </p>
         <div className="flex flex-wrap items-center gap-4 pt-2">
           <Button href="/login">Войти в кабинет</Button>
           <a href="/financials_example.csv" download className="text-[16px] text-brand hover:underline">
