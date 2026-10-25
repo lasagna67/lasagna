@@ -22,7 +22,7 @@ const statusPlates: Record<string, string> = {
 
 export function ApplicationsSection({ items, busy, canCreate, onCreate }: Props) {
   return (
-    <section className="mt-10">
+    <section className="mt-10" data-tour="applications">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h2 className="text-promo-s">Заявки</h2>
         <Button size="m" disabled={!canCreate || busy} onClick={onCreate}>

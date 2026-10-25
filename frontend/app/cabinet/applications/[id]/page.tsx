@@ -13,6 +13,7 @@ import { BankReviews } from "@/components/application/bank-reviews";
 import { InfoPanel } from "@/components/application/info-panel";
 import { OfferPanel } from "@/components/application/offer-panel";
 import { StatusBar } from "@/components/application/status-bar";
+import { ApplicationTour } from "@/components/tour/application-tour";
 import { AppHeader } from "@/components/ui/app-header";
 import { ErrorBanner } from "@/components/ui/error-banner";
 
@@ -140,9 +141,12 @@ function ApplicationDetail({ params }: { params: Promise<{ id: string }> }) {
         onLogout={() => void logout()}
       />
       <main className="mx-auto w-full max-w-[1200px] px-4 pt-6 pb-20 md:px-8">
-        <Link href="/cabinet" className="text-[15px] text-ink-soft hover:text-brand">
-          ← К кабинету
-        </Link>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link href="/cabinet" className="text-[15px] text-ink-soft hover:text-brand">
+            ← К кабинету
+          </Link>
+          {state.phase === "ready" && <ApplicationTour app={state.app} />}
+        </div>
 
         {state.phase === "loading" && <p className="mt-8 text-ink-soft">Загружаем заявку…</p>}
         {state.phase === "error" && (
@@ -153,7 +157,7 @@ function ApplicationDetail({ params }: { params: Promise<{ id: string }> }) {
 
         {state.phase === "ready" && (
           <>
-            <div className="mt-6">
+            <div className="mt-6" data-tour="status">
               <StatusBar
                 status={state.app.status}
                 number={state.app.number}
@@ -167,7 +171,7 @@ function ApplicationDetail({ params }: { params: Promise<{ id: string }> }) {
               </p>
             )}
 
-            <div className="mt-6">
+            <div className="mt-6" data-tour="main">
               {state.app.status === "draft" && (
                 <ApplyWizard
                   app={state.app}

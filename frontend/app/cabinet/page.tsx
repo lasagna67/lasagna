@@ -8,6 +8,7 @@ import { businessStatusLabel, entityLabel, positionLabel } from "@/lib/demo-data
 import { clearSession, getSession, setSession } from "@/lib/session";
 import { ConnectFlow } from "@/components/auth/connect-flow";
 import { CsvFormat } from "@/components/application/csv-format";
+import { CabinetTour } from "@/components/tour/cabinet-tour";
 import { ApplicationsSection } from "@/components/cabinet/applications-section";
 import { OverviewSection } from "@/components/cabinet/overview";
 import { AppHeader } from "@/components/ui/app-header";
@@ -140,6 +141,7 @@ export default function CabinetPage() {
 
       <main className="mx-auto w-full max-w-[1200px] px-4 pt-8 pb-20 md:px-8">
         <DemoNotice className="mb-6" />
+        <CabinetTour />
 
         {state.phase === "loading" && <p className="text-ink-soft">Загружаем кабинет…</p>}
 
@@ -165,7 +167,7 @@ export default function CabinetPage() {
 
         {state.phase === "ready" && company && (
           <>
-            <section>
+            <section data-tour="company">
               <div className="flex flex-wrap items-baseline gap-x-4 gap-y-3">
                 <h1 className="text-promo-m">{company.name}</h1>
                 <span className="rounded-full bg-plate-pearl px-3 py-1 font-mono text-[14px]">
