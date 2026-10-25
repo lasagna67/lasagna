@@ -97,6 +97,6 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Underwriting:   underwriting,
 		Offer:          offerservice.New(repo.Offers, company),
 		Document:       documents,
-		Sign:           signservice.New(repo.Sign, company, external, underwriting, documents),
+		Sign:           signservice.New(repo.Sign, company, external, underwriting, documents, repo.Files),
 	}, nil
 }

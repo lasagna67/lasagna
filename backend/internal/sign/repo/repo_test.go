@@ -16,6 +16,7 @@ import (
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
+	documentdomain "github.com/lasagna67/lasagna.git/internal/document/domain"
 	signdto "github.com/lasagna67/lasagna.git/internal/sign/dto"
 	signservice "github.com/lasagna67/lasagna.git/internal/sign/service"
 )
@@ -107,6 +108,21 @@ func TestContractAcceptAtomicAndIdempotent(t *testing.T) {
 	}
 	if s.Signature != "verified" || s.Data != c.Data || s.DocumentSHA256 != c.DocumentSHA256 || s.Certificate.Serial != cert.Serial || s.SignedBy != c.UserID || s.OperationID == uuid.Nil || !s.TermsAccepted {
 		t.Fatalf("incomplete artifact: %+v", s)
+	}
+	signed := documentdomain.Document{ID: uuid.New(), FileName: "contract-signed.pdf", ContentType: "application/pdf", SizeBytes: 256, StorageKey: uuid.NewString(), SHA256: strings.Repeat("c", 64)}
+	if id, err := r.SaveSignedDocument(ctx, s, signed); err != nil || id != signed.ID {
+		t.Fatalf("save signed document: id=%s err=%v", id, err)
+	}
+	if id, err := r.SaveSignedDocument(ctx, s, signed); err != nil || id != signed.ID {
+		t.Fatalf("replay signed document: id=%s err=%v", id, err)
+	}
+	var signedID uuid.UUID
+	var count int
+	if err := r.pool.QueryRow(ctx, `SELECT signed_document_id FROM contract_signatures WHERE id=$1`, s.ID).Scan(&signedID); err != nil || signedID != signed.ID {
+		t.Fatalf("signature document link: id=%s err=%v", signedID, err)
+	}
+	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM application_documents WHERE application_id=$1 AND type='loan_agreement'`, c.ApplicationID).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("original and signed PDF should both remain: count=%d err=%v", count, err)
 	}
 	if replay, err := r.Accept(ctx, c, "verified", cert, key); err != nil || !replay {
 		t.Fatalf("repeat: %v %v", replay, err)

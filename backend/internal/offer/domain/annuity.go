@@ -10,11 +10,11 @@ const MaxTermMonths = 600
 
 // Payment — строка графика разового кредита, суммы в копейках.
 type Payment struct {
-	Month     int
-	Payment   int64
-	Interest  int64
-	Principal int64
-	Balance   int64 // остаток долга после платежа
+	Month     int   `json:"month"`
+	Payment   int64 `json:"payment"`
+	Interest  int64 `json:"interest"`
+	Principal int64 `json:"principal"`
+	Balance   int64 `json:"balance"` // остаток долга после платежа
 }
 
 // AnnuitySchedule — график аннуитета по формуле ТЗ, r = annual_rate_bps / 120000:

@@ -48,6 +48,7 @@ type Signature struct {
 	ApplicationID        uuid.UUID                 `json:"application_id"`
 	OfferID              uuid.UUID                 `json:"offer_id"`
 	DocumentID           uuid.UUID                 `json:"document_id"`
+	SignedDocumentID     *uuid.UUID                `json:"signed_document_id,omitempty"`
 	DocumentSHA256       string                    `json:"document_sha256"`
 	Data                 string                    `json:"data"`
 	Signature            string                    `json:"signature"`

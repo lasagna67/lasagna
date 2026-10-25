@@ -101,6 +101,7 @@ func checkOffer(ctx context.Context, q applicationrepo.Querier, c signdto.Contex
 func (r *Repo) EvidenceHash(ctx context.Context, userID, appID uuid.UUID) (string, error) {
 	return evidenceHash(ctx, r.pool, userID, appID)
 }
+
 func evidenceHash(ctx context.Context, q applicationrepo.Querier, userID, appID uuid.UUID) (string, error) {
 	var data string
 	err := q.QueryRow(ctx, `SELECT jsonb_build_array(to_jsonb(a),to_jsonb(c),to_jsonb(m),to_jsonb(o),to_jsonb(d),to_jsonb(doc),

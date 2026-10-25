@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
+	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 )
 
 type DecisionState string
@@ -65,13 +66,7 @@ type MonthlyFlow struct {
 }
 
 // Payment — строка графика. Все суммы в копейках; Balance — остаток после платежа.
-type Payment struct {
-	Month     int   `json:"month"`
-	Payment   int64 `json:"payment"`
-	Interest  int64 `json:"interest"`
-	Principal int64 `json:"principal"`
-	Balance   int64 `json:"balance"`
-}
+type Payment = offerdomain.Payment
 
 // nil в метрике означает, что рассчитать её не удалось, а не нулевое значение.
 type DecisionMetrics struct {

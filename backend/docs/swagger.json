@@ -4179,6 +4179,9 @@
                 "signed_by": {
                     "type": "string"
                 },
+                "signed_document_id": {
+                    "type": "string"
+                },
                 "terms_accepted": {
                     "type": "boolean"
                 }

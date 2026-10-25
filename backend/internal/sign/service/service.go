@@ -38,6 +38,7 @@ type Repository interface {
 	Accept(context.Context, signdto.Context, string, companydomain.Certificate, applicationdomain.IdempotencyKey) (bool, error)
 	Replay(context.Context, applicationdomain.IdempotencyKey) (bool, error)
 	Signature(context.Context, uuid.UUID) (signdto.Signature, error)
+	SaveSignedDocument(context.Context, signdto.Signature, documentdomain.Document) (uuid.UUID, error)
 }
 type Companies interface {
 	Membership(context.Context, uuid.UUID, uuid.UUID) (companydomain.Membership, error)
@@ -52,17 +53,21 @@ type Reviews interface {
 type Documents interface {
 	Content(context.Context, documentdomain.Viewer, uuid.UUID) (documentdomain.Document, io.ReadCloser, error)
 }
+type Storage interface {
+	Put(context.Context, string, string, []byte) error
+}
 type Service struct {
 	repo      Repository
 	companies Companies
 	verifier  Verifier
 	reviews   Reviews
 	documents Documents
+	storage   Storage
 	now       func() time.Time
 }
 
-func New(repo Repository, companies Companies, verifier Verifier, reviews Reviews, documents Documents) *Service {
-	return &Service{repo: repo, companies: companies, verifier: verifier, reviews: reviews, documents: documents, now: time.Now}
+func New(repo Repository, companies Companies, verifier Verifier, reviews Reviews, documents Documents, storage Storage) *Service {
+	return &Service{repo: repo, companies: companies, verifier: verifier, reviews: reviews, documents: documents, storage: storage, now: time.Now}
 }
 
 func (s *Service) Prepare(ctx context.Context, userID, appID uuid.UUID, req signdto.PrepareRequest) (signdto.Context, error) {
@@ -123,7 +128,7 @@ func (s *Service) Sign(ctx context.Context, userID, appID uuid.UUID, key string,
 	if replay, err := s.repo.Replay(ctx, idem); err != nil {
 		return signdto.Signature{}, err
 	} else if replay {
-		return s.repo.Signature(ctx, appID)
+		return s.completeSignedPDF(ctx, userID, appID)
 	}
 	c, err := s.repo.Context(ctx, req.ContextID, userID, appID)
 	if err != nil {
@@ -147,6 +152,9 @@ func (s *Service) Sign(ctx context.Context, userID, appID uuid.UUID, key string,
 	if err := validation.ContractCertificate(m, card, cert, s.now()); err != nil {
 		return signdto.Signature{}, err
 	}
+	if strings.TrimSpace(cert.OwnerFullName) == "" {
+		return signdto.Signature{}, &companyerrors.SignatureError{Reason: "certificate_missing_owner_name"}
+	}
 	if cert.Serial != c.CertificateSerial {
 		return signdto.Signature{}, companyerrors.ErrNotCompanyHead
 	}
@@ -167,7 +175,48 @@ func (s *Service) Sign(ctx context.Context, userID, appID uuid.UUID, key string,
 	if _, err = s.repo.Accept(ctx, c, req.Signature, cert, idem); err != nil {
 		return signdto.Signature{}, err
 	}
-	return s.repo.Signature(ctx, appID)
+	return s.completeSignedPDF(ctx, userID, appID)
+}
+
+func (s *Service) completeSignedPDF(ctx context.Context, userID, appID uuid.UUID) (signdto.Signature, error) {
+	signature, err := s.repo.Signature(ctx, appID)
+	if err != nil || signature.SignedDocumentID != nil {
+		return signature, err
+	}
+	doc, body, err := s.documents.Content(ctx, documentdomain.Viewer{UserID: userID}, signature.DocumentID)
+	if err != nil {
+		return signdto.Signature{}, err
+	}
+	defer body.Close()
+	if doc.ApplicationID != appID || doc.Type != documentdomain.DocumentLoanAgreement || doc.ContentType != "application/pdf" {
+		return signdto.Signature{}, ErrOfferChanged
+	}
+	const limit = 20 << 20
+	original, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if err != nil || len(original) > limit || int64(len(original)) != doc.SizeBytes {
+		return signdto.Signature{}, fmt.Errorf("%w: read original PDF", applicationerrors.ErrServiceUnavailable)
+	}
+	if digest(original) != signature.DocumentSHA256 || digest(original) != doc.SHA256 {
+		return signdto.Signature{}, ErrOfferChanged
+	}
+	signed, err := signedPDF(original, signature)
+	if err != nil {
+		return signdto.Signature{}, fmt.Errorf("render signed PDF: %w", err)
+	}
+	file := documentdomain.Document{
+		ID: uuid.New(), ApplicationID: appID, Type: documentdomain.DocumentLoanAgreement,
+		FileName: "contract-signed.pdf", ContentType: "application/pdf", SizeBytes: int64(len(signed)), SHA256: digest(signed),
+	}
+	file.StorageKey = fmt.Sprintf("applications/%s/contracts/%s-signed-%s.pdf", appID, signature.ID, file.SHA256)
+	if err := s.storage.Put(ctx, file.StorageKey, file.ContentType, signed); err != nil {
+		return signdto.Signature{}, err
+	}
+	id, err := s.repo.SaveSignedDocument(ctx, signature, file)
+	if err != nil {
+		return signdto.Signature{}, err
+	}
+	signature.SignedDocumentID = &id
+	return signature, nil
 }
 
 func (s *Service) Signature(ctx context.Context, userID, appID uuid.UUID) (signdto.Signature, error) {

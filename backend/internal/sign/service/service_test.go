@@ -19,6 +19,7 @@ import (
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 	signdto "github.com/lasagna67/lasagna.git/internal/sign/dto"
 	underwritingdomain "github.com/lasagna67/lasagna.git/internal/underwriting/domain"
+	"github.com/signintech/gopdf"
 )
 
 func TestPreSignReview(t *testing.T) {
@@ -80,6 +81,7 @@ type testRepo struct {
 	key      *applicationdomain.IdempotencyKey
 	evidence string
 	accepted int
+	document documentdomain.Document
 }
 
 func (r *testRepo) SaveContext(_ context.Context, c signdto.Context) error {
@@ -112,17 +114,23 @@ func (r *testRepo) Accept(_ context.Context, c signdto.Context, signature string
 	}
 	r.accepted++
 	r.key = &key
-	r.artifact = signdto.Signature{ContextID: c.ID, ApplicationID: c.ApplicationID, DocumentSHA256: c.DocumentSHA256, Data: c.Data, Signature: signature, Certificate: cert, SignedBy: c.UserID}
+	r.artifact = signdto.Signature{ID: uuid.New(), ContextID: c.ID, ApplicationID: c.ApplicationID, DocumentID: c.DocumentID, DocumentSHA256: c.DocumentSHA256, Data: c.Data, Signature: signature, Certificate: cert, SignedBy: c.UserID, SignedAt: time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)}
 	return false, nil
 }
 func (r *testRepo) Signature(context.Context, uuid.UUID) (signdto.Signature, error) {
 	return r.artifact, nil
+}
+func (r *testRepo) SaveSignedDocument(_ context.Context, _ signdto.Signature, doc documentdomain.Document) (uuid.UUID, error) {
+	r.document = doc
+	r.artifact.SignedDocumentID = &doc.ID
+	return doc.ID, nil
 }
 
 type testCompanies struct {
 	membership companydomain.Membership
 	verified   int
 	serial     string
+	ownerName  string
 }
 
 func (c *testCompanies) Membership(context.Context, uuid.UUID, uuid.UUID) (companydomain.Membership, error) {
@@ -136,7 +144,7 @@ func (c *testCompanies) VerifySignature(_ context.Context, data, signature strin
 	if signature != "signed:"+data {
 		return companydomain.Certificate{}, &companyerrors.SignatureError{Reason: "signature_mismatch"}
 	}
-	return companydomain.Certificate{Serial: c.serial, Type: companydomain.CertificateLegalEntityHead, OwnerINN: "770586906621", OrganizationINN: "7705005410", Status: "valid", ValidFrom: "2026-01-01", ValidTo: "2026-12-31"}, nil
+	return companydomain.Certificate{Serial: c.serial, Type: companydomain.CertificateLegalEntityHead, OwnerINN: "770586906621", OwnerFullName: c.ownerName, OrganizationINN: "7705005410", Status: "valid", ValidFrom: "2026-01-01", ValidTo: "2026-12-31"}, nil
 }
 
 type testReviews struct{ review underwritingdomain.Review }
@@ -150,20 +158,49 @@ type testDocuments struct {
 	body []byte
 }
 
+type testStorage struct {
+	body []byte
+	fail bool
+}
+
+func (s *testStorage) Put(_ context.Context, _, _ string, body []byte) error {
+	if s.fail {
+		return errors.New("storage unavailable")
+	}
+	s.body = append([]byte(nil), body...)
+	return nil
+}
+
+func testContractPDF(t *testing.T) []byte {
+	t.Helper()
+	var pdf gopdf.GoPdf
+	pdf.Start(gopdf.Config{PageSize: *gopdf.PageSizeA4})
+	pdf.AddPage()
+	pdf.AddPage()
+	body, err := pdf.GetBytesPdfReturnErr()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
 func (d *testDocuments) Content(context.Context, documentdomain.Viewer, uuid.UUID) (documentdomain.Document, io.ReadCloser, error) {
 	return d.doc, io.NopCloser(bytes.NewReader(d.body)), nil
 }
 
 func TestSigningFlow(t *testing.T) {
-	for _, name := range []string{"accepted and replayed", "expired context", "other user", "old signature new nonce", "changed PDF bytes", "changed evidence", "permission revoked", "different certificate", "source expires soon"} {
+	for _, name := range []string{"accepted and replayed", "storage failure and replay", "expired context", "other user", "old signature new nonce", "changed PDF bytes", "changed evidence", "permission revoked", "different certificate", "missing owner name", "source expires soon"} {
 		t.Run(name, func(t *testing.T) {
 			now := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 			reviews := &testReviews{review: reviewFixture(now)}
+			original := testContractPDF(t)
+			reviews.review.Offer.Contract.SHA256 = digest(original)
 			r := &testRepo{contexts: map[uuid.UUID]signdto.Context{}, evidence: "original-inputs"}
 			serial := "A1"
-			companies := &testCompanies{membership: companydomain.Membership{Company: companydomain.Company{INN: "7705005410"}, Member: companydomain.Member{CanSign: true, CertificateSerial: &serial}}, serial: serial}
-			documents := &testDocuments{body: []byte("%PDF-original"), doc: documentdomain.Document{ID: reviews.review.Offer.Contract.ID, ApplicationID: reviews.review.ID, Type: documentdomain.DocumentLoanAgreement, ContentType: "application/pdf", SizeBytes: int64(len("%PDF-original")), SHA256: digest([]byte("%PDF-original"))}}
-			s := New(r, companies, companies, reviews, documents)
+			companies := &testCompanies{membership: companydomain.Membership{Company: companydomain.Company{INN: "7705005410"}, Member: companydomain.Member{CanSign: true, CertificateSerial: &serial}}, serial: serial, ownerName: "Иванов Иван Иванович"}
+			documents := &testDocuments{body: original, doc: documentdomain.Document{ID: reviews.review.Offer.Contract.ID, ApplicationID: reviews.review.ID, Type: documentdomain.DocumentLoanAgreement, ContentType: "application/pdf", SizeBytes: int64(len(original)), SHA256: digest(original)}}
+			storage := &testStorage{}
+			s := New(r, companies, companies, reviews, documents, storage)
 			s.now = func() time.Time { return now }
 			user, app := uuid.New(), reviews.review.ID
 			if name == "source expires soon" {
@@ -207,9 +244,19 @@ func TestSigningFlow(t *testing.T) {
 				companies.membership.Member.CanSign = false
 			case "different certificate":
 				companies.serial = "B2"
+			case "missing owner name":
+				companies.ownerName = ""
+			case "storage failure and replay":
+				storage.fail = true
 			}
 			artifact, err := s.Sign(context.Background(), user, app, "request-1", req)
-			if name != "accepted and replayed" {
+			if name == "storage failure and replay" {
+				if err == nil || r.accepted != 1 || r.artifact.SignedDocumentID != nil {
+					t.Fatalf("failed upload should keep signature for retry: err=%v writes=%d", err, r.accepted)
+				}
+				storage.fail = false
+				artifact, err = s.Sign(context.Background(), user, app, "request-1", req)
+			} else if name != "accepted and replayed" {
 				if err == nil || r.accepted != 0 {
 					t.Fatalf("invalid signature flow accepted: err=%v writes=%d", err, r.accepted)
 				}
@@ -217,6 +264,14 @@ func TestSigningFlow(t *testing.T) {
 			}
 			if err != nil || artifact.Data != c.Data || artifact.SignedBy != user || r.accepted != 1 {
 				t.Fatalf("sign failed: %+v %v", artifact, err)
+			}
+			if artifact.SignedDocumentID == nil || *artifact.SignedDocumentID != r.document.ID || r.document.ID == documents.doc.ID || r.document.SHA256 != digest(storage.body) || len(storage.body) == 0 || digest(documents.body) != documents.doc.SHA256 {
+				t.Fatalf("signed PDF was not saved separately: %+v", artifact)
+			}
+			var parsed gopdf.GoPdf
+			parsed.Start(gopdf.Config{PageSize: *gopdf.PageSizeA4})
+			if err := parsed.ImportPagesFromSource(storage.body, "/MediaBox"); err != nil || parsed.GetNumberOfPages() != 3 {
+				t.Fatalf("signed PDF should contain original and stamp page: pages=%d err=%v", parsed.GetNumberOfPages(), err)
 			}
 			if _, err = s.Sign(context.Background(), user, app, "request-1", req); err != nil || r.accepted != 1 || companies.verified != 1 {
 				t.Fatalf("replay repeated effects: err=%v writes=%d verifies=%d", err, r.accepted, companies.verified)

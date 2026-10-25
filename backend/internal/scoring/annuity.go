@@ -370,15 +370,7 @@ func BuildAnnuitySchedule(amount, annualRateBasisPoints int64, termMonths int) (
 	if int64(int(annualRateBasisPoints)) != annualRateBasisPoints {
 		return nil, fmt.Errorf("annual rate overflows int")
 	}
-	rows, err := offerdomain.AnnuitySchedule(amount, int(annualRateBasisPoints), termMonths)
-	if err != nil {
-		return nil, err
-	}
-	schedule := make([]Payment, len(rows))
-	for i, row := range rows {
-		schedule[i] = Payment(row)
-	}
-	return schedule, nil
+	return offerdomain.AnnuitySchedule(amount, int(annualRateBasisPoints), termMonths)
 }
 
 // MaximumPayment возвращает Pmax из полного графика, включая последний платёж.
