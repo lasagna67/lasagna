@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Application } from "@/lib/types-application";
 import { Button } from "@/components/ui/button";
+import { AnswerPreview, SignPreview } from "./previews";
 import { Tour, type TourStep } from "./tour";
 
 const WITH_OFFER = new Set(["approved", "counter_offer", "signing", "issued"]);
@@ -17,12 +18,30 @@ const pipeline: TourStep = {
 
 const infoExample: TourStep = {
   title: "Пример: запрос уточнений",
-  text: "Если данных не хватает, сотрудник оставляет сообщение — например, «Приложите счёт поставщика» — и открывает отдельные поля для правки. Ответьте, поправьте открытые поля и нажмите «Отправить заявку повторно»: заявка вернётся на проверку.",
+  text: (
+    <>
+      <p>
+        Если данных не хватает, сотрудник оставляет сообщение — например, «Приложите счёт
+        поставщика» — и открывает отдельные поля для правки. Ответьте, поправьте открытые поля и
+        нажмите «Отправить заявку повторно»: заявка вернётся на проверку.
+      </p>
+      <AnswerPreview />
+    </>
+  ),
 };
 
 const decision: TourStep = {
   title: "Решение и подпись",
-  text: "Положительное решение — предложение с суммой, ставкой, сроком, платежом и PDF договора. Читаете, соглашаетесь, подписываете (в демо PIN сертификата 12345678); после подписи остаются подписанный PDF и JSON-артефакт. Бывает и отказ.",
+  text: (
+    <>
+      <p>
+        Положительное решение — предложение с суммой, ставкой, сроком, платежом и PDF договора.
+        Читаете, соглашаетесь, подписываете (в демо PIN сертификата 12345678); после подписи
+        остаются подписанный PDF и JSON-артефакт. Бывает и отказ.
+      </p>
+      <SignPreview />
+    </>
+  ),
 };
 
 const guide: TourStep = {
@@ -97,12 +116,31 @@ function stepsFor(app: Application): TourStep[] {
 
 export function ApplicationTour({ app }: { app: Application }) {
   const [open, setOpen] = useState(false);
+  const [start, setStart] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const saved = window.localStorage.getItem("lasagna.tour");
+      if (!saved?.startsWith("application")) return;
+      window.localStorage.removeItem("lasagna.tour");
+      setStart(Number(saved.split(":")[1] ?? 0));
+      setOpen(true);
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <>
-      <Button variant="ghost" onClick={() => setOpen(true)}>
+      <Button
+        variant="ghost"
+        onClick={() => {
+          setStart(0);
+          setOpen(true);
+        }}
+      >
         Показать туториал
       </Button>
-      {open && <Tour steps={stepsFor(app)} onClose={() => setOpen(false)} />}
+      {open && <Tour steps={stepsFor(app)} startIndex={start} onClose={() => setOpen(false)} />}
     </>
   );
 }

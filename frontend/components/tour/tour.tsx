@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 
 export type TourStep = { target?: string; title: string; text: ReactNode };
 
-type Props = { steps: TourStep[]; onClose: () => void };
+type Props = { steps: TourStep[]; startIndex?: number; onClose: () => void };
 
-export function Tour({ steps, onClose }: Props) {
-  const [index, setIndex] = useState(0);
+const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+
+export function Tour({ steps, startIndex = 0, onClose }: Props) {
+  const [index, setIndex] = useState(startIndex);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  const [vp, setVp] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  const [panelH, setPanelH] = useState(300);
+  const panelRef = useRef<HTMLDivElement>(null);
   const step = steps[index];
   const last = index === steps.length - 1;
   const target = step.target;
@@ -21,6 +26,11 @@ export function Tour({ steps, onClose }: Props) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setPanelH(panelRef.current?.offsetHeight ?? 300), 0);
+    return () => clearTimeout(t);
+  }, [index]);
 
   useEffect(() => {
     const findEl = () =>
@@ -35,6 +45,7 @@ export function Tour({ steps, onClose }: Props) {
       setRect(el.getBoundingClientRect());
     };
     const track = () => {
+      setVp({ w: window.innerWidth, h: window.innerHeight });
       const el = findEl();
       if (el) setRect(el.getBoundingClientRect());
     };
@@ -48,20 +59,43 @@ export function Tour({ steps, onClose }: Props) {
     };
   }, [target]);
 
+  const desktop = vp.w >= 768;
+  const panelW = Math.min(560, vp.w - 32);
+  let panelStyle: CSSProperties | undefined;
+  if (desktop) {
+    if (rect) {
+      const left = clamp(rect.left + rect.width / 2 - panelW / 2, 16, vp.w - panelW - 16);
+      const below = rect.bottom + 12 + panelH + 12 <= vp.h;
+      panelStyle = below
+        ? { top: rect.bottom + 12, left, width: panelW }
+        : { top: Math.max(16, rect.top - 12 - panelH), left, width: panelW };
+    } else {
+      panelStyle = { bottom: 24, left: (vp.w - panelW) / 2, width: panelW };
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-90">
-      <div className="absolute inset-0 bg-black/40" aria-hidden onClick={onClose} />
+      <div
+        className={`absolute inset-0 ${rect ? "" : "bg-black/40"}`}
+        aria-hidden
+        onClick={onClose}
+      />
       {rect && (
         <div
-          className="pointer-events-none fixed rounded-xl ring-2 ring-brand"
+          className="pointer-events-none fixed rounded-2xl ring-2 ring-brand shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
           style={{ top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12 }}
         />
       )}
-      <div className="fixed inset-x-0 bottom-0 flex justify-center p-4 md:inset-x-auto md:bottom-6 md:left-1/2 md:w-[560px] md:-translate-x-1/2 md:p-0">
-        <div
+      <div
+        className={panelStyle ? "fixed" : "fixed inset-x-0 bottom-0 p-4"}
+        style={panelStyle}
+      >
+      <div
+        ref={panelRef}
           className="w-full rounded-card-lg border border-black/8 bg-white p-5 md:p-6"
-          onClick={(e) => e.stopPropagation()}
-        >
+        onClick={(e) => e.stopPropagation()}
+      >
           <div className="flex items-start justify-between gap-4">
             <div>
               <span className="text-[13px] text-ink-soft">
