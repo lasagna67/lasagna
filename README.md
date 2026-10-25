@@ -59,3 +59,41 @@ docker compose run --rm --no-deps staff-seed
 ```
 
 Сотрудник работает с очередью `/api/v0/underwriter/applications`, договоры к предложениям лежат в бакете MinIO `documents`. Подробнее — [backend/internal/underwriting/.md](backend/internal/underwriting/.md).
+
+## Запуск frontend
+
+Из каталога `frontend`:
+
+```sh
+npm install
+npm run dev     # http://localhost:3000
+```
+
+Прод-сборка: `npm run build && npm run start`. Next проксирует `/api/*` на backend (`http://localhost:8080`, ключ `NEXT_PUBLIC_API_URL`) и `/esign/*` на esign-mock (`http://localhost:8084`, ключ `NEXT_PUBLIC_SIGN_API_URL`), поэтому браузер ходит на один origin. Для входа в кабинет клиента используйте демо-аккаунты из [docs/demo-businesses.md](docs/demo-businesses.md) (например, `demo.ooo.good@lasagna.test`, пароль `DemoCabinet2026!`), для кабинета сотрудника — `underwriter@lasagna.demo` / `DemoUnderwriter2026!`.
+
+## E2E-тесты
+
+В каталоге `e2e/` — сценарные тесты на встроенном `node:test`, без внешних зависимостей. Они ходят по HTTP через next-прокси, как это делает браузер, и создают реальные заявки в демо-БД.
+
+Полный порядок запуска:
+
+```sh
+# 1. стек: базы, моки, backend, миграции, демо-данные
+cp .env.example .env.docker                        # только при первом запуске
+docker compose -f backend/docker-compose.yaml -f docker-compose.local.yaml up -d --build
+
+# 2. frontend
+cd frontend && npm install && npm run dev          # http://localhost:3000
+
+# 3. тесты (из корня репозитория)
+node --test e2e/
+```
+
+Если frontend работает на другом порту — укажите базовый адрес: `E2E_BASE=http://localhost:3100 node --test e2e/`. Есть и точечные переопределения: `E2E_API` (путь API) и `E2E_ESIGN` (путь esign-mock). Против backend напрямую, без frontend: `E2E_BASE=http://localhost:8080 node --test e2e/` (для этого адреса esign берётся с `:8084`).
+
+Сценарии:
+
+- `e2e/accounts.test.mjs` — разные демо-аккаунты: `demo.ip.overdue` получает автоматический отказ пайплайна без участия сотрудника; `demo.ooo.thin` — сотрудник публикует контрпредложение, и клиент видит изменённые условия вместе с договором.
+- `e2e/concurrent.test.mjs` — длинный сценарий `demo.ooo.good`, где клиент и сотрудник работают с одной заявкой одновременно: параллельные поллины с двух сторон, конфликт ревизий (409 и повтор после обновления), цикл запроса уточнений, решение, подпись через esign-mock (PIN `12345678`) и скачивание PDF с обеих сторон.
+
+Тесты необратимы: они добавляют заявки и решения в демо-БД. Для чистого состояния пересоздайте её, удалив том postgres, и заново поднимите стек.
