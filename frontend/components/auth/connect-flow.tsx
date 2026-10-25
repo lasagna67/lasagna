@@ -59,7 +59,7 @@ export function ConnectFlow({ token, onClose, onConnected }: Props) {
     setError("");
     let signed: { signature: string };
     try {
-      signed = await api.sign(certSerialByInn(inn) ?? "", pin, challenge.data);
+      signed = await api.esignSign(certSerialByInn(inn) ?? "", pin, challenge.data);
     } catch (e) {
       setError(e instanceof ApiError && e.status === 403 ? "Неверный PIN-код" : message(e));
       setBusy(null);

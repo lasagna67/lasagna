@@ -12,14 +12,18 @@ export const scenarios = [
 ] as const;
 
 export const innCatalog = [
-  { kind: "ooo", company: "Волжский мебельный контур Демо", inn: "6315819669", status: "Действует", serial: "1D7598C07F22CF5C" },
-  { kind: "ooo", company: "Маршрут кедра Демо", inn: "7709094259", status: "Реорганизация", serial: "72D433F7F3AD3930" },
-  { kind: "ooo", company: "Невский модуль Демо", inn: "7813099373", status: "Реорганизация", serial: "1CF0513F5579DFB3" },
-  { kind: "ooo", company: "Таёжный оттиск Демо", inn: "5406020303", status: "Деятельность прекращена", serial: "AC41A1AAA41CBCB0" },
-  { kind: "ip", company: "Искролесов Никита Сергеевич", inn: "781663101333", status: "Действует", serial: "D083AEDC7E758BB7" },
-  { kind: "ip", company: "Светоключев Артём Михайлович", inn: "231101208844", status: "Действует", serial: "3961D07FA432451B" },
-  { kind: "ip", company: "Ветрокрылов Егор Вадимович", inn: "631652222490", status: "Действует", serial: "AA1DCF02BED44888" },
-  { kind: "ip", company: "Таёжников Илья Андреевич", inn: "540742918750", status: "Деятельность прекращена", serial: "7FDCC374946C6F24" },
+  { kind: "ooo", company: "ООО «Кедровый контур Демо»", inn: "7705005410", status: "Действует", serial: "0BFD0184037F4867" },
+  { kind: "ooo", company: "ООО «Ладожский хлеб Демо»", inn: "7810969607", status: "Действует", serial: "62B6B06F3299A7A9" },
+  { kind: "ooo", company: "ООО «Южный каркас Демо»", inn: "2310569351", status: "Действует", serial: "5C7C40739A13AA5B" },
+  { kind: "ooo", company: "ООО «Листок данных Демо»", inn: "1655501828", status: "Действует", serial: "0D2979DB83EC40D5" },
+  { kind: "ooo", company: "ООО «Искра макетов Демо»", inn: "6671986865", status: "Действует", serial: "E5CF051630872835" },
+  { kind: "ooo", company: "ООО «Волжский ассортимент Демо»", inn: "5260947681", status: "Деятельность прекращена", serial: "9BE6A4ABE14CAE4D" },
+  { kind: "ip", company: "ИП Кедровцев Матвей Олегович", inn: "770761836401", status: "Действует", serial: "630A9BBCC39C8358" },
+  { kind: "ip", company: "ИП Ладогина Вероника Ильинична", inn: "781497718575", status: "Действует", serial: "8198C3C3BDFD70FF" },
+  { kind: "ip", company: "ИП Листопадова Марина Денисовна", inn: "770815348700", status: "Действует", serial: "B3BF1FD8914CBBEF" },
+  { kind: "ip", company: "ИП Яснолесов Даниил Романович", inn: "165979491871", status: "Действует", serial: "E2D03810DF340EB5" },
+  { kind: "ip", company: "ИП Берестина Алиса Тимуровна", inn: "667036260874", status: "Действует", serial: "57A549E6CEBF5376" },
+  { kind: "ip", company: "ИП Ручейников Глеб Павлович", inn: "526200583660", status: "Деятельность прекращена", serial: "3F792917D6FD2D33" },
 ] as const;
 
 export function scenarioEmail(kind: BusinessKind, scenarioKey: string): string {
@@ -75,9 +79,10 @@ const dateFmt = new Intl.DateTimeFormat("ru-RU", {
   year: "numeric",
 });
 
-export function dateRu(iso: string): string {
+export function dateRu(iso: string | null | undefined): string {
+  if (!iso) return "—";
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "" : dateFmt.format(date);
+  return Number.isNaN(date.getTime()) ? "—" : dateFmt.format(date);
 }
 
 export function entityLabel(entityType: string): string {
@@ -92,4 +97,75 @@ const loanStatuses: Record<string, string> = {
 
 export function loanStatusLabel(status: string): string {
   return loanStatuses[status] ?? status;
+}
+
+export function kopecks(value: number): string {
+  const rubles = Math.floor(value / 100);
+  const rest = value % 100;
+  const formatted = rub.format(rubles);
+  return rest === 0 ? `${formatted} ₽` : `${formatted},${String(rest).padStart(2, "0")} ₽`;
+}
+
+const appStatuses: Record<string, string> = {
+  draft: "Черновик",
+  submitted: "Отправлен",
+  validation: "Проверка данных",
+  enrichment: "Внешние проверки",
+  scoring: "Скоринг",
+  manual_review: "Рассмотрение сотрудника",
+  info_requested: "Запрошены уточнения",
+  approved: "Одобрено",
+  counter_offer: "Контрпредложение",
+  signing: "Подписание",
+  issued: "Кредит выдан",
+  rejected: "Отказ",
+  cancelled: "Отменён",
+  expired: "Предложение истекло",
+};
+
+export function appStatusLabel(status: string): string {
+  return appStatuses[status] ?? status;
+}
+
+export const pipelineStages = [
+  "submitted",
+  "validation",
+  "enrichment",
+  "scoring",
+  "manual_review",
+] as const;
+
+export const purposes: Record<string, string> = {
+  working_capital: "Оборотные средства",
+  cash_gap: "Кассовый разрыв",
+  equipment: "Оборудование",
+  business_start: "Старт бизнеса",
+  business_expansion: "Расширение",
+  other: "Другое",
+};
+
+export function purposeLabel(purpose: string | null): string {
+  if (!purpose) return "—";
+  return purposes[purpose] ?? purpose;
+}
+
+const collateralTypes: Record<string, string> = {
+  real_estate: "Недвижимость",
+  equipment: "Оборудование",
+  vehicle: "Транспорт",
+};
+
+export function collateralTypeLabel(type: string): string {
+  return collateralTypes[type] ?? type;
+}
+
+const riskGrades: Record<string, string> = {
+  low: "Низкий",
+  medium: "Средний",
+  high: "Высокий",
+  critical: "Критический",
+};
+
+export function riskGradeLabel(grade: string): string {
+  return riskGrades[grade] ?? grade;
 }

@@ -5,14 +5,15 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { DEMO_PASSWORD, scenarioEmail, type BusinessKind } from "@/lib/demo-data";
-import { setSession } from "@/lib/session";
+import { homeForRole, setSession } from "@/lib/session";
 import { DemoNotice } from "@/components/ui/demo-notice";
 import { Logo } from "@/components/ui/logo";
 import { ConnectFlow } from "./connect-flow";
+import { EmployeeStep } from "./employee-step";
 import { RegisterStep } from "./register-step";
 import { ScenarioStep } from "./scenario-step";
 
-type Step = "role" | "scenario" | "register";
+type Step = "role" | "scenario" | "register" | "employee";
 
 const roles = [
   { key: "banker", title: "Банкир", caption: "Сотрудник банка", plate: "bg-plate-pearl hover:bg-[#dfe3e3]" },
@@ -31,7 +32,6 @@ export function AuthFlow() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [registerBusy, setRegisterBusy] = useState(false);
   const [error, setError] = useState("");
-  const [bankerNote, setBankerNote] = useState(false);
   const [connectToken, setConnectToken] = useState<string | null>(null);
   const retryRef = useRef<(() => void) | null>(null);
 
@@ -43,7 +43,7 @@ export function AuthFlow() {
       role: auth.user.role,
       expiresAt: auth.expires_at,
     });
-    return auth.access_token;
+    return auth;
   }
 
   async function pickScenario(key: string) {
@@ -51,8 +51,8 @@ export function AuthFlow() {
     setError("");
     retryRef.current = () => void pickScenario(key);
     try {
-      await login(scenarioEmail(kind, key), DEMO_PASSWORD);
-      router.push("/cabinet");
+      const auth = await login(scenarioEmail(kind, key), DEMO_PASSWORD);
+      router.push(homeForRole(auth.user.role));
     } catch (e) {
       setError(errorText(e));
       setBusyKey(null);
@@ -63,7 +63,7 @@ export function AuthFlow() {
     setRegisterBusy(true);
     try {
       await api.createUser(email, password);
-      setConnectToken(await login(email, password));
+      setConnectToken((await login(email, password)).access_token);
     } finally {
       setRegisterBusy(false);
     }
@@ -72,10 +72,20 @@ export function AuthFlow() {
   async function loginExisting(email: string, password: string) {
     setRegisterBusy(true);
     try {
-      const token = await login(email, password);
-      const companies = await api.companies(token).catch(() => null);
-      if (companies?.length === 0) setConnectToken(token);
-      else router.push("/cabinet");
+      const auth = await login(email, password);
+      const companies = await api.companies(auth.access_token).catch(() => null);
+      if (companies?.length === 0) setConnectToken(auth.access_token);
+      else router.push(homeForRole(auth.user.role));
+    } finally {
+      setRegisterBusy(false);
+    }
+  }
+
+  async function loginEmployee(email: string, password: string) {
+    setRegisterBusy(true);
+    try {
+      const auth = await login(email, password);
+      router.push(homeForRole(auth.user.role));
     } finally {
       setRegisterBusy(false);
     }
@@ -90,6 +100,10 @@ export function AuthFlow() {
     register: {
       title: "Регистрация",
       caption: "Создайте аккаунт и подключите компанию по ИНН из мокового реестра.",
+    },
+    employee: {
+      title: "Кабинет сотрудника",
+      caption: "Вход для сотрудников банка: очередь заявок, проверки и решения.",
     },
   };
 
@@ -112,32 +126,25 @@ export function AuthFlow() {
         <p className="mt-3 text-[16px] leading-6 text-ink-soft">{titles[step].caption}</p>
 
         {step === "role" && (
-          <>
-            <div className="mt-8 grid gap-4 sm:grid-cols-3">
-              {roles.map((role) => (
-                <button
-                  key={role.key}
-                  type="button"
-                  onClick={() =>
-                    role.key === "banker"
-                      ? setBankerNote(true)
-                      : (setKind(role.key as BusinessKind), setStep("scenario"))
-                  }
-                  className={`rounded-card-lg p-6 text-left transition-colors ${role.plate}`}
-                >
-                  <span className="block text-promo-s">{role.title}</span>
-                  <span className="mt-2 block text-[14px] leading-5 text-ink-soft">
-                    {role.caption}
-                  </span>
-                </button>
-              ))}
-            </div>
-            {bankerNote && (
-              <p className="mt-6 rounded-2xl bg-plate-sonata px-4 py-3 text-[15px]">
-                Кабинет банкира пока в разработке — этот сценарий появится позже.
-              </p>
-            )}
-          </>
+          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            {roles.map((role) => (
+              <button
+                key={role.key}
+                type="button"
+                onClick={() =>
+                  role.key === "banker"
+                    ? setStep("employee")
+                    : (setKind(role.key as BusinessKind), setStep("scenario"))
+                }
+                className={`rounded-card-lg p-6 text-left transition-colors ${role.plate}`}
+              >
+                <span className="block text-promo-s">{role.title}</span>
+                <span className="mt-2 block text-[14px] leading-5 text-ink-soft">
+                  {role.caption}
+                </span>
+              </button>
+            ))}
+          </div>
         )}
 
         {step === "scenario" && (
@@ -158,6 +165,14 @@ export function AuthFlow() {
             onRegister={register}
             onLoginExisting={loginExisting}
             onBack={() => setStep("scenario")}
+          />
+        )}
+
+        {step === "employee" && (
+          <EmployeeStep
+            busy={registerBusy}
+            onLogin={loginEmployee}
+            onBack={() => setStep("role")}
           />
         )}
       </main>
