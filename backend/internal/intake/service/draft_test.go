@@ -12,6 +12,8 @@ import (
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
 	intakedomain "github.com/lasagna67/lasagna.git/internal/intake/domain"
+	"github.com/lasagna67/lasagna.git/internal/outbox"
+	pipelinedomain "github.com/lasagna67/lasagna.git/internal/pipeline/domain"
 )
 
 var (
@@ -25,13 +27,14 @@ func ptr[T any](v T) *T { return &v }
 func set[T any](v T) intakedomain.Field[T] { return intakedomain.Field[T]{Set: true, Value: &v} }
 
 // fakeDrafts повторяет контракт DraftRepo в памяти: Update занимает ключ до
-// сверки revision и применяет Change целиком или ничего.
+// сверки revision и применяет Change целиком или ничего — вместе с событиями outbox.
 type fakeDrafts struct {
 	apps          map[uuid.UUID]intakedomain.Details
 	products      map[string]applicationdomain.Product
 	keys          map[string]string
 	history       map[uuid.UUID][]applicationdomain.Transition
 	notifications []applicationdomain.Notification
+	outbox        []outbox.Message
 }
 
 func (f *fakeDrafts) Get(_ context.Context, id uuid.UUID) (intakedomain.Details, error) {
@@ -106,6 +109,7 @@ func (f *fakeDrafts) Update(_ context.Context, cmd applicationdomain.UpdateComma
 		d.DataRevision++
 	}
 	f.history[app.ID] = append(f.history[app.ID], change.Transitions...)
+	f.outbox = append(f.outbox, change.Outbox...)
 	if n := change.Notification; n != nil {
 		f.notifications = append(f.notifications, *n)
 	}
@@ -117,32 +121,27 @@ func (f *fakeDrafts) add(a applicationdomain.Application) {
 	f.apps[a.ID] = intakedomain.Details{ApplicationDetails: applicationdomain.ApplicationDetails{Application: a}}
 }
 
-// fakePipeline ведёт себя как временный конвейер: submitted сразу уходит на
-// ручное рассмотрение. err — сбой запуска.
-type fakePipeline struct {
-	drafts *fakeDrafts
-	err    error
-	runs   int
+// submittedEvents — события запуска конвейера, записанные вместе с заявками.
+func (f *fakeDrafts) submittedEvents(t *testing.T) []pipelinedomain.Event {
+	t.Helper()
+	var events []pipelinedomain.Event
+	for _, m := range f.outbox {
+		if m.Topic != pipelinedomain.TopicSubmitted {
+			continue
+		}
+		ev, err := pipelinedomain.DecodeEvent(m.Payload)
+		if err != nil {
+			t.Fatalf("decode event: %v", err)
+		}
+		if m.Key != ev.ApplicationID.String() {
+			t.Errorf("event key = %s; want application id %s", m.Key, ev.ApplicationID)
+		}
+		events = append(events, ev)
+	}
+	return events
 }
 
-func (p *fakePipeline) Run(_ context.Context, id uuid.UUID) error {
-	p.runs++
-	if p.err != nil {
-		return p.err
-	}
-	d := p.drafts.apps[id]
-	if d.Status != applicationdomain.StatusSubmitted {
-		return nil
-	}
-	v, _ := d.StartValidation()
-	r, _ := d.SendToManualReview()
-	d.Revision++
-	p.drafts.history[id] = append(p.drafts.history[id], v, r)
-	p.drafts.apps[id] = d
-	return nil
-}
-
-func newDraftEnv() (*ApplicationService, *fakeDrafts, *fakePipeline) {
+func newDraftEnv() (*ApplicationService, *fakeDrafts) {
 	drafts := &fakeDrafts{
 		apps: map[uuid.UUID]intakedomain.Details{},
 		products: map[string]applicationdomain.Product{
@@ -155,10 +154,9 @@ func newDraftEnv() (*ApplicationService, *fakeDrafts, *fakePipeline) {
 		keys:    map[string]string{},
 		history: map[uuid.UUID][]applicationdomain.Transition{},
 	}
-	pipeline := &fakePipeline{drafts: drafts}
-	s := New(Deps{Applications: newFakeApplications(), Drafts: drafts, Companies: fakeCompanies{}, Pipeline: pipeline})
+	s := New(Deps{Applications: newFakeApplications(), Drafts: drafts, Companies: fakeCompanies{}})
 	s.now = func() time.Time { return fixedNow }
-	return s, drafts, pipeline
+	return s, drafts
 }
 
 func newDraft(revision int) applicationdomain.Application {
@@ -183,7 +181,7 @@ func completeDraft(revision int) applicationdomain.Application {
 }
 
 func TestPatch(t *testing.T) {
-	s, drafts, _ := newDraftEnv()
+	s, drafts := newDraftEnv()
 	a := newDraft(1)
 	drafts.add(a)
 	machine := &collateraldomain.Collateral{Type: "equipment", Ownership: "existing", Description: "Станок", DeclaredValueKopecks: 500_000_000}
@@ -223,7 +221,7 @@ func TestPatch(t *testing.T) {
 }
 
 func TestSubmit(t *testing.T) {
-	s, drafts, pipeline := newDraftEnv()
+	s, drafts := newDraftEnv()
 	a := completeDraft(3)
 	drafts.add(a)
 	cmd := intakedomain.SubmitCommand{ApplicationID: a.ID, UserID: memberID, ExpectedRevision: 3, IdempotencyKey: "submit-1"}
@@ -232,21 +230,23 @@ func TestSubmit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Временный конвейер сразу отдаёт заявку на ручное рассмотрение.
-	want := []applicationdomain.Transition{
-		{From: applicationdomain.StatusDraft, To: applicationdomain.StatusSubmitted},
-		{From: applicationdomain.StatusSubmitted, To: applicationdomain.StatusValidation},
-		{From: applicationdomain.StatusValidation, To: applicationdomain.StatusManualReview},
+	// Конвейер асинхронный: ответ — submitted с новым запуском, событие запуска
+	// записано вместе с переходом.
+	want := []applicationdomain.Transition{{From: applicationdomain.StatusDraft, To: applicationdomain.StatusSubmitted}}
+	if d.Status != applicationdomain.StatusSubmitted || !slices.Equal(drafts.history[a.ID], want) ||
+		d.SubmittedAt == nil || !d.SubmittedAt.Equal(fixedNow) || d.ProcessingRunID == nil {
+		t.Fatalf("submitted = %s, history %v, submitted_at %v, run %v", d.Status, drafts.history[a.ID], d.SubmittedAt, d.ProcessingRunID)
 	}
-	if d.Status != applicationdomain.StatusManualReview || !slices.Equal(drafts.history[a.ID], want) ||
-		d.SubmittedAt == nil || !d.SubmittedAt.Equal(fixedNow) || pipeline.runs != 1 {
-		t.Fatalf("submitted = %s, history %v, submitted_at %v, runs %d", d.Status, drafts.history[a.ID], d.SubmittedAt, pipeline.runs)
+	events := drafts.submittedEvents(t)
+	if len(events) != 1 || events[0].ApplicationID != a.ID || events[0].RunID != *d.ProcessingRunID {
+		t.Fatalf("events = %+v; want one for run %s", events, *d.ProcessingRunID)
 	}
 
-	// Повтор с тем же ключом и телом не создаёт второй отправки.
+	// Повтор с тем же ключом и телом не создаёт второй отправки и второго запуска.
 	again, err := s.Submit(ctx, cmd)
-	if err != nil || again.Revision != d.Revision || len(drafts.history[a.ID]) != len(want) || pipeline.runs != 1 {
-		t.Errorf("replay = revision %d, %v, history %d, runs %d", again.Revision, err, len(drafts.history[a.ID]), pipeline.runs)
+	if err != nil || again.Revision != d.Revision || len(drafts.history[a.ID]) != len(want) ||
+		len(drafts.outbox) != 1 || *again.ProcessingRunID != *d.ProcessingRunID {
+		t.Errorf("replay = revision %d, %v, history %d, events %d", again.Revision, err, len(drafts.history[a.ID]), len(drafts.outbox))
 	}
 	cmd.ExpectedRevision = 99
 	if _, err := s.Submit(ctx, cmd); !errors.Is(err, applicationerrors.ErrIdempotencyConflict) {
@@ -259,7 +259,7 @@ func TestSubmit(t *testing.T) {
 }
 
 func TestSubmitIncompleteStaysDraft(t *testing.T) {
-	s, drafts, pipeline := newDraftEnv()
+	s, drafts := newDraftEnv()
 	a := completeDraft(3)
 	a.Request.TermMonths = nil
 	a.Request.AmountKopecks = ptr(int64(1))
@@ -271,8 +271,10 @@ func TestSubmitIncompleteStaysDraft(t *testing.T) {
 		t.Fatalf("incomplete submit = %v; want two field errors", err)
 	}
 	got := drafts.apps[a.ID]
-	if got.Status != applicationdomain.StatusDraft || got.Revision != 3 || got.SubmittedAt != nil || len(drafts.history[a.ID]) != 0 || pipeline.runs != 0 {
-		t.Errorf("after 422: %s, revision %d, submitted_at %v, history %v, runs %d", got.Status, got.Revision, got.SubmittedAt, drafts.history[a.ID], pipeline.runs)
+	if got.Status != applicationdomain.StatusDraft || got.Revision != 3 || got.SubmittedAt != nil || got.ProcessingRunID != nil ||
+		len(drafts.history[a.ID]) != 0 || len(drafts.outbox) != 0 {
+		t.Errorf("after 422: %s, revision %d, submitted_at %v, run %v, history %v, events %d",
+			got.Status, got.Revision, got.SubmittedAt, got.ProcessingRunID, drafts.history[a.ID], len(drafts.outbox))
 	}
 	// Ключ не занят: после исправления тот же ключ отправляет заявку.
 	if len(drafts.keys) != 0 {
@@ -280,32 +282,13 @@ func TestSubmitIncompleteStaysDraft(t *testing.T) {
 	}
 }
 
-func TestSubmitRetriesPipelineOnReplay(t *testing.T) {
-	s, drafts, pipeline := newDraftEnv()
-	a := completeDraft(3)
-	drafts.add(a)
-	cmd := intakedomain.SubmitCommand{ApplicationID: a.ID, UserID: memberID, ExpectedRevision: 3, IdempotencyKey: "submit-1"}
-
-	pipeline.err = applicationerrors.ErrServiceUnavailable
-	if _, err := s.Submit(ctx, cmd); !errors.Is(err, applicationerrors.ErrServiceUnavailable) {
-		t.Fatalf("submit with broken pipeline = %v", err)
-	}
-	if got := drafts.apps[a.ID].Status; got != applicationdomain.StatusSubmitted {
-		t.Fatalf("status = %s; want submitted", got)
-	}
-
-	pipeline.err = nil
-	d, err := s.Submit(ctx, cmd)
-	if err != nil || d.Status != applicationdomain.StatusManualReview || pipeline.runs != 2 {
-		t.Errorf("replay = %s, %v, runs %d; want manual_review after second run", d.Status, err, pipeline.runs)
-	}
-}
-
 func TestResubmit(t *testing.T) {
-	s, drafts, _ := newDraftEnv()
+	s, drafts := newDraftEnv()
 	a := completeDraft(6)
 	a.Status = applicationdomain.StatusInfoRequested
 	a.AssigneeID = ptr(assigneeID)
+	firstRun := uuid.New()
+	a.ProcessingRunID = &firstRun
 	a.Info = applicationdomain.InfoRound{EditableFields: []string{"request.amount_kopecks"}, Open: 1}
 	drafts.add(a)
 	cmd := intakedomain.SubmitCommand{ApplicationID: a.ID, UserID: memberID, ExpectedRevision: 6, IdempotencyKey: "resubmit-1"}
@@ -329,8 +312,13 @@ func TestResubmit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Status != applicationdomain.StatusManualReview || d.AssigneeID == nil || *d.AssigneeID != assigneeID {
+	if d.Status != applicationdomain.StatusSubmitted || d.AssigneeID == nil || *d.AssigneeID != assigneeID {
 		t.Fatalf("after resubmit: %s, assignee %v", d.Status, d.AssigneeID)
+	}
+	// Повторная отправка — новый запуск: результаты прежнего к заявке не применятся.
+	events := drafts.submittedEvents(t)
+	if d.ProcessingRunID == nil || *d.ProcessingRunID == firstRun || len(events) != 1 || events[0].RunID != *d.ProcessingRunID {
+		t.Fatalf("resubmit run = %v (was %s), events %+v", d.ProcessingRunID, firstRun, events)
 	}
 	if n := drafts.notifications; len(n) != 1 || n[0].UserID != assigneeID || n[0].Type != applicationdomain.NotificationStatusChanged {
 		t.Errorf("notifications = %+v; want one to assignee", n)

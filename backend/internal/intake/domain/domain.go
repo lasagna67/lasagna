@@ -3,6 +3,7 @@
 package intakedomain
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	collateraldomain "github.com/lasagna67/lasagna.git/internal/collateral/domain"
+	"github.com/lasagna67/lasagna.git/internal/outbox"
 )
 
 const (
@@ -56,6 +58,7 @@ type Change struct {
 	CashPlan     *PlanWrite                   // nil — план не меняется
 	DataChanged  bool                         // входные данные риска изменились — data_revision + 1
 	Notification *applicationdomain.Notification
+	Outbox       []outbox.Message // события Kafka: уйдут, только если изменение записано
 }
 
 // ProjectWrite — новые поля проекта; Value == nil — удалить их.
@@ -314,6 +317,26 @@ func trimmed(s *string) *string {
 
 //=================================================================================================
 // ОТПРАВКА:
+
+// CheckSubmit — правила отправки одним списком ошибок полей (ValidationError):
+// полнота запроса и условия продукта (applicationdomain.CheckSubmit), поля
+// проекта и денежный план (CheckPlan). Их проверяют submit, resubmit и этап
+// validation конвейера — по одним правилам.
+func (d Draft) CheckSubmit(now time.Time) error {
+	var fields []applicationerrors.FieldError
+	if err := d.Application.CheckSubmit(d.Product, d.Collateral != nil); err != nil {
+		var v *applicationerrors.ValidationError
+		if !errors.As(err, &v) {
+			return err
+		}
+		fields = v.Fields
+	}
+	fields = append(fields, d.CheckPlan(now)...)
+	if fields != nil {
+		return &applicationerrors.ValidationError{Fields: fields}
+	}
+	return nil
+}
 
 // CheckPlan — поля проекта и денежный план при отправке (P09, P11). У «Старта»
 // обязательны полные поля проекта с бюджетом (кредит + собственные средства =

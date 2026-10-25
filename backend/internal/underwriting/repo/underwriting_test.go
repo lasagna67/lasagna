@@ -100,8 +100,8 @@ func (f fixture) application(t *testing.T, status applicationdomain.Status) uuid
 	var id uuid.UUID
 	err := f.pool.QueryRow(context.Background(), `
 		INSERT INTO applications (company_id, applicant_id, product_id, status, revision, purpose,
-			requested_amount_kopecks, requested_term_months, need_period_unit, submitted_at)
-		SELECT $1, $2, p.id, $3, 4, 'working_capital', 100000000, 12, 'unknown', now()
+			requested_amount_kopecks, requested_term_months, need_period_unit, submitted_at, processing_run_id)
+		SELECT $1, $2, p.id, $3, 4, 'working_capital', 100000000, 12, 'unknown', now(), gen_random_uuid()
 		FROM credit_products p WHERE p.code = 'express'
 		RETURNING id`,
 		f.companyID, f.applicantID, status,
@@ -209,7 +209,7 @@ func TestInfoRequestRound(t *testing.T) {
 	key := applicationdomain.IdempotencyKey{UserID: f.applicantID, Operation: applicationdomain.OperationResubmit, ResourceID: &id, Key: "k1",
 		RequestHash: "1111111111111111111111111111111111111111111111111111111111111111"}
 	resubmit := func(a *applicationdomain.Application) (underwritingdomain.Change, error) {
-		tr, err := a.Resubmit()
+		tr, err := a.Resubmit(uuid.New())
 		return underwritingdomain.Change{Transitions: []applicationdomain.Transition{tr}}, err
 	}
 	cmd := applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 6, ActorID: &f.applicantID, Key: &key}

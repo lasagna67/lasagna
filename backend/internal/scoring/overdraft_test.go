@@ -55,7 +55,7 @@ func TestOverdraftExactThresholds(t *testing.T) {
 		score int
 		grade string
 	}{{399, "critical"}, {400, "high"}, {599, "high"}, {600, "medium"}, {799, "medium"}, {800, "low"}, {1000, "low"}} {
-		if overdraftRiskGrade(tc.score) != tc.grade {
+		if RiskGrade(tc.score) != tc.grade {
 			t.Fatal(tc)
 		}
 	}

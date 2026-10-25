@@ -133,6 +133,10 @@ type Application struct {
 	AssigneeID *uuid.UUID // сотрудник, взявший заявку на рассмотрение; назначает модуль underwriting
 	Info       InfoRound  // запросы банка текущего раунда; только в info_requested
 
+	// ProcessingRunID — текущий запуск конвейера: новый при каждой отправке.
+	// Результаты чужого запуска отбрасываются; nil — заявку не отправляли.
+	ProcessingRunID *uuid.UUID
+
 	SubmittedAt *time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -230,9 +234,14 @@ type Notification struct {
 
 // UpdateCommand — изменение заявки с optimistic locking. Key задан — повтор с
 // тем же ключом и телом не меняет заявку, а возвращает replayed.
+//
+// RunID задан — пишет конвейер: вместо ExpectedRevision сверяется запуск
+// конвейера (ProcessingRunID), иначе ErrStaleRun. Записи одного запуска не
+// конфликтуют друг с другом из-за того, что предыдущая увеличила revision.
 type UpdateCommand struct {
 	ID               uuid.UUID
 	ExpectedRevision int
+	RunID            *uuid.UUID
 	ActorID          *uuid.UUID // nil — конвейер
 	Key              *IdempotencyKey
 }
@@ -282,22 +291,30 @@ func (a *Application) transit(to Status, from ...Status) (Transition, error) {
 // Submit — отправка черновика. Полноту запроса и условия продукта сервис
 // проверяет до вызова (CheckSubmit): ошибка возвращает 422 и оставляет draft.
 // SubmittedAt — время первой отправки; повторная после уточнений его не меняет.
-func (a *Application) Submit(now time.Time) (Transition, error) {
+// run — новый запуск конвейера для этой отправки.
+func (a *Application) Submit(now time.Time, run uuid.UUID) (Transition, error) {
 	tr, err := a.transit(StatusSubmitted, StatusDraft)
 	if err != nil {
 		return Transition{}, err
 	}
 	a.SubmittedAt = &now
+	a.ProcessingRunID = &run
 	return tr, nil
 }
 
 // Resubmit — повторная отправка после ответа на все открытые запросы банка.
-// Заявка та же, конвейер повторяет затронутые проверки.
-func (a *Application) Resubmit() (Transition, error) {
+// Заявка та же, конвейер повторяет проверки новым запуском run: результаты
+// прежнего запуска к ней больше не применяются.
+func (a *Application) Resubmit(run uuid.UUID) (Transition, error) {
 	if a.Status == StatusInfoRequested && a.Info.Open > 0 {
 		return Transition{}, fmt.Errorf("%w: %d open", applicationerrors.ErrInfoRequestsOpen, a.Info.Open)
 	}
-	return a.transit(StatusSubmitted, StatusInfoRequested)
+	tr, err := a.transit(StatusSubmitted, StatusInfoRequested)
+	if err != nil {
+		return Transition{}, err
+	}
+	a.ProcessingRunID = &run
+	return tr, nil
 }
 
 // Sign — клиент подписал актуальный договор. Актуальность предложения,

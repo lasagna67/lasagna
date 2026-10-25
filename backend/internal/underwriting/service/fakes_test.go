@@ -331,3 +331,17 @@ func (f *fakeRenderer) Render(d offerdomain.ContractData) ([]byte, error) {
 	f.last = d
 	return []byte("%PDF-fake contract"), nil
 }
+
+// fakePipeline запоминает повторы источников; err — сбой постановки в очередь.
+type fakePipeline struct {
+	retries [][]underwritingdomain.CheckSource
+	err     error
+}
+
+func (p *fakePipeline) RetryChecks(_ context.Context, _ uuid.UUID, sources []underwritingdomain.CheckSource) error {
+	if p.err != nil {
+		return p.err
+	}
+	p.retries = append(p.retries, sources)
+	return nil
+}

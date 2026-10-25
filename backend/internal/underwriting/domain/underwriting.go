@@ -244,7 +244,7 @@ type FinancialsCheck struct {
 }
 
 // ScoringStatus — не статус заявки: not_configured и failed ведут на ручное
-// рассмотрение, а не в отказ.
+// рассмотрение, а не в отказ. skipped — сработало стоп-правило, балл не считался.
 type ScoringStatus string
 
 const (
@@ -252,14 +252,25 @@ const (
 	ScoringInsufficientData ScoringStatus = "insufficient_data"
 	ScoringNotConfigured    ScoringStatus = "not_configured"
 	ScoringFailed           ScoringStatus = "failed"
+	ScoringSkipped          ScoringStatus = "skipped"
 )
 
+// ScoringCheck — последняя оценка модели. Score и RiskGrade — только у
+// завершённой балльной модели. Recommendation — маршрут, который предложила
+// модель (manual_review, auto_approved, auto_rejected); решение всё равно
+// публикует сотрудник. Report — полный расчёт, только сотруднику.
 type ScoringCheck struct {
-	Status       ScoringStatus
-	Score        *int
-	RiskGrade    *string
-	ModelVersion *string
-	Factors      json.RawMessage
+	Status           ScoringStatus
+	Kind             *string
+	Score            *int
+	RiskGrade        *string
+	ModelVersion     *string
+	Factors          json.RawMessage
+	Recommendation   *string
+	CanPublish       bool
+	PositiveBlockers []string
+	Report           json.RawMessage
+	CalculatedAt     *time.Time
 }
 
 // CheckSummary — проверки заявки: снимки версии от конвейера, а где их нет —

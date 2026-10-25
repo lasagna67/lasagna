@@ -312,14 +312,22 @@ type ChecksResponse struct {
 	Financials   FinancialsCheckResponse   `json:"financials"`
 }
 
-// ScoringResponse — результат модели. not_configured: модель не подключена,
-// score и risk_grade — null, решение принимает сотрудник.
+// ScoringResponse — результат модели. score и risk_grade — только у завершённой
+// балльной модели, иначе null; решение принимает сотрудник. recommendation —
+// маршрут, предложенный моделью; positive_blockers — что мешает положительному
+// решению; report — полный расчёт модели.
 type ScoringResponse struct {
-	Status       string          `json:"status" enums:"completed,insufficient_data,not_configured,failed"`
-	Score        *int            `json:"score"`
-	RiskGrade    *string         `json:"risk_grade"`
-	ModelVersion *string         `json:"model_version"`
-	Factors      json.RawMessage `json:"factors" swaggertype:"array,object"`
+	Status           string          `json:"status" enums:"completed,insufficient_data,not_configured,failed,skipped"`
+	Kind             *string         `json:"kind" enums:"cashflow,project,overdraft"`
+	Score            *int            `json:"score"`
+	RiskGrade        *string         `json:"risk_grade" enums:"low,medium,high,critical"`
+	ModelVersion     *string         `json:"model_version"`
+	Factors          json.RawMessage `json:"factors" swaggertype:"array,object"`
+	Recommendation   *string         `json:"recommendation" enums:"manual_review,auto_approved,auto_rejected"`
+	CanPublish       bool            `json:"can_publish"`
+	PositiveBlockers []string        `json:"positive_blockers"`
+	Report           json.RawMessage `json:"report" swaggertype:"object"`
+	CalculatedAt     *time.Time      `json:"calculated_at"`
 }
 
 // PlanTermsResponse — условия, на которых проверен или считается план.
@@ -540,11 +548,17 @@ func newChecks(c underwritingdomain.CheckSummary) ChecksResponse {
 
 func newScoring(s underwritingdomain.ScoringCheck) ScoringResponse {
 	return ScoringResponse{
-		Status:       string(s.Status),
-		Score:        s.Score,
-		RiskGrade:    s.RiskGrade,
-		ModelVersion: s.ModelVersion,
-		Factors:      s.Factors,
+		Status:           string(s.Status),
+		Kind:             s.Kind,
+		Score:            s.Score,
+		RiskGrade:        s.RiskGrade,
+		ModelVersion:     s.ModelVersion,
+		Factors:          s.Factors,
+		Recommendation:   s.Recommendation,
+		CanPublish:       s.CanPublish,
+		PositiveBlockers: nonNil(s.PositiveBlockers),
+		Report:           s.Report,
+		CalculatedAt:     utc(s.CalculatedAt),
 	}
 }
 

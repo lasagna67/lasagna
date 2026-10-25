@@ -77,6 +77,77 @@ func (s *Scorer) EvaluateProject(ctx context.Context, applicationID uuid.UUID, i
 	return EvaluateProject(in, now), nil
 }
 
+// Evaluate — оценка заявки моделью её продукта; её вызывает конвейер. Кроме
+// проверок счёта, залога и плана из БД собирает входы выбранной модели:
+// у «Старта» — бюджет, прогноз и резервы из сохранённых полей проекта и плана,
+// у овердрафта — период в днях и счёт компании. Чего в схеме ещё нет (поля
+// поступления овердрафта, подтверждение раздельности резерва), то модель
+// получает пустым и блокирует положительное решение, а не считает выполненным.
+func (s *Scorer) Evaluate(ctx context.Context, applicationID uuid.UUID, in ScoringInput, now time.Time) (ScoringDecision, error) {
+	base, err := s.loadApplicationInput(ctx, applicationID, in, now)
+	if err != nil {
+		return ScoringDecision{}, err
+	}
+	var unit string
+	var days *int
+	var dataRevision int
+	var accountID *uuid.UUID
+	err = s.pool.QueryRow(ctx, `SELECT a.need_period_unit::text, a.need_period_value, a.data_revision, ac.id
+		FROM applications a LEFT JOIN company_accounts ac ON ac.company_id=a.company_id
+		WHERE a.id=$1`, applicationID).Scan(&unit, &days, &dataRevision, &accountID)
+	if err != nil {
+		return ScoringDecision{}, fmt.Errorf("load scoring request: %w", err)
+	}
+	ev := EvaluationInput{ScoringInput: base}
+	if base.Product != nil {
+		switch base.Product.Code {
+		case "start":
+			project := savedProjectInput(base, dataRevision, now)
+			ev.Project = &project
+		case "overdraft":
+			overdraft := OverdraftInput{ScoringInput: base, NeedPeriodUnit: unit, NeedPeriodDays: days, DataRevision: strconv.Itoa(dataRevision)}
+			if accountID != nil {
+				overdraft.BankAccountID = *accountID
+			}
+			ev.Overdraft = &overdraft
+		}
+	}
+	return EvaluateApplication(ev, now), nil
+}
+
+// savedProjectInput — вход проектной модели из сохранённых полей проекта и плана.
+// Отсутствующие значения остаются nil: модель отличает их от нуля.
+func savedProjectInput(base ScoringInput, dataRevision int, now time.Time) ProjectInput {
+	in := ProjectInput{ScoringInput: base, DataRevision: strconv.Itoa(dataRevision)}
+	if _, debt, reason := validatedCreditDebt(base.Overview.CreditHistory, base.INN, validation.BusinessDay(now)); reason == "" {
+		in.ExistingDebtPaymentKopecks = &debt
+	}
+	cp := base.CashPlan
+	if cp == nil {
+		return in
+	}
+	if p := cp.Project; p != nil {
+		if cost, ok := p.CostKopecks(); ok {
+			in.ProjectCostKopecks = &cost
+		}
+		in.OwnFundsKopecks = p.OwnFundsKopecks
+		if p.SalesStartMonth != nil {
+			in.SalesStartMonth = *p.SalesStartMonth
+		}
+	}
+	if plan := cp.Plan; plan != nil {
+		reserve := plan.OwnReserveKopecks
+		in.DeclaredReserveKopecks = &reserve
+		for _, row := range plan.Forecast {
+			income, expenses := row.IncomeKopecks, row.ExpensesKopecks
+			in.Forecast = append(in.Forecast, ForecastMonth{Month: row.Month, IncomeKopecks: &income, ExpensesKopecks: &expenses})
+		}
+	}
+	in.ValidatedReserveKopecks = cp.ValidatedReserveKopecks
+	in.ReviewsCurrent = base.Checks.CashPlanAccepted != nil && *base.Checks.CashPlanAccepted
+	return in
+}
+
 func (s *Scorer) loadApplicationInput(ctx context.Context, applicationID uuid.UUID, in ScoringInput, now time.Time) (ScoringInput, error) {
 	var companyID uuid.UUID
 	var productCode string

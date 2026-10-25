@@ -35,6 +35,17 @@ docker compose run --rm --no-deps demo-seed
 docker compose cp demo-seed:/data/demo-businesses.json ../docs/demo-businesses.json
 ```
 
+### Конвейер проверок
+
+После `submit` заявка проходит `submitted → validation → enrichment → scoring → manual_review` асинхронно, через Kafka: событие пишется в outbox вместе с отправкой и публикуется relay бекенда, этапы читает consumer group `lasagna-pipeline`. Ответ `submit` приходит в `submitted`, обычно за секунду-две заявка доходит до сотрудника. Реестр и БКИ с прекращённой деятельностью или просрочкой от 30 дней дают автоматический отказ (`BUSINESS_TERMINATED`, `CURRENT_OVERDUE_30_PLUS`). Подробнее — [backend/internal/pipeline/.md](backend/internal/pipeline/.md).
+
+Посмотреть события и отставание consumer:
+
+```sh
+docker compose exec kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group lasagna-pipeline
+docker compose exec postgres psql -U postgres -c "select topic, key, published_at from outbox order by id desc limit 10"
+```
+
 ### Сотрудник банка
 
 Одноразовый сервис `staff-seed` создаёт демо-сотрудника с ролью `underwriter` напрямую в БД: публичная регистрация роль сотрудника не даёт. Логин `underwriter@lasagna.demo`, пароль `DemoUnderwriter2026!`; переопределяются через `STAFF_EMAIL` и `STAFF_PASSWORD`. Повторный запуск дублей не создаёт и пароль не меняет.

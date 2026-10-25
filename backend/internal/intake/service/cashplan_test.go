@@ -36,7 +36,7 @@ func startProject() cashplandomain.Project {
 }
 
 func TestPatchStartPlan(t *testing.T) {
-	s, drafts, pipeline := newDraftEnv()
+	s, drafts := newDraftEnv()
 	drafts.products["start"] = applicationdomain.Product{
 		Code: "start", Active: true, Purposes: []applicationdomain.Purpose{applicationdomain.PurposeBusinessStart},
 		MinAmountKopecks: 10_000_000, MaxAmountKopecks: 300_000_000, MinTermMonths: 12, MaxTermMonths: 36,
@@ -71,7 +71,7 @@ func TestPatchStartPlan(t *testing.T) {
 	submit := intakedomain.SubmitCommand{ApplicationID: a.ID, UserID: memberID, ExpectedRevision: 3, IdempotencyKey: "submit-1"}
 	d.Collateral = machineCollateral()
 	drafts.apps[a.ID] = d
-	if _, err := s.Submit(ctx, submit); !isFieldError("cash_plan.confirmed", cashplandomain.CodeForecastConfirmation)(err) || pipeline.runs != 0 {
+	if _, err := s.Submit(ctx, submit); !isFieldError("cash_plan.confirmed", cashplandomain.CodeForecastConfirmation)(err) || len(drafts.outbox) != 0 {
 		t.Fatalf("submit unconfirmed = %v", err)
 	}
 
@@ -98,8 +98,8 @@ func TestPatchStartPlan(t *testing.T) {
 
 	submit.ExpectedRevision = d.Revision
 	got, err := s.Submit(ctx, submit)
-	if err != nil || got.Status != applicationdomain.StatusManualReview {
-		t.Fatalf("submit start = %v, %v", got.Status, err)
+	if err != nil || got.Status != applicationdomain.StatusSubmitted || len(drafts.outbox) != 1 {
+		t.Fatalf("submit start = %v, events %d, %v", got.Status, len(drafts.outbox), err)
 	}
 	if !slices.Equal(drafts.history[a.ID][:1], []applicationdomain.Transition{{From: applicationdomain.StatusDraft, To: applicationdomain.StatusSubmitted}}) {
 		t.Errorf("history = %v", drafts.history[a.ID])
@@ -107,7 +107,7 @@ func TestPatchStartPlan(t *testing.T) {
 }
 
 func TestPatchPlanRejectedForProduct(t *testing.T) {
-	s, drafts, _ := newDraftEnv()
+	s, drafts := newDraftEnv()
 	a := completeDraft(1)
 	drafts.add(a)
 	// working_capital: план ликвидности в черновике не вводится, поля проекта — только у «Старта».

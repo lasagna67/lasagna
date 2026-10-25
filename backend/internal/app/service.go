@@ -12,6 +12,7 @@ import (
 	intakeservice "github.com/lasagna67/lasagna.git/internal/intake/service"
 	offercontract "github.com/lasagna67/lasagna.git/internal/offer/contract"
 	offerservice "github.com/lasagna67/lasagna.git/internal/offer/service"
+	pipelineservice "github.com/lasagna67/lasagna.git/internal/pipeline/service"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
 	signservice "github.com/lasagna67/lasagna.git/internal/sign/service"
 	underwritingservice "github.com/lasagna67/lasagna.git/internal/underwriting/service"
@@ -33,6 +34,7 @@ type Service struct {
 	Offer          *offerservice.Service
 	Document       *documentservice.Service
 	Sign           *signservice.Service
+	Pipeline       *pipelineservice.Service
 }
 
 func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service, error) {
@@ -65,9 +67,16 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 	if err != nil {
 		return nil, err
 	}
-	// Passthrough — пока конвейер проверок не подключён модулем scoring.
-	// Запускает его intake после отправки, повтор источников — underwriting.
-	pipeline := underwritingservice.NewPassthrough(repo.Underwriting)
+	// Конвейер запускает событие отправки, которое intake пишет в outbox;
+	// повтор источников сотрудником — underwriting.
+	pipeline := pipelineservice.New(pipelineservice.Deps{
+		Repo:      repo.Pipeline,
+		Sources:   external,
+		Overviews: repo.Companies,
+		Products:  repo.CreditProducts,
+		Scorer:    repo.Scoring,
+		Logger:    logger.Named("pipeline"),
+	})
 	underwriting := underwritingservice.New(underwritingservice.Deps{
 		Repo:      repo.Underwriting,
 		Checks:    repo.Checks,
@@ -81,7 +90,6 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Applications: repo.Applications,
 		Drafts:       repo.Drafts,
 		Companies:    company,
-		Pipeline:     pipeline,
 	})
 
 	documents := documentservice.New(repo.Documents, repo.Files, company)
@@ -98,5 +106,6 @@ func NewService(cfg config.Config, repo *Repo, logger *logger.Logger) (*Service,
 		Offer:          offerservice.New(repo.Offers, company),
 		Document:       documents,
 		Sign:           signservice.New(repo.Sign, company, external, underwriting, documents, repo.Files),
+		Pipeline:       pipeline,
 	}, nil
 }

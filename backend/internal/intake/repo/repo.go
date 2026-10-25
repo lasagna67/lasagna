@@ -63,20 +63,8 @@ func (r *Repo) Product(ctx context.Context, code string) (*applicationdomain.Pro
 // транзакции, и возвращает Change.
 func (r *Repo) Update(ctx context.Context, cmd applicationdomain.UpdateCommand, fn func(*intakedomain.Draft) (intakedomain.Change, error)) (replayed bool, err error) {
 	return applicationrepo.Update(ctx, r.pool, cmd, func(tx pgx.Tx, app *applicationdomain.Application) (applicationrepo.History, error) {
-		d := intakedomain.Draft{Application: app}
-		var err error
-		if code := app.Request.ProductCode; code != nil {
-			if d.Product, err = applicationrepo.GetProduct(ctx, tx, *code); err != nil {
-				return applicationrepo.History{}, err
-			}
-		}
-		if d.Collateral, err = loadCollateral(ctx, tx, app.ID); err != nil {
-			return applicationrepo.History{}, err
-		}
-		if d.Project, err = cashplanrepo.Project(ctx, tx, app.ID); err != nil {
-			return applicationrepo.History{}, err
-		}
-		if d.CashPlan, err = cashplanrepo.Plan(ctx, tx, app.ID); err != nil {
+		d, err := LoadDraft(ctx, tx, app)
+		if err != nil {
 			return applicationrepo.History{}, err
 		}
 		change, err := fn(&d)
@@ -86,8 +74,31 @@ func (r *Repo) Update(ctx context.Context, cmd applicationdomain.UpdateCommand, 
 		if err := apply(ctx, tx, *app, change); err != nil {
 			return applicationrepo.History{}, err
 		}
-		return applicationrepo.History{Transitions: change.Transitions}, nil
+		return applicationrepo.History{Transitions: change.Transitions, Outbox: change.Outbox}, nil
 	})
+}
+
+// LoadDraft читает то, по чему проверяется заявка: продукт по коду из запроса,
+// предмет залога, поля проекта и план. Вызывается в транзакции, где заявка
+// заблокирована: так же её проверяет этап validation конвейера.
+func LoadDraft(ctx context.Context, q applicationrepo.Querier, app *applicationdomain.Application) (intakedomain.Draft, error) {
+	d := intakedomain.Draft{Application: app}
+	var err error
+	if code := app.Request.ProductCode; code != nil {
+		if d.Product, err = applicationrepo.GetProduct(ctx, q, *code); err != nil {
+			return intakedomain.Draft{}, err
+		}
+	}
+	if d.Collateral, err = loadCollateral(ctx, q, app.ID); err != nil {
+		return intakedomain.Draft{}, err
+	}
+	if d.Project, err = cashplanrepo.Project(ctx, q, app.ID); err != nil {
+		return intakedomain.Draft{}, err
+	}
+	if d.CashPlan, err = cashplanrepo.Plan(ctx, q, app.ID); err != nil {
+		return intakedomain.Draft{}, err
+	}
+	return d, nil
 }
 
 // apply пишет Change: поля запроса, предмет залога, поля проекта, план,

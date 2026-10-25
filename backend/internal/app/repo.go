@@ -10,6 +10,7 @@ import (
 	documentrepo "github.com/lasagna67/lasagna.git/internal/document/repo"
 	intakerepo "github.com/lasagna67/lasagna.git/internal/intake/repo"
 	offerrepo "github.com/lasagna67/lasagna.git/internal/offer/repo"
+	pipelinerepo "github.com/lasagna67/lasagna.git/internal/pipeline/repo"
 	"github.com/lasagna67/lasagna.git/internal/scoring"
 	signrepo "github.com/lasagna67/lasagna.git/internal/sign/repo"
 	underwritingrepo "github.com/lasagna67/lasagna.git/internal/underwriting/repo"
@@ -38,6 +39,8 @@ type Repo struct {
 	Documents    *documentrepo.Repo
 	Files        *documentrepo.Storage
 	Sign         *signrepo.Repo
+
+	Pipeline *pipelinerepo.Repo
 }
 
 func NewRepo(cfg config.Config, infra *Infra) *Repo {
@@ -61,5 +64,7 @@ func NewRepo(cfg config.Config, infra *Infra) *Repo {
 		Documents:    documentrepo.New(infra.Postgres().Pool()),
 		Files:        documentrepo.NewStorage(infra.S3(), cfg.S3.DocumentsBucket),
 		Sign:         signrepo.New(infra.Postgres().Pool()),
+
+		Pipeline: pipelinerepo.New(infra.Postgres().Pool()),
 	}
 }

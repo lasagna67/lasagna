@@ -224,7 +224,7 @@ func CalculateOverdraft(in OverdraftInput, now time.Time) (a OverdraftAssessment
 	factors := overdraftFactors(b, total, credit.Report, positive, len(months), trend)
 	factors.Trend.Condition = fmt.Sprintf("recent income sum=%d; older income sum=%d", recent, old)
 	score := factors.Coverage.Points + factors.History.Points + factors.Stability.Points + factors.Trend.Points
-	grade := overdraftRiskGrade(score)
+	grade := RiskGrade(score)
 	a.Factors, a.Score, a.RiskGrade, a.Status = &factors, &score, &grade, "completed"
 	// T не должна превышать ни Bs, ни floor(B / 1.2); сравнение выполняется точно в целых числах.
 	repaymentBudget := min(b/6*5+b%6*5/6, bs)
@@ -259,7 +259,9 @@ func overdraftFactors(b, total int64, history company.CreditHistory, positive, n
 	}
 }
 
-func overdraftRiskGrade(score int) string {
+// RiskGrade — внутренняя оценка политики по баллу (P05): 800–1000 low, 600–799
+// medium, 400–599 high, 0–399 critical. Вероятности дефолта не означает.
+func RiskGrade(score int) string {
 	switch {
 	case score >= 800:
 		return "low"

@@ -45,6 +45,7 @@ type env struct {
 	checks    *fakeChecks
 	storage   *fakeStorage
 	contracts *fakeRenderer
+	pipeline  *fakePipeline
 }
 
 func newEnv() env {
@@ -62,6 +63,7 @@ func newEnv() env {
 		checks:    &fakeChecks{summary: readyChecks()},
 		storage:   &fakeStorage{files: map[string][]byte{}},
 		contracts: &fakeRenderer{},
+		pipeline:  &fakePipeline{},
 	}
 	e.svc = New(Deps{
 		Repo:      repo,
@@ -70,7 +72,7 @@ func newEnv() env {
 		Companies: fakeCompanies{members: map[uuid.UUID][]uuid.UUID{companyID: {applicantID}}},
 		Storage:   e.storage,
 		Contracts: e.contracts,
-		Pipeline:  NewPassthrough(repo),
+		Pipeline:  e.pipeline,
 	})
 	return e
 }
@@ -354,9 +356,21 @@ func TestRetryChecks(t *testing.T) {
 	if _, err := e.svc.RetryChecks(ctx, cmd); !slices.Equal(fieldCodes(err), []string{"sources:INVALID"}) {
 		t.Errorf("unknown source = %v", err)
 	}
-	cmd.Sources = []underwritingdomain.CheckSource{underwritingdomain.CheckRegistry}
+	if len(e.pipeline.retries) != 0 {
+		t.Fatalf("invalid retry reached pipeline: %v", e.pipeline.retries)
+	}
+	cmd.Sources = []underwritingdomain.CheckSource{underwritingdomain.CheckRegistry, underwritingdomain.CheckRegistry, underwritingdomain.CheckCreditBureau}
+	if _, err := e.svc.RetryChecks(ctx, cmd); err != nil {
+		t.Fatalf("retry checks = %v", err)
+	}
+	want := []underwritingdomain.CheckSource{underwritingdomain.CheckRegistry, underwritingdomain.CheckCreditBureau}
+	if len(e.pipeline.retries) != 1 || !slices.Equal(e.pipeline.retries[0], want) {
+		t.Errorf("pipeline retries = %v; want one with %v", e.pipeline.retries, want)
+	}
+
+	e.pipeline.err = applicationerrors.ErrServiceUnavailable
 	if _, err := e.svc.RetryChecks(ctx, cmd); !errors.Is(err, applicationerrors.ErrServiceUnavailable) {
-		t.Errorf("retry without pipeline = %v; want ErrServiceUnavailable", err)
+		t.Errorf("retry with failed pipeline = %v; want ErrServiceUnavailable", err)
 	}
 }
 

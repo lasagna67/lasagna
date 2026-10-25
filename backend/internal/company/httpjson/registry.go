@@ -33,7 +33,8 @@ type registryReport struct {
 }
 
 // GetCard ищет ЮЛ в ЕГРЮЛ (ИНН 10 цифр) или ИП в ЕГРИП (12 цифр).
-// Формат ИНН проверяет вызывающий.
+// Формат ИНН проверяет вызывающий. Ответ с чужим ИНН или неизвестным статусом —
+// ErrRegistryUnavailable вместе с ErrInvalidReport.
 func (c *Client) GetCard(ctx context.Context, inn string) (companydomain.RegistryCard, error) {
 	registry := "egrul"
 	if len(inn) == 12 {
@@ -51,8 +52,11 @@ func (c *Client) GetCard(ctx context.Context, inn string) (companydomain.Registr
 	}
 
 	card, err := resp.card()
+	if err == nil && card.INN != inn {
+		err = fmt.Errorf("inn %q does not match requested", card.INN)
+	}
 	if err != nil {
-		return companydomain.RegistryCard{}, fmt.Errorf("%w: unexpected registry data: %w", companyerrors.ErrRegistryUnavailable, err)
+		return companydomain.RegistryCard{}, fmt.Errorf("%w: %w: unexpected registry data: %w", companyerrors.ErrRegistryUnavailable, companyerrors.ErrInvalidReport, err)
 	}
 	return card, nil
 }

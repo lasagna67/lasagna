@@ -18,6 +18,7 @@ import (
 	companydomain "github.com/lasagna67/lasagna.git/internal/company/domain"
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 	intakedomain "github.com/lasagna67/lasagna.git/internal/intake/domain"
+	pipelinedomain "github.com/lasagna67/lasagna.git/internal/pipeline/domain"
 )
 
 // maxIdempotencyKeyLen — длина колонки idempotency_keys.idempotency_key.
@@ -47,25 +48,18 @@ type Companies interface {
 	Membership(ctx context.Context, companyID, userID uuid.UUID) (companydomain.Membership, error)
 }
 
-// Pipeline — конвейер проверок после отправки. Run идемпотентен: не делает
-// ничего, если заявка уже не в submitted.
-type Pipeline interface {
-	Run(ctx context.Context, applicationID uuid.UUID) error
-}
-
 type Deps struct {
 	Applications ApplicationRepo
 	Drafts       DraftRepo
 	Companies    Companies
-	Pipeline     Pipeline
 }
 
 type ApplicationService struct {
 	applications ApplicationRepo
 	drafts       DraftRepo
 	companies    Companies
-	pipeline     Pipeline
 	now          func() time.Time
+	newRun       func() uuid.UUID
 }
 
 func New(d Deps) *ApplicationService {
@@ -73,8 +67,8 @@ func New(d Deps) *ApplicationService {
 		applications: d.Applications,
 		drafts:       d.Drafts,
 		companies:    d.Companies,
-		pipeline:     d.Pipeline,
 		now:          time.Now,
+		newRun:       uuid.New,
 	}
 }
 
@@ -153,15 +147,15 @@ func (s *ApplicationService) Patch(ctx context.Context, cmd intakedomain.PatchCo
 }
 
 // Submit — отправка черновика. Полнота запроса и условия продукта проверяются
-// на заблокированной заявке: ошибка — 422, заявка остаётся draft. Затем
-// запускается конвейер.
+// на заблокированной заявке: ошибка — 422, заявка остаётся draft. Вместе с
+// переходом пишется событие, которое запускает конвейер.
 func (s *ApplicationService) Submit(ctx context.Context, cmd intakedomain.SubmitCommand) (intakedomain.Details, error) {
-	return s.send(ctx, cmd, applicationdomain.OperationSubmit, func(d *intakedomain.Draft) (intakedomain.Change, error) {
-		tr, err := d.Application.Submit(s.now())
+	return s.send(ctx, cmd, applicationdomain.OperationSubmit, func(d *intakedomain.Draft, run uuid.UUID) (intakedomain.Change, error) {
+		tr, err := d.Application.Submit(s.now(), run)
 		if err != nil {
 			return intakedomain.Change{}, err
 		}
-		if err := checkSubmit(d, s.now()); err != nil {
+		if err := d.CheckSubmit(s.now()); err != nil {
 			return intakedomain.Change{}, err
 		}
 		return intakedomain.Change{Transitions: []applicationdomain.Transition{tr}}, nil
@@ -172,13 +166,13 @@ func (s *ApplicationService) Submit(ctx context.Context, cmd intakedomain.Submit
 // проверяется как при первой отправке: клиент мог изменить открытые поля.
 // Ответственный сотрудник получает уведомление.
 func (s *ApplicationService) Resubmit(ctx context.Context, cmd intakedomain.SubmitCommand) (intakedomain.Details, error) {
-	return s.send(ctx, cmd, applicationdomain.OperationResubmit, func(d *intakedomain.Draft) (intakedomain.Change, error) {
+	return s.send(ctx, cmd, applicationdomain.OperationResubmit, func(d *intakedomain.Draft, run uuid.UUID) (intakedomain.Change, error) {
 		a := d.Application
-		tr, err := a.Resubmit()
+		tr, err := a.Resubmit(run)
 		if err != nil {
 			return intakedomain.Change{}, err
 		}
-		if err := checkSubmit(d, s.now()); err != nil {
+		if err := d.CheckSubmit(s.now()); err != nil {
 			return intakedomain.Change{}, err
 		}
 		change := intakedomain.Change{Transitions: []applicationdomain.Transition{tr}}
@@ -195,10 +189,12 @@ func (s *ApplicationService) Resubmit(ctx context.Context, cmd intakedomain.Subm
 	})
 }
 
-// send переводит заявку в submitted и запускает конвейер. Повтор с тем же
-// Idempotency-Key и телом не создаёт второй отправки; конвейер запускается,
-// пока заявка в submitted, — и при повторе, если первый запуск не удался.
-func (s *ApplicationService) send(ctx context.Context, cmd intakedomain.SubmitCommand, op applicationdomain.Operation, fn func(*intakedomain.Draft) (intakedomain.Change, error)) (intakedomain.Details, error) {
+// send переводит заявку в submitted с новым запуском конвейера и в той же
+// транзакции пишет в outbox событие отправки: конвейер начнётся, только если
+// отправка записана, и не потеряется, если Kafka или процесс упадут после
+// коммита. Повтор с тем же Idempotency-Key и телом не создаёт второй отправки
+// и второго запуска.
+func (s *ApplicationService) send(ctx context.Context, cmd intakedomain.SubmitCommand, op applicationdomain.Operation, fn func(*intakedomain.Draft, uuid.UUID) (intakedomain.Change, error)) (intakedomain.Details, error) {
 	if err := validateIdempotencyKey(cmd.IdempotencyKey); err != nil {
 		return intakedomain.Details{}, err
 	}
@@ -214,7 +210,16 @@ func (s *ApplicationService) send(ctx context.Context, cmd intakedomain.SubmitCo
 		Key:         cmd.IdempotencyKey,
 		RequestHash: requestHash(id.String(), fmt.Sprint(cmd.ExpectedRevision)),
 	}
-	if _, err := s.drafts.Update(ctx, update, fn); err != nil {
+	run := s.newRun()
+	_, err := s.drafts.Update(ctx, update, func(d *intakedomain.Draft) (intakedomain.Change, error) {
+		change, err := fn(d, run)
+		if err != nil {
+			return intakedomain.Change{}, err
+		}
+		change.Outbox = append(change.Outbox, pipelinedomain.Submitted(id, run))
+		return change, nil
+	})
+	if err != nil {
 		return intakedomain.Details{}, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -222,36 +227,10 @@ func (s *ApplicationService) send(ctx context.Context, cmd intakedomain.SubmitCo
 	if err != nil {
 		return intakedomain.Details{}, fmt.Errorf("get application: %w", err)
 	}
-	if d.Status == applicationdomain.StatusSubmitted {
-		if err := s.pipeline.Run(ctx, id); err != nil {
-			return intakedomain.Details{}, fmt.Errorf("run pipeline: %w", err)
-		}
-		if d, err = s.drafts.Get(ctx, id); err != nil {
-			return intakedomain.Details{}, fmt.Errorf("get application: %w", err)
-		}
-	}
 	return d, nil
 }
 
 //============================================================================================
-
-// checkSubmit — полнота запроса, условия продукта, поля проекта и план одним
-// списком ошибок полей.
-func checkSubmit(d *intakedomain.Draft, now time.Time) error {
-	var fields []applicationerrors.FieldError
-	if err := d.Application.CheckSubmit(d.Product, d.Collateral != nil); err != nil {
-		var v *applicationerrors.ValidationError
-		if !errors.As(err, &v) {
-			return err
-		}
-		fields = v.Fields
-	}
-	fields = append(fields, d.CheckPlan(now)...)
-	if fields != nil {
-		return &applicationerrors.ValidationError{Fields: fields}
-	}
-	return nil
-}
 
 // dataChanged — правка меняет входные данные риска (C01): запрос, предмет
 // залога, поля проекта или план с его подтверждением. Повтор тех же значений

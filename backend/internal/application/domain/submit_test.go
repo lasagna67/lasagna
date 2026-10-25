@@ -139,16 +139,16 @@ func TestCheckSubmit(t *testing.T) {
 func TestSubmitKeepsFirstSubmittedAt(t *testing.T) {
 	a := completeLoan()
 	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
-	if tr, err := a.Submit(now); err != nil || tr.To != StatusSubmitted || a.SubmittedAt == nil || !a.SubmittedAt.Equal(now) {
+	if tr, err := a.Submit(now, uuid.New()); err != nil || tr.To != StatusSubmitted || a.SubmittedAt == nil || !a.SubmittedAt.Equal(now) {
 		t.Fatalf("submit = %+v, %v, submitted_at %v", tr, err, a.SubmittedAt)
 	}
 	// Повторная отправка после уточнений время первой не меняет.
 	a.Status = StatusInfoRequested
-	if _, err := a.Resubmit(); err != nil || !a.SubmittedAt.Equal(now) {
+	if _, err := a.Resubmit(uuid.New()); err != nil || !a.SubmittedAt.Equal(now) {
 		t.Errorf("resubmit = %v, submitted_at %v", err, a.SubmittedAt)
 	}
 	a.Status = StatusManualReview
-	if _, err := a.Submit(now.Add(time.Hour)); !errors.Is(err, applicationerrors.ErrInvalidState) || !a.SubmittedAt.Equal(now) {
+	if _, err := a.Submit(now.Add(time.Hour), uuid.New()); !errors.Is(err, applicationerrors.ErrInvalidState) || !a.SubmittedAt.Equal(now) {
 		t.Errorf("submit from manual_review = %v, submitted_at %v", err, a.SubmittedAt)
 	}
 }

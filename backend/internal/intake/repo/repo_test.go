@@ -207,7 +207,7 @@ func TestSubmitOverdraftWithoutTerm(t *testing.T) {
 	var product *applicationdomain.Product
 	_, err = r.Update(ctx, applicationdomain.UpdateCommand{ID: id, ExpectedRevision: 2, ActorID: &user}, func(d *intakedomain.Draft) (intakedomain.Change, error) {
 		product = d.Product
-		tr, err := d.Application.Submit(now)
+		tr, err := d.Application.Submit(now, uuid.New())
 		if err != nil {
 			return intakedomain.Change{}, err
 		}
