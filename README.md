@@ -6,13 +6,13 @@
 
 Нужен Docker с Compose. Перед первым запуском скопировать `.env.example` в `.env.docker` и проверить параметры окружения.
 
-Из каталога `backend`:
+Из корня репозитория:
 
 ```sh
 docker compose up -d --build
 ```
 
-Compose поднимет базы и моки, применит миграции и запустит backend. Одноразовый сервис `demo-seed` дождётся готовности API и создаст 12 демо-аккаунтов с подключёнными компаниями: по шесть сценариев для ООО и ИП. Повторный запуск переиспользует существующие записи.
+Одна команда поднимает весь проект: базы и моки, backend с миграциями, демо-данные и frontend на `http://localhost:3000` (сборка из `frontend/Dockerfile`, прокси `/api` и `/esign` внутри compose-сети). Одноразовый сервис `demo-seed` дождётся готовности API и создаст 12 демо-аккаунтов с подключёнными компаниями: по шесть сценариев для ООО и ИП. Повторный запуск переиспользует существующие записи. Локальный override (`docker-compose.local.yaml`) убран в корневой файл: порт postgres на хост не публикуется.
 
 Дождаться окончания заполнения:
 
@@ -21,7 +21,7 @@ docker compose wait demo-seed
 docker compose logs demo-seed
 ```
 
-Код завершения `0` и сообщение `demo seed completed accounts=12` означают готовность демо. Backend доступен на `http://localhost:8080`.
+Код завершения `0` и сообщение `demo seed completed accounts=12` означают готовность демо. Backend доступен на `http://localhost:8080`, frontend — на `http://localhost:3000`.
 
 Логины и API для frontend: [docs/demo-businesses.md](docs/demo-businesses.md). Общий демо-пароль: `DemoCabinet2026!`. После входа актуальные ID компаний получать через `GET /api/v0/companies`: на новой БД UUID отличаются.
 
@@ -31,10 +31,10 @@ docker compose logs demo-seed
 docker compose run --rm --no-deps demo-seed
 ```
 
-Актуальный список аккаунтов сохраняется в volume `demo-data`. Из каталога `backend` его можно выгрузить:
+Актуальный список аккаунтов сохраняется в volume `demo-data`. Из корня репозитория его можно выгрузить:
 
 ```sh
-docker compose cp demo-seed:/data/demo-businesses.json ../docs/demo-businesses.json
+docker compose cp demo-seed:/data/demo-businesses.json docs/demo-businesses.json
 ```
 
 ### Финансовый шаг заявки
@@ -64,14 +64,17 @@ docker compose run --rm --no-deps staff-seed
 
 ## Запуск frontend
 
-Из каталога `frontend`:
+Frontend собирается прямо в корневом compose (`frontend/Dockerfile`) и стартует вместе со стеком на `http://localhost:3000`. Next проксирует `/api/*` на backend и `/esign/*` на esign-mock, поэтому браузер ходит на один origin; адреса (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SIGN_API_URL`, `NEXT_PUBLIC_SITE_URL`) задаются в корневом `docker-compose.yaml` — при сборке они попадают в rewrites, при старте — в окружение.
+
+Для локальной разработки можно запустить из исходников (порт 3000 должен быть свободен — сначала остановите docker-frontend: `docker compose stop frontend`):
 
 ```sh
+cd frontend
 npm install
-npm run dev     # http://localhost:3000
+npm run dev
 ```
 
-Прод-сборка: `npm run build && npm run start`. Next проксирует `/api/*` на backend (`http://localhost:8080`, ключ `NEXT_PUBLIC_API_URL`) и `/esign/*` на esign-mock (`http://localhost:8084`, ключ `NEXT_PUBLIC_SIGN_API_URL`), поэтому браузер ходит на один origin. Для входа в кабинет клиента используйте демо-аккаунты из [docs/demo-businesses.md](docs/demo-businesses.md) (например, `demo.ooo.good@lasagna.test`, пароль `DemoCabinet2026!`), для кабинета сотрудника — `underwriter@lasagna.demo` / `DemoUnderwriter2026!`.
+Логины: клиент — демо-аккаунты из [docs/demo-businesses.md](docs/demo-businesses.md) (например, `demo.ooo.good@lasagna.test`, пароль `DemoCabinet2026!`), сотрудник — `underwriter@lasagna.demo` / `DemoUnderwriter2026!`.
 
 ## E2E-тесты
 
@@ -80,14 +83,11 @@ npm run dev     # http://localhost:3000
 Полный порядок запуска:
 
 ```sh
-# 1. стек: базы, моки, backend, миграции, демо-данные
+# 1. стек целиком: backend + frontend (http://localhost:3000)
 cp .env.example .env.docker                        # только при первом запуске
-docker compose -f backend/docker-compose.yaml -f docker-compose.local.yaml up -d --build
+docker compose up -d --build
 
-# 2. frontend
-cd frontend && npm install && npm run dev          # http://localhost:3000
-
-# 3. тесты (из корня репозитория)
+# 2. тесты (из корня репозитория; frontend уже поднят)
 node --test e2e/
 ```
 

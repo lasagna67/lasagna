@@ -1,5 +1,5 @@
-# Локальный override: не публикует порт postgres на хосте (5432 может быть занят локальным PostgreSQL)
-# Использование: docker compose -f backend/docker-compose.yaml -f docker-compose.local.yaml up -d --build
+# Локальный override: не публикует порт postgres на хосте (5432 может быть занят локальным PostgreSQL).
+# Подключается из корневого docker-compose.yaml; отдельно: docker compose -f backend/docker-compose.yaml -f docker-compose.local.yaml up -d --build
 services:
   postgres:
     ports: !override []

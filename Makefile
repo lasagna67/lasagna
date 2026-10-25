@@ -1,4 +1,4 @@
-COMPOSE := docker compose -f backend/docker-compose.yaml -f docker-compose.local.yaml
+COMPOSE := docker compose
 PROJECT := $(notdir $(CURDIR))
 E2E_BASE ?= http://localhost:3000
 
@@ -10,7 +10,7 @@ E2E_BASE ?= http://localhost:3000
 help: ## Список целей
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
 
-up: ## Поднять стек: базы, моки, backend, миграции, сиды
+up: ## Поднять всё: backend, моки, базы, миграции, сиды и frontend (:3000)
 	@test -f .env.docker || cp .env.example .env.docker
 	$(COMPOSE) up -d --build
 
@@ -58,7 +58,7 @@ lag: ## Отставание consumer'а pipeline в Kafka
 install: ## Установить зависимости frontend
 	cd frontend && npm install
 
-dev: ## Запустить frontend в dev-режиме (http://localhost:3000)
+dev: ## Запустить frontend из исходников (npm dev; остановите docker-frontend на :3000)
 	cd frontend && npm run dev
 
 build: ## Собрать frontend
