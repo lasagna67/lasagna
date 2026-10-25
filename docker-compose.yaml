@@ -1,0 +1,37 @@
+# Корневой запуск всего проекта: docker compose up -d --build
+# Поднимает backend-стек (включая локальный override без порта postgres) и frontend.
+include:
+  - path: backend/docker-compose.yaml
+  - path: docker-compose.local.yaml
+
+services:
+  postgres:
+    # 5432 может быть занят локальным PostgreSQL: порт на хост не публикуем
+    ports: !override []
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # rewrites(next.config.ts) резолвятся по именам сервисов compose
+        NEXT_PUBLIC_API_URL: http://backend:8080
+        NEXT_PUBLIC_SIGN_API_URL: http://esign-mock:8084
+        NEXT_PUBLIC_SITE_URL: http://localhost:3000
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:8080
+      NEXT_PUBLIC_SIGN_API_URL: http://esign-mock:8084
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+      esign-mock:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/login"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
