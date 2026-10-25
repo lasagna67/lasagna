@@ -26,6 +26,7 @@ type ScoringInput struct {
 	HasCollateral    bool
 	Checks           ScoringChecks
 	RegistrySyncedAt *time.Time
+	CreditFetchedAt  *time.Time // Время получения БКИ отдельно от календарной даты отчёта.
 }
 
 // EvaluationInput содержит общие данные и дополнительные входы выбранной модели.
@@ -174,7 +175,6 @@ type OverdraftInput struct {
 	ExpectedInflowAmount *int64
 	InflowBasis          string
 	BankAccountID        uuid.UUID
-	CreditFetchedAt      *time.Time
 	CatalogVersion       string
 	DataRevision         string
 	SnapshotIDs          []string

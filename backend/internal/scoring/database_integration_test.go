@@ -58,7 +58,7 @@ func TestDatabaseScorer(t *testing.T) {
 	exec(`INSERT INTO company_accounts(company_id) VALUES($1)`, foreignCompany)
 	check("account_check_missing", true)
 	exec(`INSERT INTO company_accounts(company_id,status) VALUES($1,'inactive')`, company)
-	if got := check("account_not_active_or_not_owned", true); got.State != DecisionAutoRejected {
+	if got := check("account_not_active_or_not_owned", true); got.State != DecisionManualReview || got.CanPublish {
 		t.Fatal(got.State)
 	}
 	exec(`UPDATE company_accounts SET status='active' WHERE company_id=$1`, company)

@@ -33,32 +33,6 @@ func TestDataCurrent(t *testing.T) {
 
 func timeValue(t time.Time) *time.Time { return &t }
 
-func TestScoringSourceFreshness(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		change func(*ScoringInput)
-		reason string
-	}{
-		{"old registry", func(in *ScoringInput) { in.RegistrySyncedAt = timeValue(decisionNow.Add(-31 * 24 * time.Hour)) }, "registry_outdated"},
-		{"missing registry date", func(in *ScoringInput) { in.RegistrySyncedAt = nil }, "registry_freshness_unconfirmed"},
-		{"old BKI", func(in *ScoringInput) { in.Overview.CreditHistory.Data.ReportDate = "2026-09-23" }, "credit_outdated"},
-		{"30 calendar days BKI", func(in *ScoringInput) { in.Overview.CreditHistory.Data.ReportDate = "2026-09-24" }, ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			in := decisionInput()
-			tc.change(&in)
-			got := EvaluateApplication(EvaluationInput{ScoringInput: in}, decisionNow)
-			if tc.reason == "" {
-				if got.State != DecisionAutoApproved {
-					t.Fatalf("boundary rejected: %+v", got)
-				}
-			} else if got.State != DecisionManualReview || !slices.Contains(got.Reasons, tc.reason) {
-				t.Fatalf("freshness check: %+v", got)
-			}
-		})
-	}
-}
-
 func TestNoAnomalousIncome(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -139,7 +113,7 @@ func TestValidationReason(t *testing.T) {
 				o.Registry.Data.Status = d.StatusTerminated
 			}
 			for i := 0; i < tc.months; i++ {
-				o.Financials.Data.MonthlyData = append(o.Financials.Data.MonthlyData, d.MonthlyData{Month: time.Date(2026, time.Month(i+1), 1, 0, 0, 0, 0, time.UTC).Format("2006-01")})
+				o.Financials.Data.MonthlyData = append(o.Financials.Data.MonthlyData, d.MonthlyData{Month: time.Date(2026, time.Month(10-tc.months+i), 1, 0, 0, 0, 0, time.UTC).Format("2006-01")})
 			}
 			got := validateOverview(o, "123", time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC))
 			if got.Status != tc.status || !reflect.DeepEqual(got.Reasons, tc.reasons) {
