@@ -374,6 +374,27 @@ func TestRetryChecks(t *testing.T) {
 	}
 }
 
+func TestRetryScoring(t *testing.T) {
+	e := newEnv()
+	app := e.manualReview(1000)
+	cmd := underwritingdomain.RetryScoringCommand{ApplicationID: app.ID, Reviewer: me, ExpectedRevision: 4}
+	if _, err := e.svc.RetryScoring(ctx, cmd); !errors.Is(err, underwritingerrors.ErrNotAssignee) {
+		t.Errorf("not assignee = %v", err)
+	}
+	e.take(t, app.ID, me)
+	if _, err := e.svc.RetryScoring(ctx, cmd); !errors.Is(err, applicationerrors.ErrRevisionConflict) {
+		t.Errorf("stale revision = %v", err)
+	}
+	cmd.ExpectedRevision = 5
+	if _, err := e.svc.RetryScoring(ctx, cmd); err != nil || !slices.Equal(e.pipeline.rescores, []uuid.UUID{app.ID}) {
+		t.Fatalf("retry scoring = %v, rescores %v", err, e.pipeline.rescores)
+	}
+	e.pipeline.err = applicationerrors.ErrServiceUnavailable
+	if _, err := e.svc.RetryScoring(ctx, cmd); !errors.Is(err, applicationerrors.ErrServiceUnavailable) {
+		t.Errorf("failed pipeline = %v", err)
+	}
+}
+
 func TestStaffDoesNotSeeDrafts(t *testing.T) {
 	e := newEnv()
 	app := e.manualReview(1000)

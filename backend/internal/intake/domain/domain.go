@@ -405,6 +405,21 @@ func (d Draft) CheckPlan(now time.Time) []applicationerrors.FieldError {
 	return errs
 }
 
+// ListFilter — заявки компании для клиента, новые сверху. Before — курсор:
+// номер последней заявки предыдущей страницы.
+type ListFilter struct {
+	CompanyID uuid.UUID
+	Status    *applicationdomain.Status
+	Limit     int
+	Before    *int64
+}
+
+// ListCommand — список заявок компании, где пользователь — представитель.
+type ListCommand struct {
+	UserID uuid.UUID
+	ListFilter
+}
+
 // SubmitCommand — отправка черновика или повторная отправка после уточнений.
 // Повтор с тем же Idempotency-Key и expected_revision не создаёт второй отправки.
 type SubmitCommand struct {

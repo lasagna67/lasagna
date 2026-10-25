@@ -97,6 +97,19 @@ func (r *Repo) Checks(ctx context.Context, applicationID, run uuid.UUID) (pipeli
 	return checks, nil
 }
 
+// RecordSkip пишет отброшенное событие в техническую историю конвейера.
+// Удалённой заявки нет — нечего и записывать.
+func (r *Repo) RecordSkip(ctx context.Context, ev pipelinedomain.Event, topic, reason string) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO pipeline_skipped_events (application_id, run_id, topic, reason)
+		SELECT $1, $2, $3, $4 WHERE EXISTS (SELECT 1 FROM applications WHERE id = $1)`,
+		ev.ApplicationID, ev.RunID, topic, reason)
+	if err != nil {
+		return fmt.Errorf("insert skipped event: %w", err)
+	}
+	return nil
+}
+
 // Enqueue пишет события в outbox вне изменения заявки: повтор источников
 // сотрудником ничего в заявке не меняет до ответа конвейера.
 func (r *Repo) Enqueue(ctx context.Context, msgs ...outbox.Message) error {

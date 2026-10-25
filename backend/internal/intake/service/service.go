@@ -24,6 +24,11 @@ import (
 // maxIdempotencyKeyLen — длина колонки idempotency_keys.idempotency_key.
 const maxIdempotencyKeyLen = 255
 
+const (
+	defaultLimit = 20
+	maxLimit     = 100
+)
+
 type ApplicationRepo interface {
 	// Create в одной транзакции занимает ключ идемпотентности, сохраняет черновик и первую запись истории.
 	// Ключ уже занят тем же запросом — возвращает заявку, созданную тогда; другим — applicationerrors.ErrIdempotencyConflict.
@@ -34,6 +39,8 @@ type ApplicationRepo interface {
 type DraftRepo interface {
 	// Get — нет заявки: applicationerrors.ErrNotFound.
 	Get(ctx context.Context, id uuid.UUID) (intakedomain.Details, error)
+	// List — заявки компании по фильтру, новые сверху; Limit задаёт сервис.
+	List(ctx context.Context, f intakedomain.ListFilter) ([]intakedomain.Details, error)
 	// Product — условия продукта по коду; нет такого — nil.
 	Product(ctx context.Context, code string) (*applicationdomain.Product, error)
 	// Update в одной транзакции блокирует заявку, сверяет revision (иначе
@@ -97,6 +104,43 @@ func (s *ApplicationService) Create(ctx context.Context, cmd applicationdomain.C
 		return applicationdomain.ApplicationDetails{}, fmt.Errorf("create application: %w", err)
 	}
 	return details, nil
+}
+
+// Get — заявка своей компании в любом статусе: так клиент следит за
+// конвейером после отправки. Чужая заявка неотличима от несуществующей.
+func (s *ApplicationService) Get(ctx context.Context, userID, id uuid.UUID) (intakedomain.Details, error) {
+	return s.clientDetails(ctx, userID, id)
+}
+
+// List — заявки компании, где пользователь — представитель, новые сверху.
+// next — курсор следующей страницы, nil — страниц больше нет.
+func (s *ApplicationService) List(ctx context.Context, cmd intakedomain.ListCommand) (items []intakedomain.Details, next *int64, err error) {
+	f := cmd.ListFilter
+	switch {
+	case f.CompanyID == uuid.Nil:
+		return nil, nil, &applicationerrors.RequestError{Message: "Передайте company_id"}
+	case f.Limit == 0:
+		f.Limit = defaultLimit
+	case f.Limit < 0 || f.Limit > maxLimit:
+		return nil, nil, &applicationerrors.RequestError{Message: fmt.Sprintf("limit — от 1 до %d", maxLimit)}
+	}
+	if f.Status != nil && !f.Status.Valid() {
+		return nil, nil, &applicationerrors.RequestError{Message: "Неизвестный статус заявки"}
+	}
+	if err := s.checkMember(ctx, f.CompanyID, cmd.UserID); err != nil {
+		return nil, nil, err
+	}
+	limit := f.Limit
+	f.Limit++ // лишняя строка — признак следующей страницы
+	if items, err = s.drafts.List(ctx, f); err != nil {
+		return nil, nil, fmt.Errorf("list applications: %w", err)
+	}
+	if len(items) > limit {
+		items = items[:limit]
+		last := items[limit-1].Number
+		next = &last
+	}
+	return items, next, nil
 }
 
 // Patch — правка заявки своей компании: в черновике — любые поля запроса,

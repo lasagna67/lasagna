@@ -73,10 +73,11 @@ type ContractRenderer interface {
 	Render(offerdomain.ContractData) ([]byte, error)
 }
 
-// Pipeline — повтор источников конвейера для заявки на рассмотрении. Запуск
-// после отправки — у модуля intake.
+// Pipeline — повторы конвейера для заявки на рассмотрении: источники или только
+// модель. Запуск после отправки — у модуля intake. Реализация — pipelineservice.
 type Pipeline interface {
 	RetryChecks(ctx context.Context, applicationID uuid.UUID, sources []underwritingdomain.CheckSource) error
+	RetryScoring(ctx context.Context, applicationID uuid.UUID) error
 }
 
 type Deps struct {
@@ -403,6 +404,29 @@ func (s *Service) RetryChecks(ctx context.Context, cmd underwritingdomain.RetryC
 	}
 	if err := s.pipeline.RetryChecks(ctx, cmd.ApplicationID, sources); err != nil {
 		return underwritingdomain.Review{}, fmt.Errorf("retry checks: %w", err)
+	}
+	return s.Get(ctx, cmd.ApplicationID)
+}
+
+// RetryScoring пересчитывает модель на текущих снимках и принятых финансах —
+// например, после сбоя модели (оценка failed). Результат придёт асинхронно:
+// конвейер сохранит новую оценку и увеличит revision.
+func (s *Service) RetryScoring(ctx context.Context, cmd underwritingdomain.RetryScoringCommand) (underwritingdomain.Review, error) {
+	d, err := s.staffDetails(ctx, cmd.ApplicationID)
+	if err != nil {
+		return underwritingdomain.Review{}, err
+	}
+	if err := underwritingdomain.CanReview(d.Application, cmd.Reviewer); err != nil {
+		return underwritingdomain.Review{}, err
+	}
+	if d.Status != applicationdomain.StatusManualReview {
+		return underwritingdomain.Review{}, fmt.Errorf("%w: retry scoring in %s", applicationerrors.ErrInvalidState, d.Status)
+	}
+	if d.Revision != cmd.ExpectedRevision {
+		return underwritingdomain.Review{}, &applicationerrors.RevisionConflictError{Current: d.Revision}
+	}
+	if err := s.pipeline.RetryScoring(ctx, cmd.ApplicationID); err != nil {
+		return underwritingdomain.Review{}, fmt.Errorf("retry scoring: %w", err)
 	}
 	return s.Get(ctx, cmd.ApplicationID)
 }

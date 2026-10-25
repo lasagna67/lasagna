@@ -4,10 +4,8 @@
 package underwritingdto
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -123,19 +121,6 @@ func (r TermsRequest) Domain() *underwritingdomain.TermsInput {
 		CollateralRequired:  r.CollateralRequired,
 		ValidUntil:          r.ValidUntil,
 	}
-}
-
-// EncodeCursor и DecodeCursor — непрозрачный курсор очереди: номер последней заявки.
-func EncodeCursor(after int64) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(strconv.FormatInt(after, 10)))
-}
-
-func DecodeCursor(s string) (int64, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return 0, err
-	}
-	return strconv.ParseInt(string(raw), 10, 64)
 }
 
 //============================================================================================
@@ -430,7 +415,7 @@ func NewPage(items []underwritingdomain.Details, next *int64, r underwritingdoma
 		page.Items = append(page.Items, NewUnderwriterApplication(d, r))
 	}
 	if next != nil {
-		cursor := EncodeCursor(*next)
+		cursor := applicationdto.EncodeCursor(*next)
 		page.NextCursor = &cursor
 	}
 	return page

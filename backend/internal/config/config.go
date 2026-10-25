@@ -92,6 +92,8 @@ type (
 		// Как часто relay забирает неотправленные события outbox и сколько за раз.
 		OutboxInterval time.Duration `default:"500ms"`
 		OutboxBatch    int           `default:"100"`
+		// Сколько хранить опубликованные события outbox; 0 — не удалять.
+		OutboxRetention time.Duration `default:"168h"`
 		// Пауза перед пересозданием consumer после сбоя обработки.
 		RestartDelay time.Duration `default:"5s"`
 	}

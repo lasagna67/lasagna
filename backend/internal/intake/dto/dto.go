@@ -318,6 +318,24 @@ type CollateralResponse struct {
 
 // NewApplication — объект заявки с предметом залога, полями проекта и планом.
 // Заключение банка по плану клиент видит в ручках модуля underwriting.
+// ApplicationPageResponse — страница заявок клиента, новые сверху.
+type ApplicationPageResponse struct {
+	Items      []applicationdto.ApplicationResponse `json:"items"`
+	NextCursor *string                              `json:"next_cursor"`
+}
+
+func NewPage(items []intakedomain.Details, next *int64) ApplicationPageResponse {
+	page := ApplicationPageResponse{Items: make([]applicationdto.ApplicationResponse, 0, len(items))}
+	for _, d := range items {
+		page.Items = append(page.Items, NewApplication(d))
+	}
+	if next != nil {
+		cursor := applicationdto.EncodeCursor(*next)
+		page.NextCursor = &cursor
+	}
+	return page
+}
+
 func NewApplication(d intakedomain.Details) applicationdto.ApplicationResponse {
 	resp := applicationdto.NewApplicationResponse(d.ApplicationDetails)
 	if p := cashplandto.NewProject(d.Project); p != nil {

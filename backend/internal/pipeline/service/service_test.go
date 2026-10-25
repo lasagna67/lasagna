@@ -364,6 +364,10 @@ func TestPipelineDropsStaleEvents(t *testing.T) {
 		len(e.repo.outbox) != 0 || e.sources.calls[underwritingdomain.CheckRegistry] != 0 {
 		t.Errorf("stale events changed application: %s, revision %d", got.Status, got.Revision)
 	}
+	// Отброшенные события заявки — в технической истории; мусор и чужие заявки — только в логе.
+	if want := []string{pipelinedomain.TopicSubmitted, pipelinedomain.TopicValidated}; !slices.Equal(e.repo.skips, want) {
+		t.Errorf("recorded skips = %v; want %v", e.repo.skips, want)
+	}
 }
 
 func TestPipelineInfrastructureErrorIsRetried(t *testing.T) {
@@ -460,5 +464,66 @@ func TestRetryChecksNeedsRun(t *testing.T) {
 	e.repo.apps[d.ID] = app
 	if err := e.svc.RetryChecks(ctx, d.ID, []underwritingdomain.CheckSource{underwritingdomain.CheckRegistry}); err == nil {
 		t.Error("retry without run accepted")
+	}
+}
+
+func TestScoringFailureGoesToReview(t *testing.T) {
+	e := newEnv()
+	e.scorer.err = errors.New("decode scoring cash plan: unexpected end of JSON input")
+	d := e.submitted()
+
+	// Сбой модели не крутит событие в повторах: заявка у сотрудника с видимой блокировкой.
+	e.repo.deliver(t, e.svc)
+	got := e.app(d.ID)
+	if got.Status != applicationdomain.StatusManualReview || len(e.repo.assessments) != 1 {
+		t.Fatalf("status %s, assessments %d", got.Status, len(e.repo.assessments))
+	}
+	a := e.repo.assessments[0]
+	if a.Status != "failed" || a.Score != nil || a.ModelVersion == nil || *a.ModelVersion != pipelinedomain.ModelCashflow ||
+		!slices.Equal(a.PositiveBlockers, []string{pipelinedomain.BlockerScoringFailed}) || a.CanPublish {
+		t.Errorf("assessment = %+v", a)
+	}
+
+	// retry-scoring: пересчёт на тех же снимках, без запросов к источникам.
+	e.scorer.err = nil
+	calls := e.sources.calls[underwritingdomain.CheckRegistry] + e.sources.calls[underwritingdomain.CheckCreditBureau]
+	if err := e.svc.RetryScoring(ctx, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	if topics := e.repo.deliver(t, e.svc); !slices.Equal(topics, []string{pipelinedomain.TopicScoringRequested}) {
+		t.Fatalf("events = %v", topics)
+	}
+	after := e.app(d.ID)
+	if after.Status != applicationdomain.StatusManualReview || after.Revision != got.Revision+1 ||
+		len(e.repo.assessments) != 2 || e.repo.assessments[1].Status != "completed" || len(e.repo.checks[d.ID]) != 2 {
+		t.Fatalf("after rescoring: %s rev %d, assessments %+v", after.Status, after.Revision, e.repo.assessments)
+	}
+	if now := e.sources.calls[underwritingdomain.CheckRegistry] + e.sources.calls[underwritingdomain.CheckCreditBureau]; now != calls {
+		t.Errorf("rescoring fetched sources: %d -> %d calls", calls, now)
+	}
+	// Модель снова получила снимки этого запуска.
+	if in := e.scorer.inputs[len(e.scorer.inputs)-1]; in.Overview.Registry.Data == nil || in.CreditFetchedAt == nil {
+		t.Errorf("rescoring input = %+v", in.Overview)
+	}
+}
+
+func TestScoringCancelledWritesNothing(t *testing.T) {
+	e := newEnv()
+	d := e.submitted()
+	e.repo.outbox = nil
+	app := e.repo.apps[d.ID]
+	app.Status = applicationdomain.StatusScoring
+	e.repo.apps[d.ID] = app
+	e.scorer.err = context.Canceled
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	msg := pipelinedomain.Event{ApplicationID: d.ID, RunID: *d.ProcessingRunID}.Message(pipelinedomain.TopicEnriched)
+	if err := e.svc.Handle(cancelled, kafka.Message{Topic: msg.Topic, Value: msg.Payload}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled scoring = %v; want context.Canceled", err)
+	}
+	// Остановка процесса — не сбой модели: оценки failed нет, событие перечитается.
+	if len(e.repo.assessments) != 0 || e.app(d.ID).Status != applicationdomain.StatusScoring {
+		t.Errorf("cancelled scoring wrote %d assessments, status %s", len(e.repo.assessments), e.app(d.ID).Status)
 	}
 }

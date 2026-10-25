@@ -17,6 +17,7 @@ const (
 	defaultInterval = 500 * time.Millisecond
 	defaultBatch    = 100
 	produceTimeout  = 10 * time.Second
+	cleanupEvery    = time.Hour
 )
 
 // Producer — синхронная отправка в Kafka. Реализация — kafka.Producer.
@@ -29,27 +30,32 @@ type Producer interface {
 // одно сообщение параллельно. Если Kafka не ответила, транзакция откатывается и
 // пачка уйдёт в следующий проход; если упал процесс между отправкой и коммитом —
 // сообщение уйдёт повторно, поэтому получатели идемпотентны.
+//
+// outbox — очередь отправки, а не журнал: опубликованные сообщения старше
+// retention relay удаляет раз в час; 0 — не удалять. Неопубликованные не удаляются.
 type Relay struct {
-	pool     *pgxpool.Pool
-	producer Producer
-	logger   *logger.Logger
-	interval time.Duration
-	batch    int
+	pool      *pgxpool.Pool
+	producer  Producer
+	logger    *logger.Logger
+	interval  time.Duration
+	batch     int
+	retention time.Duration
 }
 
-func NewRelay(pool *pgxpool.Pool, producer Producer, logger *logger.Logger, interval time.Duration, batch int) *Relay {
+func NewRelay(pool *pgxpool.Pool, producer Producer, logger *logger.Logger, interval time.Duration, batch int, retention time.Duration) *Relay {
 	if interval <= 0 {
 		interval = defaultInterval
 	}
 	if batch <= 0 {
 		batch = defaultBatch
 	}
-	return &Relay{pool: pool, producer: producer, logger: logger, interval: interval, batch: batch}
+	return &Relay{pool: pool, producer: producer, logger: logger, interval: interval, batch: batch, retention: retention}
 }
 
 // Run публикует сообщения до отмены ctx. Полная пачка — сразу следующая,
 // иначе пауза interval. Ошибки не останавливают relay: он повторит позже.
 func (r *Relay) Run(ctx context.Context) error {
+	var cleaned time.Time
 	for {
 		n, err := r.publishBatch(ctx)
 		switch {
@@ -60,12 +66,27 @@ func (r *Relay) Run(ctx context.Context) error {
 		case n == r.batch:
 			continue
 		}
+		// Очередь разобрана — время убрать опубликованное.
+		if r.retention > 0 && time.Since(cleaned) >= cleanupEvery {
+			if err := r.cleanup(ctx); err != nil && ctx.Err() == nil {
+				r.logger.Error("outbox cleanup failed", slog.Any("error", err))
+			}
+			cleaned = time.Now()
+		}
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(r.interval):
 		}
 	}
+}
+
+// cleanup удаляет сообщения, опубликованные раньше retention назад.
+func (r *Relay) cleanup(ctx context.Context) error {
+	if _, err := r.pool.Exec(ctx, `DELETE FROM outbox WHERE published_at < $1`, time.Now().Add(-r.retention)); err != nil {
+		return fmt.Errorf("delete published outbox: %w", err)
+	}
+	return nil
 }
 
 // publishBatch отправляет одну пачку; n — сколько сообщений опубликовано.

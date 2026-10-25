@@ -328,3 +328,20 @@ func TestResubmit(t *testing.T) {
 		t.Errorf("replay = revision %d, %v, history %d -> %d", again.Revision, err, transitions, len(drafts.history[a.ID]))
 	}
 }
+
+// List — фильтр компании и статуса, новые сверху, как у intakerepo.
+func (f *fakeDrafts) List(_ context.Context, filter intakedomain.ListFilter) ([]intakedomain.Details, error) {
+	var items []intakedomain.Details
+	for _, d := range f.apps {
+		if d.CompanyID != filter.CompanyID || (filter.Status != nil && d.Status != *filter.Status) ||
+			(filter.Before != nil && d.Number >= *filter.Before) {
+			continue
+		}
+		items = append(items, d)
+	}
+	slices.SortFunc(items, func(a, b intakedomain.Details) int { return int(b.Number - a.Number) })
+	if len(items) > filter.Limit {
+		items = items[:filter.Limit]
+	}
+	return items, nil
+}

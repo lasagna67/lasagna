@@ -81,6 +81,9 @@ func (f *fakeService) Decide(_ context.Context, cmd underwritingdomain.DecideCom
 func (f *fakeService) RetryChecks(context.Context, underwritingdomain.RetryChecksCommand) (underwritingdomain.Review, error) {
 	return f.result()
 }
+func (f *fakeService) RetryScoring(context.Context, underwritingdomain.RetryScoringCommand) (underwritingdomain.Review, error) {
+	return f.result()
+}
 func (f *fakeService) InfoRequests(context.Context, uuid.UUID, uuid.UUID) ([]underwritingdomain.InfoRequest, error) {
 	return nil, f.err
 }

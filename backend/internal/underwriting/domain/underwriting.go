@@ -88,7 +88,7 @@ func Actions(d Details, r Reviewer) []applicationdomain.Action {
 		if reviewCashPlan {
 			actions = append(actions, applicationdomain.ActionReviewCashPlan)
 		}
-		actions = append(actions, applicationdomain.ActionDecide, applicationdomain.ActionRetryChecks)
+		actions = append(actions, applicationdomain.ActionDecide, applicationdomain.ActionRetryChecks, applicationdomain.ActionRetryScoring)
 	case applicationdomain.StatusInfoRequested:
 		if reviewCollateral {
 			actions = append(actions, applicationdomain.ActionReviewCollateral)
@@ -475,6 +475,12 @@ type RetryChecksCommand struct {
 	Reviewer         Reviewer
 	ExpectedRevision int
 	Sources          []CheckSource
+}
+
+type RetryScoringCommand struct {
+	ApplicationID    uuid.UUID
+	Reviewer         Reviewer
+	ExpectedRevision int
 }
 
 // Команды клиента. UserID — из токена; участие в компании проверяется каждый раз.

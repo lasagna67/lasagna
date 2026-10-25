@@ -257,3 +257,17 @@ func TestPatchCashPlanBody(t *testing.T) {
 		})
 	}
 }
+
+func (f *fakeService) Get(_ context.Context, _ uuid.UUID, id uuid.UUID) (intakedomain.Details, error) {
+	return f.details(id)
+}
+
+func (f *fakeService) List(_ context.Context, cmd intakedomain.ListCommand) ([]intakedomain.Details, *int64, error) {
+	f.list = cmd
+	if f.err != nil {
+		return nil, nil, f.err
+	}
+	d, _ := f.details(appID)
+	next := d.Number
+	return []intakedomain.Details{d}, &next, nil
+}

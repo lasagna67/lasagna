@@ -488,6 +488,33 @@ func TestChecksSummary(t *testing.T) {
 	if s, _ = checks.Summary(ctx, id); s.CreditBureau.Status != underwritingdomain.SourceInvalid || s.Registry.Status != underwritingdomain.SourceNotFound {
 		t.Errorf("foreign bki inn / registry not found = %s / %s", s.CreditBureau.Status, s.Registry.Status)
 	}
+
+	// Новый запуск (повторная отправка): результаты прежнего запуска не текущие.
+	var run uuid.UUID
+	if err := f.pool.QueryRow(ctx, `SELECT processing_run_id FROM applications WHERE id = $1`, id).Scan(&run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, `
+		INSERT INTO external_checks (application_id, processing_run_id, source, status, response, completed_at)
+		VALUES ($1, $2, 'registry', 'completed', $3::jsonb, now())`,
+		id, run, `{"inn":"`+f.inn+`","report":{"business_status":"active"}}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, `
+		INSERT INTO scoring_results (application_id, processing_run_id, kind, status, model_version, score, risk_grade)
+		VALUES ($1, $2, 'cashflow', 'completed', 'cashflow-v1', 820, 'low')`, id, run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, `UPDATE applications SET processing_run_id = gen_random_uuid() WHERE id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	s, err = checks.Summary(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Registry.Status != underwritingdomain.SourceNotFound || s.Scoring.Score == nil || *s.Scoring.Score != 640 {
+		t.Errorf("previous run leaked into card: registry %s, scoring %v", s.Registry.Status, s.Scoring.Score)
+	}
 }
 
 func timeNow() time.Time { return time.Now() }

@@ -38,6 +38,7 @@ type fakeRepo struct {
 	decisions     []offerdomain.Decision
 	notifications []applicationdomain.Notification
 	outbox        []outbox.Message
+	skips         []string // топики отброшенных событий
 	updateErr     error
 }
 
@@ -122,6 +123,13 @@ func (r *fakeRepo) Checks(_ context.Context, applicationID, run uuid.UUID) (pipe
 	return checks, nil
 }
 
+func (r *fakeRepo) RecordSkip(_ context.Context, ev pipelinedomain.Event, topic, _ string) error {
+	if _, ok := r.apps[ev.ApplicationID]; ok {
+		r.skips = append(r.skips, topic)
+	}
+	return nil
+}
+
 func (r *fakeRepo) Enqueue(_ context.Context, msgs ...outbox.Message) error {
 	r.outbox = append(r.outbox, msgs...)
 	return nil
@@ -204,13 +212,14 @@ func (f fakeProducts) GetByCode(_ context.Context, code string) (creditproducts.
 	return p, nil
 }
 
-// fakeScorer возвращает decision и запоминает входы.
+// fakeScorer возвращает decision или err и запоминает входы.
 type fakeScorer struct {
 	decision scoring.ScoringDecision
+	err      error
 	inputs   []scoring.ScoringInput
 }
 
 func (f *fakeScorer) Evaluate(_ context.Context, _ uuid.UUID, in scoring.ScoringInput, _ time.Time) (scoring.ScoringDecision, error) {
 	f.inputs = append(f.inputs, in)
-	return f.decision, nil
+	return f.decision, f.err
 }

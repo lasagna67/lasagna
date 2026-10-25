@@ -18,15 +18,16 @@ import (
 
 // Топики конвейера. Событие — факт завершения этапа; читает его следующий этап.
 const (
-	TopicSubmitted       = "lasagna.applications.submitted"        // отправка → validation
-	TopicValidated       = "lasagna.applications.validated"        // validation → enrichment
-	TopicEnriched        = "lasagna.applications.enriched"         // enrichment → scoring
-	TopicChecksRequested = "lasagna.applications.checks-requested" // retry-checks сотрудника
+	TopicSubmitted        = "lasagna.applications.submitted"         // отправка → validation
+	TopicValidated        = "lasagna.applications.validated"         // validation → enrichment
+	TopicEnriched         = "lasagna.applications.enriched"          // enrichment → scoring
+	TopicChecksRequested  = "lasagna.applications.checks-requested"  // retry-checks сотрудника
+	TopicScoringRequested = "lasagna.applications.scoring-requested" // retry-scoring сотрудника
 )
 
 // Topics — все топики, которые читает конвейер.
 func Topics() []string {
-	return []string{TopicSubmitted, TopicValidated, TopicEnriched, TopicChecksRequested}
+	return []string{TopicSubmitted, TopicValidated, TopicEnriched, TopicChecksRequested, TopicScoringRequested}
 }
 
 // Event — сообщение конвейера. RunID — запуск, к которому оно относится:

@@ -221,11 +221,32 @@ func NewAssessment(d scoring.ScoringDecision, productCode string, dataRevision i
 		a.RiskGrade = &grade
 	}
 	if a.Status != "not_configured" && a.Status != "skipped" {
-		model := map[string]string{"cashflow": ModelCashflow, "project": ModelProject, "overdraft": ModelOverdraft}[a.Kind]
-		a.ModelVersion = &model
+		a.ModelVersion = modelVersion(a.Kind)
 	}
 	if a.Status != "completed" || a.Recommendation == scoring.DecisionAutoRejected {
 		a.CanPublish = false
+	}
+	return a
+}
+
+// BlockerScoringFailed — модель не досчитала (P07 SCORING_PROBLEM).
+const BlockerScoringFailed = "SCORING_FAILED"
+
+// Failed — оценка при сбое модели: балла нет, положительное решение
+// заблокировано, а заявка не застревает в повторах — сотрудник видит причину и
+// запускает retry-scoring (A37). Без модели у продукта — not_configured.
+func Failed(productCode string, dataRevision int) Assessment {
+	a := Assessment{
+		Kind:             kindOf(productCode),
+		Status:           "failed",
+		ModelVersion:     modelVersion(kindOf(productCode)),
+		Recommendation:   scoring.DecisionManualReview,
+		PositiveBlockers: []string{BlockerScoringFailed},
+		Factors:          json.RawMessage(`[]`),
+		DataRevision:     dataRevision,
+	}
+	if a.Kind == "" {
+		a.Status, a.ModelVersion = "not_configured", nil
 	}
 	return a
 }
@@ -241,6 +262,14 @@ func Skipped(productCode string, stops []string, dataRevision int) Assessment {
 		Factors:          json.RawMessage(`[]`),
 		DataRevision:     dataRevision,
 	}
+}
+
+func modelVersion(kind string) *string {
+	model, ok := map[string]string{"cashflow": ModelCashflow, "project": ModelProject, "overdraft": ModelOverdraft}[kind]
+	if !ok {
+		return nil
+	}
+	return &model
 }
 
 // kindOf — вид модели продукта; пусто — модели нет.

@@ -26,7 +26,7 @@ func NewWorkers(cfg config.Config, infra *Infra, services *Service, logger *logg
 	return &Workers{
 		kafka:    cfg.Kafka,
 		pipeline: cfg.Pipeline,
-		relay:    outbox.NewRelay(infra.Postgres().Pool(), infra.KafkaProducer(), logger.Named("outbox"), cfg.Pipeline.OutboxInterval, cfg.Pipeline.OutboxBatch),
+		relay:    outbox.NewRelay(infra.Postgres().Pool(), infra.KafkaProducer(), logger.Named("outbox"), cfg.Pipeline.OutboxInterval, cfg.Pipeline.OutboxBatch, cfg.Pipeline.OutboxRetention),
 		handle:   services.Pipeline.Handle,
 		logger:   logger,
 	}

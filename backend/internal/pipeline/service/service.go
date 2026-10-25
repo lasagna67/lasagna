@@ -6,6 +6,9 @@
 //	                                 или rejected по стоп-правилу P06
 //	lasagna.applications.enriched  → scoring: модель продукта; scoring → manual_review
 //
+// Для заявки на рассмотрении — повторы сотрудника: checks-requested (источники,
+// P06, пересчёт модели) и scoring-requested (только пересчёт модели).
+//
 // Этап проверяет, что заявка в его статусе и в том же запуске конвейера, делает
 // работу без транзакции (внешние HTTP-запросы — тоже), затем в одной транзакции
 // пишет результат, переход и событие следующему этапу. Событие чужого запуска
@@ -44,6 +47,8 @@ type Repo interface {
 	Update(ctx context.Context, cmd applicationdomain.UpdateCommand, fn func(*pipelinedomain.Locked) (pipelinedomain.Change, error)) error
 	Checks(ctx context.Context, applicationID, run uuid.UUID) (pipelinedomain.SourceChecks, error)
 	Enqueue(ctx context.Context, msgs ...outbox.Message) error
+	// RecordSkip — отброшенное событие в техническую историю (B03).
+	RecordSkip(ctx context.Context, ev pipelinedomain.Event, topic, reason string) error
 }
 
 // Sources — внешние источники по ИНН. Реализация — companyhttpjson.Client.
@@ -105,7 +110,8 @@ func New(d Deps) *Service {
 // Handle обрабатывает сообщение конвейера; его вызывает kafka.Consumer.
 // Ошибка — только сбой инфраструктуры (БД, отмена): сообщение перечитается.
 // Некорректное сообщение и событие, которое уже не относится к заявке,
-// отбрасываются с записью в лог, иначе они остановили бы чтение партиции.
+// отбрасываются, иначе они остановили бы чтение партиции: первое — с записью
+// в лог, второе — ещё и в техническую историю заявки.
 func (s *Service) Handle(ctx context.Context, msg kafka.Message) error {
 	ev, err := pipelinedomain.DecodeEvent(msg.Value)
 	if err != nil {
@@ -119,7 +125,7 @@ func (s *Service) Handle(ctx context.Context, msg kafka.Message) error {
 		err = s.Enrich(ctx, ev)
 	case pipelinedomain.TopicEnriched:
 		err = s.Score(ctx, ev)
-	case pipelinedomain.TopicChecksRequested:
+	case pipelinedomain.TopicChecksRequested, pipelinedomain.TopicScoringRequested:
 		err = s.Recheck(ctx, ev)
 	default:
 		s.logger.Warn("pipeline event dropped: unknown topic", slog.String("topic", msg.Topic))
@@ -132,6 +138,12 @@ func (s *Service) Handle(ctx context.Context, msg kafka.Message) error {
 			slog.String("run_id", ev.RunID.String()),
 			slog.String("reason", err.Error()),
 		)
+		// История — для разбора, а не условие обработки: её сбой событие не возвращает.
+		if !errors.Is(err, applicationerrors.ErrNotFound) {
+			if rerr := s.repo.RecordSkip(ctx, ev, msg.Topic, err.Error()); rerr != nil {
+				s.logger.Warn("pipeline skip not recorded", slog.String("application_id", ev.ApplicationID.String()), slog.Any("error", rerr))
+			}
+		}
 		return nil
 	}
 	if err != nil {
@@ -216,19 +228,20 @@ func (s *Service) Enrich(ctx context.Context, ev pipelinedomain.Event) error {
 		}
 		var change pipelinedomain.Change
 		if len(stops) > 0 {
-			change, err = pipelinedomain.Reject(l, pipelinedomain.Rejection(uuid.New(), a.ID, l.NextDecisionVersion, stops, s.now()))
+			if change, err = pipelinedomain.Reject(l, pipelinedomain.Rejection(uuid.New(), a.ID, l.NextDecisionVersion, stops, s.now())); err != nil {
+				return pipelinedomain.Change{}, err
+			}
 			skipped := pipelinedomain.Skipped(productCode(*a), stops, a.DataRevision)
 			change.Assessment = &skipped
 		} else {
-			var tr applicationdomain.Transition
-			tr, err = a.StartScoring()
+			tr, err := a.StartScoring()
+			if err != nil {
+				return pipelinedomain.Change{}, err
+			}
 			change = pipelinedomain.Change{
 				Transitions: []applicationdomain.Transition{tr},
 				Outbox:      []outbox.Message{ev.Message(pipelinedomain.TopicEnriched)},
 			}
-		}
-		if err != nil {
-			return pipelinedomain.Change{}, err
 		}
 		change.Checks = []pipelinedomain.CheckResult{checks.Registry, checks.Credit}
 		return change, nil
@@ -264,10 +277,11 @@ func (s *Service) Score(ctx context.Context, ev pipelinedomain.Event) error {
 	})
 }
 
-// Recheck — повтор источников по запросу сотрудника (retry-checks) для заявки
-// на рассмотрении. Новые снимки дополняют снимки запуска, затем стоп-правило
-// P06 действует так же, как в enrichment, а без стопа модель пересчитывается.
-// Заявка остаётся на рассмотрении, revision + 1.
+// Recheck — повтор по запросу сотрудника для заявки на рассмотрении. С
+// источниками (retry-checks) новые снимки дополняют снимки запуска; без них
+// (retry-scoring) модель пересчитывается на тех же снимках и принятых финансах.
+// Стоп-правило P06 действует так же, как в enrichment, а без стопа модель
+// пересчитывается. Заявка остаётся на рассмотрении, revision + 1.
 func (s *Service) Recheck(ctx context.Context, ev pipelinedomain.Event) error {
 	d, err := s.current(ctx, ev, applicationdomain.StatusManualReview)
 	if err != nil {
@@ -277,12 +291,15 @@ func (s *Service) Recheck(ctx context.Context, ev pipelinedomain.Event) error {
 	if err != nil {
 		return err
 	}
-	checks := s.fetch(ctx, d.Company.INN, prev, ev.Sources...)
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if err := s.saveOverview(ctx, d.CompanyID, checks); err != nil {
-		return err
+	checks := prev
+	if len(ev.Sources) > 0 {
+		checks = s.fetch(ctx, d.Company.INN, prev, ev.Sources...)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := s.saveOverview(ctx, d.CompanyID, checks); err != nil {
+			return err
+		}
 	}
 	stops := scoring.StopReasons(stopInput(d, checks), s.now())
 	var assessment *pipelinedomain.Assessment
@@ -320,6 +337,17 @@ func (s *Service) Recheck(ctx context.Context, ev pipelinedomain.Event) error {
 // повтора в outbox. Результат придёт асинхронно: конвейер сохранит снимки и
 // увеличит revision заявки. Статус и права проверил модуль underwriting.
 func (s *Service) RetryChecks(ctx context.Context, applicationID uuid.UUID, sources []underwritingdomain.CheckSource) error {
+	return s.enqueue(ctx, applicationID, pipelinedomain.TopicChecksRequested, sources)
+}
+
+// RetryScoring — retry-scoring сотрудника: пересчёт модели на текущих снимках
+// и принятых финансах, асинхронно, как RetryChecks.
+func (s *Service) RetryScoring(ctx context.Context, applicationID uuid.UUID) error {
+	return s.enqueue(ctx, applicationID, pipelinedomain.TopicScoringRequested, nil)
+}
+
+// enqueue — событие повтора для текущего запуска заявки.
+func (s *Service) enqueue(ctx context.Context, applicationID uuid.UUID, topic string, sources []underwritingdomain.CheckSource) error {
 	d, err := s.repo.Get(ctx, applicationID)
 	if err != nil {
 		return err
@@ -328,8 +356,8 @@ func (s *Service) RetryChecks(ctx context.Context, applicationID uuid.UUID, sour
 		return fmt.Errorf("%w: application was not submitted", applicationerrors.ErrInvalidState)
 	}
 	ev := pipelinedomain.Event{ApplicationID: applicationID, RunID: *d.ProcessingRunID, Sources: sources}
-	if err := s.repo.Enqueue(ctx, ev.Message(pipelinedomain.TopicChecksRequested)); err != nil {
-		return fmt.Errorf("enqueue checks: %w", err)
+	if err := s.repo.Enqueue(ctx, ev.Message(topic)); err != nil {
+		return fmt.Errorf("enqueue %s: %w", topic, err)
 	}
 	return nil
 }
@@ -423,6 +451,9 @@ func (s *Service) saveOverview(ctx context.Context, companyID uuid.UUID, checks 
 }
 
 // assess — оценка моделью продукта на снимках checks и принятых финансах.
+// Сбой самой модели — оценка failed, а не ошибка этапа: иначе детерминированная
+// ошибка вечно перечитывала бы партицию. Ошибки чтения БД и отмена — ошибка
+// этапа, событие перечитается.
 func (s *Service) assess(ctx context.Context, d applicationdomain.ApplicationDetails, checks pipelinedomain.SourceChecks) (pipelinedomain.Assessment, error) {
 	stored, err := s.overviews.GetOverview(ctx, d.CompanyID)
 	switch {
@@ -451,7 +482,11 @@ func (s *Service) assess(ctx context.Context, d applicationdomain.ApplicationDet
 	}
 	decision, err := s.scorer.Evaluate(ctx, d.ID, in, s.now())
 	if err != nil {
-		return pipelinedomain.Assessment{}, fmt.Errorf("evaluate application: %w", err)
+		if ctx.Err() != nil {
+			return pipelinedomain.Assessment{}, ctx.Err()
+		}
+		s.logger.Error("pipeline scoring failed", slog.String("application_id", d.ID.String()), slog.Any("error", err))
+		return pipelinedomain.Failed(code, d.DataRevision), nil
 	}
 	return pipelinedomain.NewAssessment(decision, code, d.DataRevision), nil
 }

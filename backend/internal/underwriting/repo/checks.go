@@ -23,6 +23,10 @@ import (
 //     ошибкой — источник недоступен.
 //   - scoring_results: последняя строка; нет строки — модель ещё не считала.
 //
+// Читаются только строки текущего запуска конвейера (processing_run_id заявки) и
+// строки до конвейера (NULL): после повторной отправки результаты прежнего
+// запуска не выдаются за текущие, даже если новый запуск ещё их не записал.
+//
 // Финансовых снимков версии заявки в схеме ещё нет: до финансового шага
 // данные считаются отсутствующими, и положительное решение блокируется.
 type ChecksRepo struct {
@@ -50,9 +54,11 @@ func (r *ChecksRepo) Summary(ctx context.Context, applicationID uuid.UUID) (unde
 	}
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT DISTINCT ON (source) source, status, response, error, completed_at
-		FROM external_checks WHERE application_id = $1
-		ORDER BY source, requested_at DESC`, applicationID)
+		SELECT DISTINCT ON (e.source) e.source, e.status, e.response, e.error, e.completed_at
+		FROM external_checks e JOIN applications a ON a.id = e.application_id
+		WHERE e.application_id = $1
+			AND (e.processing_run_id IS NULL OR e.processing_run_id = a.processing_run_id)
+		ORDER BY e.source, e.requested_at DESC`, applicationID)
 	if err != nil {
 		return underwritingdomain.CheckSummary{}, fmt.Errorf("select external checks: %w", err)
 	}
@@ -77,10 +83,12 @@ func (r *ChecksRepo) Summary(ctx context.Context, applicationID uuid.UUID) (unde
 	var s underwritingdomain.ScoringCheck
 	var calculatedAt time.Time
 	err = r.pool.QueryRow(ctx, `
-		SELECT status, kind, model_version, score, risk_grade::text, factors,
-			recommendation, can_publish, positive_blockers, report, created_at
-		FROM scoring_results
-		WHERE application_id = $1 ORDER BY created_at DESC LIMIT 1`, applicationID,
+		SELECT s.status, s.kind, s.model_version, s.score, s.risk_grade::text, s.factors,
+			s.recommendation, s.can_publish, s.positive_blockers, s.report, s.created_at
+		FROM scoring_results s JOIN applications a ON a.id = s.application_id
+		WHERE s.application_id = $1
+			AND (s.processing_run_id IS NULL OR s.processing_run_id = a.processing_run_id)
+		ORDER BY s.created_at DESC LIMIT 1`, applicationID,
 	).Scan(&s.Status, &s.Kind, &s.ModelVersion, &s.Score, &s.RiskGrade, &s.Factors,
 		&s.Recommendation, &s.CanPublish, &s.PositiveBlockers, &s.Report, &calculatedAt)
 	switch {

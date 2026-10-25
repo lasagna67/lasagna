@@ -242,6 +242,18 @@ func TestNewAssessment(t *testing.T) {
 	}
 }
 
+func TestFailed(t *testing.T) {
+	a := Failed("express", 2)
+	if a.Kind != "cashflow" || a.Status != "failed" || a.ModelVersion == nil || *a.ModelVersion != ModelCashflow ||
+		a.Score != nil || a.CanPublish || !slices.Equal(a.PositiveBlockers, []string{BlockerScoringFailed}) {
+		t.Errorf("failed = %+v", a)
+	}
+	// Без модели продукта — not_configured: failed требует версию модели.
+	if a := Failed("", 2); a.Status != "not_configured" || a.ModelVersion != nil || a.Kind != "" {
+		t.Errorf("failed without product = %+v", a)
+	}
+}
+
 func TestSkipped(t *testing.T) {
 	a := Skipped("overdraft", []string{scoring.StopCurrentOverdue30Plus}, 4)
 	if a.Kind != "overdraft" || a.Status != "skipped" || a.ModelVersion != nil || a.Score != nil || a.CanPublish ||

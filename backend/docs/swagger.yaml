@@ -415,6 +415,50 @@ definitions:
     - expected_revision
     - result
     type: object
+  companydomain.Certificate:
+    properties:
+      issuer:
+        type: string
+      organization_inn:
+        description: пусто, если сертификат не на организацию
+        type: string
+      organization_name:
+        type: string
+      owner_full_name:
+        type: string
+      owner_inn:
+        type: string
+      owner_position:
+        type: string
+      serial:
+        type: string
+      status:
+        type: string
+      type:
+        $ref: '#/definitions/companydomain.CertificateType'
+      valid_from:
+        type: string
+      valid_to:
+        type: string
+    type: object
+  companydomain.CertificateType:
+    enum:
+    - legal_entity_head
+    - individual_entrepreneur
+    - individual
+    type: string
+    x-enum-comments:
+      CertificateIndividual: физлицо без организации
+      CertificateIndividualEntrepreneur: ИП
+      CertificateLegalEntityHead: руководитель ЮЛ, есть организация
+    x-enum-descriptions:
+    - руководитель ЮЛ, есть организация
+    - ИП
+    - физлицо без организации
+    x-enum-varnames:
+    - CertificateLegalEntityHead
+    - CertificateIndividualEntrepreneur
+    - CertificateIndividual
   companydomain.CreditHistory:
     properties:
       has_credit_history:
@@ -945,6 +989,15 @@ definitions:
         example: client
         type: string
     type: object
+  intakedto.ApplicationPageResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/applicationdto.ApplicationResponse'
+        type: array
+      next_cursor:
+        type: string
+    type: object
   intakedto.CashPlanPatch:
     properties:
       confirmed:
@@ -1233,6 +1286,78 @@ definitions:
         - completed
         - insufficient_data
         type: string
+    type: object
+  signdto.Context:
+    properties:
+      application_id:
+        type: string
+      certificate_serial:
+        type: string
+      context_id:
+        type: string
+      data:
+        type: string
+      document_id:
+        type: string
+      document_sha256:
+        type: string
+      expected_revision:
+        type: integer
+      expires_at:
+        type: string
+      offer_id:
+        type: string
+    type: object
+  signdto.PrepareRequest:
+    properties:
+      document_id:
+        type: string
+      expected_revision:
+        type: integer
+      offer_id:
+        type: string
+    type: object
+  signdto.SignRequest:
+    properties:
+      context_id:
+        type: string
+      signature:
+        type: string
+      terms_accepted:
+        type: boolean
+    type: object
+  signdto.Signature:
+    properties:
+      application_id:
+        type: string
+      certificate:
+        $ref: '#/definitions/companydomain.Certificate'
+      context_id:
+        type: string
+      data:
+        type: string
+      document_id:
+        type: string
+      document_sha256:
+        type: string
+      id:
+        type: string
+      modeled_effective_date:
+        type: string
+      offer_id:
+        type: string
+      operation_id:
+        type: string
+      signature:
+        type: string
+      signed_at:
+        type: string
+      signed_by:
+        type: string
+      signed_document_id:
+        type: string
+      terms_accepted:
+        type: boolean
     type: object
   swagger.HTTPError:
     properties:
@@ -1836,6 +1961,58 @@ info:
   version: "0.1"
 paths:
   /applications:
+    get:
+      description: |-
+        Заявки компании, где пользователь — представитель, новые сверху; иначе 404.
+        После отправки статус меняется по этапам конвейера асинхронно — список и карточка
+        показывают текущий.
+      parameters:
+      - description: Компания
+        format: uuid
+        in: query
+        name: company_id
+        required: true
+        type: string
+      - description: Статус
+        in: query
+        name: status
+        type: string
+      - description: До 100, по умолчанию 20
+        in: query
+        name: limit
+        type: integer
+      - description: next_cursor предыдущей страницы
+        in: query
+        name: cursor
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/intakedto.ApplicationPageResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: не клиент
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: 'NOT_FOUND: нет компании или пользователь не её участник'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Заявки компании
+      tags:
+      - applications
     post:
       consumes:
       - application/json
@@ -1892,6 +2069,41 @@ paths:
       tags:
       - applications
   /applications/{id}:
+    get:
+      description: |-
+        Заявка своей компании в любом статусе, с залогом, полями проекта и планом.
+        После отправки по ней видно, на каком этапе конвейера заявка.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.ApplicationResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: не клиент
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: 'NOT_FOUND: нет заявки или она чужая'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Заявка
+      tags:
+      - applications
     patch:
       consumes:
       - application/json
@@ -2097,7 +2309,7 @@ paths:
       - application/json
       description: |-
         info_requested → submitted после ответов на все запросы банка; запрос проверяется
-        как при отправке. Если банк открыл cash_plan, план должен быть подтверждён на срок кредита.
+        как при отправке. Новый запуск конвейера: этапы идут асинхронно, как после submit. Если банк открыл cash_plan, план должен быть подтверждён на срок кредита.
         Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.
       parameters:
       - description: Заявка
@@ -2148,13 +2360,166 @@ paths:
           description: VALIDATION_FAILED
           schema:
             $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Отправить повторно
+      tags:
+      - applications
+  /applications/{id}/sign:
+    post:
+      consumes:
+      - application/json
+      description: Backend проверяет подпись через esign-mock; PIN и сертификат от
+        клиента не принимает. Атомарно сохраняет артефакт, accepted, signing и задачу
+        выдачи pending. Повтор с тем же ключом и телом не создаёт новую операцию.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Контекст, подпись и согласие с условиями
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/signdto.SignRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/signdto.Signature'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: FORBIDDEN
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, OFFER_CHANGED, SIGNING_CONTEXT_EXPIRED,
+            IDEMPOTENCY_CONFLICT, INVALID_STATE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "422":
+          description: INVALID_SIGNATURE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
         "503":
-          description: 'SERVICE_UNAVAILABLE: конвейер'
+          description: SOURCE_RECHECK_REQUIRED или SERVICE_UNAVAILABLE
           schema:
             $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Отправить повторно
+      summary: Проверить криптографическую подпись договора
+      tags:
+      - applications
+  /applications/{id}/signature:
+    get:
+      description: 'JSON: подписанные данные, подпись, проверенный сертификат и хеш
+        исходного PDF.'
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/signdto.Signature'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: FORBIDDEN
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Скачать артефакт подписи
+      tags:
+      - applications
+  /applications/{id}/signing-context:
+    post:
+      consumes:
+      - application/json
+      description: TTL до 5 минут, с учётом срока проверок. Контекст связан с пользователем,
+        revision, Offer, Contract и SHA-256 исходного PDF. При неподтверждённом P14
+        — 503.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Предложение, договор и версия заявки
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/signdto.PrepareRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/signdto.Context'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "403":
+          description: FORBIDDEN
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, OFFER_CHANGED, INVALID_STATE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "503":
+          description: SOURCE_RECHECK_REQUIRED или SERVICE_UNAVAILABLE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Подготовить контекст подписи договора
       tags:
       - applications
   /applications/{id}/submit:
@@ -2162,7 +2527,9 @@ paths:
       consumes:
       - application/json
       description: |-
-        draft → submitted → конвейер проверок. Неполный запрос или нарушение условий
+        draft → submitted с новым запуском конвейера. Ответ — в submitted: этапы
+        validation → enrichment → scoring → manual_review идут асинхронно, текущий статус —
+        GET /applications/{id}. Неполный запрос или нарушение условий
         продукта — 422 с полями, заявка остаётся draft. У «Старта» обязательны полные
         product_details (кредит + собственные средства = стоимость, собственных не меньше 30%)
         и подтверждённый cash_plan на срок кредита. Повтор с тем же Idempotency-Key
@@ -2214,10 +2581,6 @@ paths:
             $ref: '#/definitions/applicationdto.ErrorResponse'
         "422":
           description: VALIDATION_FAILED
-          schema:
-            $ref: '#/definitions/applicationdto.ErrorResponse'
-        "503":
-          description: 'SERVICE_UNAVAILABLE: конвейер'
           schema:
             $ref: '#/definitions/applicationdto.ErrorResponse'
       security:
@@ -3174,8 +3537,8 @@ paths:
       consumes:
       - application/json
       description: |-
-        Перезапрашивает источники; результат придёт асинхронно с новой revision.
-        Пока конвейер не подключён — 503.
+        Перезапрашивает источники в manual_review; результат придёт асинхронно с новой
+        revision: новые снимки, стоп-правило P06 (может дать rejected) и пересчёт модели.
       parameters:
       - description: Заявка
         format: uuid
@@ -3223,6 +3586,54 @@ paths:
       security:
       - BearerAuth: []
       summary: Повторить проверки
+      tags:
+      - underwriter
+  /underwriter/applications/{id}/retry-scoring:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Пересчитывает модель в manual_review на текущих снимках реестра и БКИ и принятых
+        финансах — например, после оценки failed. Результат придёт асинхронно с новой revision.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ожидаемая revision
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/underwritingdto.RevisionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/underwritingdto.ReviewApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: 'FORBIDDEN: заявка у другого сотрудника'
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Пересчитать скоринг
       tags:
       - underwriter
   /underwriter/applications/{id}/take:

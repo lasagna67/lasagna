@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -51,6 +52,58 @@ func (r *Repo) Get(ctx context.Context, id uuid.UUID) (intakedomain.Details, err
 		return intakedomain.Details{}, err
 	}
 	return d, nil
+}
+
+// List — заявки компании по фильтру, новые сверху, с предметом залога, полями
+// проекта и планом. Читается одним снимком, чтобы страница не разошлась сама с собой.
+func (r *Repo) List(ctx context.Context, f intakedomain.ListFilter) ([]intakedomain.Details, error) {
+	where := []string{`a.company_id = $1`}
+	args := []any{f.CompanyID}
+	arg := func(v any) string {
+		args = append(args, v)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	if f.Status != nil {
+		where = append(where, `a.status = `+arg(*f.Status))
+	}
+	if f.Before != nil {
+		where = append(where, `a.number < `+arg(*f.Before))
+	}
+	sql := applicationrepo.SelectDetails + ` WHERE ` + strings.Join(where, ` AND `) + ` ORDER BY a.number DESC LIMIT ` + arg(f.Limit)
+
+	var items []intakedomain.Details
+	err := pgx.BeginTxFunc(ctx, r.pool, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, sql, args...)
+		if err != nil {
+			return fmt.Errorf("select applications: %w", err)
+		}
+		apps, err := pgx.CollectRows(rows, applicationrepo.ScanDetails)
+		if err != nil {
+			return fmt.Errorf("scan applications: %w", err)
+		}
+		items = make([]intakedomain.Details, 0, len(apps))
+		for _, app := range apps {
+			if err := applicationrepo.LoadInfoRound(ctx, tx, &app.Application); err != nil {
+				return err
+			}
+			d := intakedomain.Details{ApplicationDetails: app}
+			if d.Collateral, err = loadCollateral(ctx, tx, app.ID); err != nil {
+				return err
+			}
+			if d.Project, err = cashplanrepo.Project(ctx, tx, app.ID); err != nil {
+				return err
+			}
+			if d.CashPlan, err = cashplanrepo.Plan(ctx, tx, app.ID); err != nil {
+				return err
+			}
+			items = append(items, d)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 // Product — условия продукта каталога по коду; нет такого — nil.

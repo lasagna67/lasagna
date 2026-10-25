@@ -26,6 +26,7 @@ type Service interface {
 	ReviewCashPlan(ctx context.Context, cmd underwritingdomain.ReviewCashPlanCommand) (underwritingdomain.Review, error)
 	Decide(ctx context.Context, cmd underwritingdomain.DecideCommand) (underwritingdomain.Review, error)
 	RetryChecks(ctx context.Context, cmd underwritingdomain.RetryChecksCommand) (underwritingdomain.Review, error)
+	RetryScoring(ctx context.Context, cmd underwritingdomain.RetryScoringCommand) (underwritingdomain.Review, error)
 
 	InfoRequests(ctx context.Context, userID, applicationID uuid.UUID) ([]underwritingdomain.InfoRequest, error)
 	AnswerInfo(ctx context.Context, cmd underwritingdomain.AnswerInfoCommand) (underwritingdomain.Details, error)
@@ -55,6 +56,7 @@ func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, clientOnly, staf
 	staff.POST("/:id/cash-plan-review", h.reviewCashPlan)
 	staff.POST("/:id/decision", h.decide)
 	staff.POST("/:id/retry-checks", h.retryChecks)
+	staff.POST("/:id/retry-scoring", h.retryScoring)
 
 	client := api.Group("/applications", authenticate, clientOnly)
 	client.GET("/:id/info-requests", h.infoRequests)
@@ -110,7 +112,7 @@ func (h *Handler) list(c *echo.Context) error {
 		f.Limit = n
 	}
 	if cur := c.QueryParam("cursor"); cur != "" {
-		after, err := underwritingdto.DecodeCursor(cur)
+		after, err := applicationdto.DecodeCursor(cur)
 		if err != nil {
 			return h.fail(c, &applicationerrors.RequestError{Message: "Некорректный cursor"})
 		}
@@ -315,8 +317,8 @@ func (h *Handler) decide(c *echo.Context) error {
 // retryChecks godoc
 //
 //	@Summary		Повторить проверки
-//	@Description	Перезапрашивает источники; результат придёт асинхронно с новой revision.
-//	@Description	Пока конвейер не подключён — 503.
+//	@Description	Перезапрашивает источники в manual_review; результат придёт асинхронно с новой
+//	@Description	revision: новые снимки, стоп-правило P06 (может дать rejected) и пересчёт модели.
 //	@Tags			underwriter
 //	@Accept			json
 //	@Produce		json
@@ -347,6 +349,42 @@ func (h *Handler) retryChecks(c *echo.Context) error {
 	}
 	review, err := h.service.RetryChecks(c.Request().Context(), underwritingdomain.RetryChecksCommand{
 		ApplicationID: id, Reviewer: reviewer, ExpectedRevision: revision, Sources: sources,
+	})
+	if err != nil {
+		return h.fail(c, err)
+	}
+	return c.JSON(http.StatusOK, underwritingdto.NewReview(review, reviewer))
+}
+
+// retryScoring godoc
+//
+//	@Summary		Пересчитать скоринг
+//	@Description	Пересчитывает модель в manual_review на текущих снимках реестра и БКИ и принятых
+//	@Description	финансах — например, после оценки failed. Результат придёт асинхронно с новой revision.
+//	@Tags			underwriter
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		string							true	"Заявка"	format(uuid)
+//	@Param			request	body		underwritingdto.RevisionRequest	true	"Ожидаемая revision"
+//	@Success		200		{object}	underwritingdto.ReviewApplicationResponse
+//	@Failure		400		{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
+//	@Failure		403		{object}	applicationdto.ErrorResponse	"FORBIDDEN: заявка у другого сотрудника"
+//	@Failure		404		{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		409		{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE"
+//	@Router			/underwriter/applications/{id}/retry-scoring [post]
+func (h *Handler) retryScoring(c *echo.Context) error {
+	reviewer, id, err := h.staffTarget(c)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	var req underwritingdto.RevisionRequest
+	revision, err := bindRevision(c, &req, &req.ExpectedRevision)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	review, err := h.service.RetryScoring(c.Request().Context(), underwritingdomain.RetryScoringCommand{
+		ApplicationID: id, Reviewer: reviewer, ExpectedRevision: revision,
 	})
 	if err != nil {
 		return h.fail(c, err)

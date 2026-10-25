@@ -142,6 +142,17 @@ func TestStageWrites(t *testing.T) {
 	if other, _ := repo.Checks(ctx, id, uuid.New()); other.Registry.Status != underwritingdomain.SourceNotRequested {
 		t.Errorf("checks of another run = %s", other.Registry.Status)
 	}
+	// Отброшенное событие — в технической истории; событие удалённой заявки не пишется.
+	if err := repo.RecordSkip(ctx, pipelinedomain.Event{ApplicationID: id, RunID: other}, pipelinedomain.TopicSubmitted, "stale run"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.RecordSkip(ctx, pipelinedomain.Event{ApplicationID: uuid.New(), RunID: other}, pipelinedomain.TopicSubmitted, "gone"); err != nil {
+		t.Fatalf("skip of missing application = %v", err)
+	}
+	var skips int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pipeline_skipped_events WHERE application_id = $1 AND run_id = $2`, id, other).Scan(&skips); err != nil || skips != 1 {
+		t.Errorf("skipped events = %d, %v", skips, err)
+	}
 	var status string
 	var score *int
 	var model *string
@@ -208,17 +219,29 @@ func TestRelay(t *testing.T) {
 	}
 	log := &logger.Logger{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
 
-	// Kafka недоступна: событие остаётся в outbox.
+	// Опубликованное давно событие этой заявки — его уберёт очистка.
+	if _, err := pool.Exec(ctx, `INSERT INTO outbox (topic, key, payload, published_at) VALUES ('old', $1, '{}', now() - interval '8 days')`, id.String()); err != nil {
+		t.Fatal(err)
+	}
+	stored := func() int {
+		var n int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM outbox WHERE key = $1`, id.String()).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	// Kafka недоступна: событие остаётся в outbox, очистка его не трогает.
 	broken := &fakeProducer{err: errors.New("broker down")}
-	runFor(ctx, outbox.NewRelay(pool, broken, log, 10*time.Millisecond, 100), 100*time.Millisecond)
-	if unpublished() != 1 {
-		t.Fatalf("event lost while broker is down")
+	runFor(ctx, outbox.NewRelay(pool, broken, log, 10*time.Millisecond, 100, 7*24*time.Hour), 100*time.Millisecond)
+	if unpublished() != 1 || stored() != 1 {
+		t.Fatalf("broker down: unpublished %d, stored %d; want the new event kept and the old one cleaned", unpublished(), stored())
 	}
 
 	producer := &fakeProducer{}
-	runFor(ctx, outbox.NewRelay(pool, producer, log, 10*time.Millisecond, 100), 200*time.Millisecond)
-	if unpublished() != 0 {
-		t.Fatal("event not published")
+	runFor(ctx, outbox.NewRelay(pool, producer, log, 10*time.Millisecond, 100, 0), 200*time.Millisecond)
+	if unpublished() != 0 || stored() != 1 {
+		t.Fatalf("unpublished %d, stored %d; want published and kept (retention 0)", unpublished(), stored())
 	}
 	var found bool
 	for _, m := range producer.sent {

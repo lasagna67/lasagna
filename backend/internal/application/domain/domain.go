@@ -191,6 +191,7 @@ const (
 	ActionReviewCashPlan   Action = "review_cash_plan"
 	ActionDecide           Action = "decide"
 	ActionRetryChecks      Action = "retry_checks"
+	ActionRetryScoring     Action = "retry_scoring"
 	ActionRetryIssue       Action = "retry_issue"
 )
 

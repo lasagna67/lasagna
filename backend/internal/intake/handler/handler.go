@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
@@ -22,6 +23,8 @@ const headerIdempotencyKey = "Idempotency-Key"
 
 type Service interface {
 	Create(ctx context.Context, cmd applicationdomain.CreateCommand) (applicationdomain.ApplicationDetails, error)
+	Get(ctx context.Context, userID, id uuid.UUID) (intakedomain.Details, error)
+	List(ctx context.Context, cmd intakedomain.ListCommand) ([]intakedomain.Details, *int64, error)
 	Patch(ctx context.Context, cmd intakedomain.PatchCommand) (intakedomain.Details, error)
 	Submit(ctx context.Context, cmd intakedomain.SubmitCommand) (intakedomain.Details, error)
 	Resubmit(ctx context.Context, cmd intakedomain.SubmitCommand) (intakedomain.Details, error)
@@ -42,6 +45,8 @@ func New(service Service, logger *logger.Logger) *Handler {
 func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, clientOnly echo.MiddlewareFunc) {
 	g := api.Group("/applications", authenticate, clientOnly)
 	g.POST("", h.create)
+	g.GET("", h.list)
+	g.GET("/:id", h.get)
 	g.PATCH("/:id", h.patch)
 	g.POST("/:id/submit", h.submit)
 	g.POST("/:id/resubmit", h.resubmit)
@@ -86,6 +91,87 @@ func (h *Handler) create(c *echo.Context) error {
 		return h.fail(c, err)
 	}
 	return c.JSON(http.StatusCreated, applicationdto.NewApplicationResponse(details))
+}
+
+// list godoc
+//
+//	@Summary		Заявки компании
+//	@Description	Заявки компании, где пользователь — представитель, новые сверху; иначе 404.
+//	@Description	После отправки статус меняется по этапам конвейера асинхронно — список и карточка
+//	@Description	показывают текущий.
+//	@Tags			applications
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			company_id	query		string	true	"Компания"	format(uuid)
+//	@Param			status		query		string	false	"Статус"
+//	@Param			limit		query		int		false	"До 100, по умолчанию 20"
+//	@Param			cursor		query		string	false	"next_cursor предыдущей страницы"
+//	@Success		200			{object}	intakedto.ApplicationPageResponse
+//	@Failure		400			{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
+//	@Failure		401			{object}	applicationdto.ErrorResponse
+//	@Failure		403			{object}	swagger.HTTPError	"не клиент"
+//	@Failure		404			{object}	applicationdto.ErrorResponse	"NOT_FOUND: нет компании или пользователь не её участник"
+//	@Router			/applications [get]
+func (h *Handler) list(c *echo.Context) error {
+	claims, ok := authdomain.GetClaims(c.Request().Context())
+	if !ok {
+		return h.fail(c, errUnauthenticated)
+	}
+	cmd := intakedomain.ListCommand{UserID: claims.UserID}
+	companyID, err := uuid.Parse(c.QueryParam("company_id"))
+	if err != nil {
+		return h.fail(c, &applicationerrors.RequestError{Message: "Передайте company_id"})
+	}
+	cmd.CompanyID = companyID
+	if st := c.QueryParam("status"); st != "" {
+		status := applicationdomain.Status(st)
+		cmd.Status = &status
+	}
+	if l := c.QueryParam("limit"); l != "" {
+		n, err := strconv.Atoi(l)
+		if err != nil || n < 1 {
+			return h.fail(c, &applicationerrors.RequestError{Message: "limit — от 1 до 100"})
+		}
+		cmd.Limit = n
+	}
+	if cur := c.QueryParam("cursor"); cur != "" {
+		before, err := applicationdto.DecodeCursor(cur)
+		if err != nil {
+			return h.fail(c, &applicationerrors.RequestError{Message: "Некорректный cursor"})
+		}
+		cmd.Before = &before
+	}
+	items, next, err := h.service.List(c.Request().Context(), cmd)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	return c.JSON(http.StatusOK, intakedto.NewPage(items, next))
+}
+
+// get godoc
+//
+//	@Summary		Заявка
+//	@Description	Заявка своей компании в любом статусе, с залогом, полями проекта и планом.
+//	@Description	После отправки по ней видно, на каком этапе конвейера заявка.
+//	@Tags			applications
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string	true	"Заявка"	format(uuid)
+//	@Success		200	{object}	applicationdto.ApplicationResponse
+//	@Failure		401	{object}	applicationdto.ErrorResponse
+//	@Failure		403	{object}	swagger.HTTPError	"не клиент"
+//	@Failure		404	{object}	applicationdto.ErrorResponse	"NOT_FOUND: нет заявки или она чужая"
+//	@Router			/applications/{id} [get]
+func (h *Handler) get(c *echo.Context) error {
+	userID, id, err := target(c)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	d, err := h.service.Get(c.Request().Context(), userID, id)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	return c.JSON(http.StatusOK, intakedto.NewApplication(d))
 }
 
 // patch godoc
@@ -139,7 +225,9 @@ func (h *Handler) patch(c *echo.Context) error {
 // submit godoc
 //
 //	@Summary		Отправить заявку
-//	@Description	draft → submitted → конвейер проверок. Неполный запрос или нарушение условий
+//	@Description	draft → submitted с новым запуском конвейера. Ответ — в submitted: этапы
+//	@Description	validation → enrichment → scoring → manual_review идут асинхронно, текущий статус —
+//	@Description	GET /applications/{id}. Неполный запрос или нарушение условий
 //	@Description	продукта — 422 с полями, заявка остаётся draft. У «Старта» обязательны полные
 //	@Description	product_details (кредит + собственные средства = стоимость, собственных не меньше 30%)
 //	@Description	и подтверждённый cash_plan на срок кредита. Повтор с тем же Idempotency-Key
@@ -158,7 +246,6 @@ func (h *Handler) patch(c *echo.Context) error {
 //	@Failure		404				{object}	applicationdto.ErrorResponse	"NOT_FOUND"
 //	@Failure		409				{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT"
 //	@Failure		422				{object}	applicationdto.ErrorResponse	"VALIDATION_FAILED"
-//	@Failure		503				{object}	applicationdto.ErrorResponse	"SERVICE_UNAVAILABLE: конвейер"
 //	@Router			/applications/{id}/submit [post]
 func (h *Handler) submit(c *echo.Context) error {
 	return h.send(c, h.service.Submit)
@@ -168,7 +255,7 @@ func (h *Handler) submit(c *echo.Context) error {
 //
 //	@Summary		Отправить повторно
 //	@Description	info_requested → submitted после ответов на все запросы банка; запрос проверяется
-//	@Description	как при отправке. Если банк открыл cash_plan, план должен быть подтверждён на срок кредита.
+//	@Description	как при отправке. Новый запуск конвейера: этапы идут асинхронно, как после submit. Если банк открыл cash_plan, план должен быть подтверждён на срок кредита.
 //	@Description	Повтор с тем же Idempotency-Key и телом не создаёт второй отправки.
 //	@Tags			applications
 //	@Accept			json
@@ -184,7 +271,6 @@ func (h *Handler) submit(c *echo.Context) error {
 //	@Failure		404				{object}	applicationdto.ErrorResponse	"NOT_FOUND"
 //	@Failure		409				{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT"
 //	@Failure		422				{object}	applicationdto.ErrorResponse	"VALIDATION_FAILED"
-//	@Failure		503				{object}	applicationdto.ErrorResponse	"SERVICE_UNAVAILABLE: конвейер"
 //	@Router			/applications/{id}/resubmit [post]
 func (h *Handler) resubmit(c *echo.Context) error {
 	return h.send(c, h.service.Resubmit)
