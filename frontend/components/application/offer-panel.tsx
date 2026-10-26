@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, isRevisionConflict } from "@/lib/api";
 import { dateRu } from "@/lib/demo-data";
 import type { Application, Contract, Offer, Signature } from "@/lib/types-application";
 import { downloadSignature, openDocument } from "@/lib/pdf";
@@ -33,6 +33,7 @@ const paymentLabel = (offer: Offer) =>
 
 export function OfferPanel({ app, offer, contract, token, canSign: canSignProp, onSigned, onConflict, onOfferChanged }: Props) {
   const [signing, setSigning] = useState(false);
+  const [declining, setDeclining] = useState(false);
   const [signature, setSignature] = useState<Signature | null>(null);
   const [error, setError] = useState<unknown>(null);
 
@@ -53,6 +54,23 @@ export function OfferPanel({ app, offer, contract, token, canSign: canSignProp, 
 
   const signed = Boolean(signature);
   const canSign = !signed && canSignProp;
+  const canDecline =
+    !signed && (app.status === "approved" || app.status === "counter_offer");
+
+  async function decline() {
+    if (!confirm("Отказаться от предложения? Заявка будет закрыта.")) return;
+    setDeclining(true);
+    setError(null);
+    try {
+      await api.declineApp(app.id, app.revision, token);
+      await onOfferChanged();
+    } catch (e) {
+      setError(e);
+      if (isRevisionConflict(e)) onConflict();
+    } finally {
+      setDeclining(false);
+    }
+  }
 
   const rows: { label: string; value: string }[] = [
     { label: "Продукт", value: offer.product_name },
@@ -156,6 +174,16 @@ export function OfferPanel({ app, offer, contract, token, canSign: canSignProp, 
         {canSign && (
           <button type="button" className={primary} onClick={() => setSigning(true)}>
             Подписать договор
+          </button>
+        )}
+        {canDecline && (
+          <button
+            type="button"
+            className={secondary}
+            disabled={declining}
+            onClick={() => void decline()}
+          >
+            {declining ? "Отказываемся…" : "Отказаться от предложения"}
           </button>
         )}
       </div>

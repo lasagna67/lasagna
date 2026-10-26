@@ -96,6 +96,13 @@ export const api = {
       token,
       idem,
     }),
+  declineApp: (id: string, revision: number, token: Token, idem = newIdemKey()) =>
+    request<Application>(`/applications/${id}/decline`, {
+      method: "POST",
+      body: { expected_revision: revision },
+      token,
+      idem,
+    }),
   infoRequests: (id: string, token: Token) =>
     request<InfoRequest[]>(`/applications/${id}/info-requests`, { token }),
   answerInfo: (id: string, rid: string, body: Revision & { answer: string }, token: Token) =>

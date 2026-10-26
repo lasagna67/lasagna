@@ -44,22 +44,31 @@ test(
 );
 
 test(
-  "demo.ooo.thin: контрпредложение сотрудника видно клиенту с изменёнными условиями",
+  "demo.ooo.good: контрпредложение по экспресс-кредиту и отказ клиента",
   { timeout: 120_000 },
   async (t) => {
-    const client = await clientLogin("ooo.thin");
+    const client = await clientLogin("ooo.good");
     const staff = await staffLogin();
-    const { id } = await startApplication(client);
-    t.diagnostic(`заявка ${id} отправлена, ждём manual_review`);
+    const { id } = await startApplication(client, {
+      request: {
+        purpose: "cash_gap",
+        amount_kopecks: 10_000_000,
+        need_period: { unit: "months", value: 24 },
+        product_code: "express",
+        term_months: 24,
+        collateral_mode: "none",
+      },
+    });
+    t.diagnostic(`заявка ${id} (экспресс 100 000 ₽), ждём manual_review`);
 
     let card = await until(
       async () => {
         const c = await staffCard(id, staff);
         return c.available_actions.includes("take") ? c : null;
       },
-      { timeout: 90_000, label: "take available for thin" },
+      { timeout: 90_000, label: "take available" },
     );
-    assert.deepEqual(card.decision_blockers, [], "у тонкого профиля нет блокеров решения");
+    assert.deepEqual(card.decision_blockers, [], "модель одобряет экспресс без блокеров");
 
     const me = await reqOk("/auth/me", { token: staff });
     card = await reqOk(`/underwriter/applications/${id}/take`, {
@@ -76,10 +85,10 @@ test(
         expected_revision: card.revision,
         outcome: "counter_offer",
         terms: {
-          product_code: "working_capital",
-          amount_kopecks: 250_000_000,
-          term_months: 24,
-          annual_rate_bps: 2100,
+          product_code: "express",
+          amount_kopecks: 10_000_000,
+          term_months: 12,
+          annual_rate_bps: 2290,
         },
       },
     });
@@ -92,11 +101,23 @@ test(
     ]);
     assert.equal(app.status, "counter_offer");
     assert.equal(offer.outcome, "counter_offer");
-    assert.equal(offer.amount_kopecks, 250_000_000, "клиент видит уменьшенную сумму");
-    assert.equal(offer.annual_rate_bps, 2100);
-    assert.deepEqual(offer.changed_fields, ["amount_kopecks"]);
+    assert.equal(offer.term_months, 12, "клиент видит укороченный срок");
+    assert.equal(offer.annual_rate_bps, 2290);
+    assert.deepEqual(offer.changed_fields, ["term_months"]);
     assert.ok(contract.id, "контрпредложению создан договор");
     t.diagnostic("клиент видит контрпредложение и договор");
+
+    // и может отказаться от него кнопкой «Отказаться от предложения»
+    const declined = await reqOk(`/applications/${id}/decline`, {
+      method: "POST",
+      token: client,
+      idempotencyKey: idem(),
+      body: { expected_revision: app.revision },
+    });
+    assert.equal(declined.status, "cancelled", "после отказа заявка закрыта");
+    const closed = await reqOk(`/applications/${id}`, { token: client });
+    assert.equal(closed.status, "cancelled");
+    t.diagnostic("клиент отказался от контрпредложения — cancelled");
   },
 );
 

@@ -13,6 +13,7 @@ import {
   staffCard,
   staffLogin,
   until,
+  waitForIssued,
 } from "./helpers.mjs";
 
 test(
@@ -26,7 +27,16 @@ test(
     const staffMe = await reqOk("/auth/me", { token: staff });
 
     // 1. Клиент оформляет и отправляет заявку.
-    const { id } = await startApplication(client);
+    const { id } = await startApplication(client, {
+      request: {
+        purpose: "cash_gap",
+        amount_kopecks: 10_000_000,
+        need_period: { unit: "months", value: 24 },
+        product_code: "express",
+        term_months: 24,
+        collateral_mode: "none",
+      },
+    });
     t.diagnostic(`заявка ${id} отправлена`);
 
     // 2. Оба наблюдают за пайплайном одновременно: два параллельных поллинга
@@ -137,10 +147,10 @@ test(
         expected_revision: decidedCard.revision,
         outcome: "approved",
         terms: {
-          product_code: "working_capital",
-          amount_kopecks: 300_000_000,
+          product_code: "express",
+          amount_kopecks: 10_000_000,
           term_months: 24,
-          annual_rate_bps: 1990,
+          annual_rate_bps: 2290,
         },
       },
     });
@@ -157,8 +167,8 @@ test(
     ]);
     assert.equal(appWithOffer.status, "approved");
     assert.equal(offer.outcome, "approved");
-    assert.equal(offer.amount_kopecks, 300_000_000);
-    assert.equal(offer.annual_rate_bps, 1990);
+    assert.equal(offer.amount_kopecks, 10_000_000);
+    assert.equal(offer.annual_rate_bps, 2290);
     assert.ok(contract.id, "договор сформирован");
     assert.equal(staffFinalCard.decisions.at(-1)?.outcome, "approved");
     assert.ok(
@@ -191,22 +201,24 @@ test(
     });
     assert.ok(signature.signed_document_id, "заявка подписана");
 
-    // 8. Итоги с двух сторон и документы.
-    const [finalApp, finalSignature, finalStaffCard, contractPdf, signedPdf] = await Promise.all([
-      reqOk(`/applications/${id}`, { token: client }),
+    // 8. Выдача асинхронна: issue-worker переводит signing → issued.
+    const issued = await waitForIssued(client, id);
+    t.diagnostic("issue-worker завершил выдачу — issued");
+
+    const [finalSignature, finalStaffCard, contractPdf, signedPdf] = await Promise.all([
       reqOk(`/applications/${id}/signature`, { token: client }),
       staffCard(id, staff),
       reqBytes(`/documents/${contract.id}/content`, { token: client }),
       reqBytes(`/documents/${signature.signed_document_id}/content`, { token: client }),
     ]);
-    assert.equal(finalApp.status, "signing", "после подписи заявка в signing, выдача не заявлена");
-    assert.equal(finalStaffCard.status, "signing", "сотрудник видит тот же статус");
+    assert.equal(issued.status, "issued", "клиент видит выданную заявку");
+    assert.equal(finalStaffCard.status, "issued", "сотрудник видит тот же статус");
     assert.equal(finalSignature.signed_document_id, signature.signed_document_id);
     assert.equal(finalSignature.signed_at, signature.signed_at);
     assert.equal(contractPdf.status, 200);
     assert.ok(contractPdf.bytes > 1000, "договор-PDF скачался");
     assert.equal(signedPdf.status, 200);
     assert.ok(signedPdf.bytes > contractPdf.bytes, "подписанный PDF больше исходного");
-    t.diagnostic("обе стороны видят signing, PDF скачиваются");
+    t.diagnostic("обе стороны видят issued, PDF скачиваются");
   },
 );
