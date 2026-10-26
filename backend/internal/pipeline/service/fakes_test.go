@@ -41,6 +41,7 @@ type fakeRepo struct {
 	skips         []string // топики отброшенных событий
 	financials    financialsdomain.State
 	updateErr     error
+	gets          int
 }
 
 func newFakeRepo() *fakeRepo {
@@ -53,6 +54,7 @@ func newFakeRepo() *fakeRepo {
 }
 
 func (r *fakeRepo) Get(_ context.Context, id uuid.UUID) (applicationdomain.ApplicationDetails, error) {
+	r.gets++
 	d, ok := r.apps[id]
 	if !ok {
 		return applicationdomain.ApplicationDetails{}, applicationerrors.ErrNotFound

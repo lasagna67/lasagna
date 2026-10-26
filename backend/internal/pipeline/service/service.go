@@ -114,18 +114,43 @@ func New(d Deps) *Service {
 // отбрасываются, иначе они остановили бы чтение партиции: первое — с записью
 // в лог, второе — ещё и в техническую историю заявки.
 func (s *Service) Handle(ctx context.Context, msg kafka.Message) error {
-	ev, err := pipelinedomain.DecodeEvent(msg.Value)
+	stage, measured := pipelineStage(msg.Topic)
+	started := time.Now()
+	result := "error"
+	var decoded bool
+	var ev pipelinedomain.Event
+	var completion pipelineCompletion
+	defer func() {
+		if !measured {
+			return
+		}
+		duration := time.Since(started)
+		observePipelineStage(stage, result, duration)
+		if decoded {
+			s.logger.Info("pipeline stage completed",
+				slog.String("application_id", ev.ApplicationID.String()),
+				slog.String("run_id", ev.RunID.String()),
+				slog.String("stage", stage),
+				slog.Int64("duration_ms", duration.Milliseconds()),
+				slog.String("result", result),
+			)
+		}
+	}()
+
+	var err error
+	ev, err = pipelinedomain.DecodeEvent(msg.Value)
 	if err != nil {
 		s.logger.Warn("pipeline event dropped", slog.String("topic", msg.Topic), slog.Int64("offset", msg.Offset), slog.Any("error", err))
 		return nil
 	}
+	decoded = true
 	switch msg.Topic {
 	case pipelinedomain.TopicSubmitted:
-		err = s.Validate(ctx, ev)
+		completion, err = s.validate(ctx, ev)
 	case pipelinedomain.TopicValidated:
-		err = s.Enrich(ctx, ev)
+		completion, err = s.enrich(ctx, ev)
 	case pipelinedomain.TopicEnriched:
-		err = s.Score(ctx, ev)
+		completion, err = s.score(ctx, ev)
 	case pipelinedomain.TopicChecksRequested, pipelinedomain.TopicScoringRequested:
 		err = s.Recheck(ctx, ev)
 	default:
@@ -133,6 +158,7 @@ func (s *Service) Handle(ctx context.Context, msg kafka.Message) error {
 		return nil
 	}
 	if skipped(err) {
+		result = "skipped"
 		s.logger.Info("pipeline event skipped",
 			slog.String("topic", msg.Topic),
 			slog.String("application_id", ev.ApplicationID.String()),
@@ -150,7 +176,41 @@ func (s *Service) Handle(ctx context.Context, msg kafka.Message) error {
 	if err != nil {
 		return fmt.Errorf("%s: application %s: %w", msg.Topic, ev.ApplicationID, err)
 	}
+	result = "success"
+	observePipelineCompletion(completion, s.now())
 	return nil
+}
+
+func pipelineStage(topic string) (string, bool) {
+	switch topic {
+	case pipelinedomain.TopicSubmitted:
+		return "validation", true
+	case pipelinedomain.TopicValidated:
+		return "enrichment", true
+	case pipelinedomain.TopicEnriched:
+		return "scoring", true
+	default:
+		return "", false
+	}
+}
+
+type pipelineCompletion struct {
+	result      applicationdomain.Status
+	submittedAt *time.Time
+}
+
+func observePipelineCompletion(completion pipelineCompletion, completedAt time.Time) {
+	if completion.result == "" {
+		return
+	}
+	result := string(completion.result)
+	pipelineMetrics.completed.WithLabelValues(result).Inc()
+	if completion.submittedAt != nil {
+		duration := completedAt.Sub(*completion.submittedAt)
+		if duration >= 0 {
+			pipelineMetrics.endToEnd.WithLabelValues(result).Observe(duration.Seconds())
+		}
+	}
 }
 
 // skipped — событие не относится к текущему состоянию заявки: заявку отозвали,
@@ -170,7 +230,13 @@ func skipped(err error) bool {
 // транзакция. Прошла — enrichment и событие validated, нет — рассмотрение
 // сотрудником с пояснением, что уточнить.
 func (s *Service) Validate(ctx context.Context, ev pipelinedomain.Event) error {
-	return s.repo.Update(ctx, s.update(ev), func(l *pipelinedomain.Locked) (pipelinedomain.Change, error) {
+	_, err := s.validate(ctx, ev)
+	return err
+}
+
+func (s *Service) validate(ctx context.Context, ev pipelinedomain.Event) (pipelineCompletion, error) {
+	var completion pipelineCompletion
+	err := s.repo.Update(ctx, s.update(ev), func(l *pipelinedomain.Locked) (pipelinedomain.Change, error) {
 		a := l.Application
 		if err := pipelinedomain.Expect(*a, ev.RunID, applicationdomain.StatusSubmitted); err != nil {
 			return pipelinedomain.Change{}, err
@@ -191,6 +257,7 @@ func (s *Service) Validate(ctx context.Context, ev pipelinedomain.Event) error {
 			}
 			change.Transitions = append(change.Transitions, tr)
 			change.Comment = pipelinedomain.ValidationComment(fields)
+			completion = pipelineCompletion{result: a.Status, submittedAt: a.SubmittedAt}
 			return change, nil
 		}
 		tr, err := a.StartEnrichment()
@@ -201,6 +268,7 @@ func (s *Service) Validate(ctx context.Context, ev pipelinedomain.Event) error {
 		change.Outbox = []outbox.Message{ev.Message(pipelinedomain.TopicValidated)}
 		return change, nil
 	})
+	return completion, err
 }
 
 // Enrich — этап enrichment: реестр и БКИ параллельно, каждый до трёх попыток
@@ -209,20 +277,26 @@ func (s *Service) Validate(ctx context.Context, ev pipelinedomain.Event) error {
 // не отказ: снимок unavailable дойдёт до сотрудника, положительное решение
 // будет заблокировано.
 func (s *Service) Enrich(ctx context.Context, ev pipelinedomain.Event) error {
+	_, err := s.enrich(ctx, ev)
+	return err
+}
+
+func (s *Service) enrich(ctx context.Context, ev pipelinedomain.Event) (pipelineCompletion, error) {
 	d, err := s.current(ctx, ev, applicationdomain.StatusEnrichment)
 	if err != nil {
-		return err
+		return pipelineCompletion{}, err
 	}
 	checks := s.fetch(ctx, d.Company.INN, pipelinedomain.SourceChecks{}, underwritingdomain.CheckRegistry, underwritingdomain.CheckCreditBureau)
 	if err := ctx.Err(); err != nil {
-		return err
+		return pipelineCompletion{}, err
 	}
 	if err := s.saveOverview(ctx, d.CompanyID, checks); err != nil {
-		return err
+		return pipelineCompletion{}, err
 	}
 	stops := scoring.StopReasons(stopInput(d, checks), s.now())
 
-	return s.repo.Update(ctx, s.update(ev), func(l *pipelinedomain.Locked) (pipelinedomain.Change, error) {
+	var completion pipelineCompletion
+	err = s.repo.Update(ctx, s.update(ev), func(l *pipelinedomain.Locked) (pipelinedomain.Change, error) {
 		a := l.Application
 		if err := pipelinedomain.Expect(*a, ev.RunID, applicationdomain.StatusEnrichment); err != nil {
 			return pipelinedomain.Change{}, err
@@ -234,6 +308,7 @@ func (s *Service) Enrich(ctx context.Context, ev pipelinedomain.Event) error {
 			}
 			skipped := pipelinedomain.Skipped(productCode(*a), stops, a.DataRevision)
 			change.Assessment = &skipped
+			completion = pipelineCompletion{result: a.Status, submittedAt: a.SubmittedAt}
 		} else {
 			tr, err := a.StartScoring()
 			if err != nil {
@@ -247,25 +322,32 @@ func (s *Service) Enrich(ctx context.Context, ev pipelinedomain.Event) error {
 		change.Checks = []pipelinedomain.CheckResult{checks.Registry, checks.Credit}
 		return change, nil
 	})
+	return completion, err
 }
 
 // Score — этап scoring: модель продукта на снимках этого запуска и принятом
 // финансовом снимке заявки, затем рассмотрение сотрудником. Модель лишь рекомендует:
 // положительное решение публикует сотрудник.
 func (s *Service) Score(ctx context.Context, ev pipelinedomain.Event) error {
+	_, err := s.score(ctx, ev)
+	return err
+}
+
+func (s *Service) score(ctx context.Context, ev pipelinedomain.Event) (pipelineCompletion, error) {
 	d, err := s.current(ctx, ev, applicationdomain.StatusScoring)
 	if err != nil {
-		return err
+		return pipelineCompletion{}, err
 	}
 	checks, err := s.repo.Checks(ctx, d.ID, ev.RunID)
 	if err != nil {
-		return err
+		return pipelineCompletion{}, err
 	}
 	assessment, err := s.assess(ctx, d, checks)
 	if err != nil {
-		return err
+		return pipelineCompletion{}, err
 	}
-	return s.repo.Update(ctx, s.update(ev), func(l *pipelinedomain.Locked) (pipelinedomain.Change, error) {
+	var completion pipelineCompletion
+	err = s.repo.Update(ctx, s.update(ev), func(l *pipelinedomain.Locked) (pipelinedomain.Change, error) {
 		if err := pipelinedomain.Expect(*l.Application, ev.RunID, applicationdomain.StatusScoring); err != nil {
 			return pipelinedomain.Change{}, err
 		}
@@ -274,8 +356,10 @@ func (s *Service) Score(ctx context.Context, ev pipelinedomain.Event) error {
 			return pipelinedomain.Change{}, err
 		}
 		change.Assessment = &assessment
+		completion = pipelineCompletion{result: l.Application.Status, submittedAt: l.Application.SubmittedAt}
 		return change, nil
 	})
+	return completion, err
 }
 
 // Recheck — повтор по запросу сотрудника для заявки на рассмотрении. С
