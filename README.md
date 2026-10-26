@@ -62,6 +62,39 @@ docker compose run --rm --no-deps staff-seed
 
 Сотрудник работает с очередью `/api/v0/underwriter/applications`, договоры к предложениям лежат в бакете MinIO `documents`. Подробнее — [backend/internal/underwriting/.md](backend/internal/underwriting/.md).
 
+## Метрики Prometheus
+
+Backend экспортирует метрики на том же порту, что и API: `GET http://localhost:8080/metrics` в стандартном формате Prometheus (`client_golang` + `promhttp`, код — `backend/pkg/server/metrics.go` и `backend/internal/pipeline/service/metrics.go`). Сервиса Prometheus в compose нет — scrape настраивается снаружи:
+
+```yaml
+scrape_configs:
+  - job_name: lasagna-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["localhost:8080"]
+```
+
+Быстрая проверка: `curl -s http://localhost:8080/metrics | grep -E "^(http_|pipeline_)"`.
+
+| Метрика | Метки | Что показывает |
+| --- | --- | --- |
+| `http_requests_total` | method, route, status | счётчик HTTP-запросов |
+| `http_request_duration_seconds` | method, route, status | гистограмма длительности ответа |
+| `http_requests_in_flight` | method, route | запросы в обработке прямо сейчас |
+| `pipeline_stage_duration_seconds` | stage, result | длительность этапа пайплайна |
+| `pipeline_stage_events_total` | stage, result | события этапов конвейера |
+| `pipeline_completed_total` | result | завершённые автоматические прогоны |
+| `pipeline_end_to_end_duration_seconds` | result | время от submit до завершения прогона |
+
+Наполнить метрики живым трафиком можно нагрузочным симулятором `backend/loadsim` — он гоняет полные циклы заявок от имени демо-аккаунта. Из каталога `backend`:
+
+```sh
+go run ./loadsim                                  # 10 заявок, 2 воркера, http://localhost:8080
+LOADTEST_EMAIL=demo.ip.good@lasagna.test go run ./loadsim -applications 30 -workers 4
+```
+
+Флаги: `-applications`, `-workers`, `-timeout`; переменные `LOADTEST_BASE_URL`, `LOADTEST_EMAIL`.
+
 ## Запуск frontend
 
 Frontend собирается прямо в корневом compose (`frontend/Dockerfile`) и стартует вместе со стеком на `http://localhost:3000`. Next проксирует `/api/*` на backend и `/esign/*` на esign-mock, поэтому браузер ходит на один origin; адреса (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_SIGN_API_URL`, `NEXT_PUBLIC_SITE_URL`) задаются в корневом `docker-compose.yaml` — при сборке они попадают в rewrites, при старте — в окружение.
