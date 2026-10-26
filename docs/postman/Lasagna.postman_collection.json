@@ -1,0 +1,3376 @@
+{
+  "info": {
+    "name": "Lasagna API",
+    "description": "Postman Collection for backend operations defined in backend/docs/swagger.json. Swagger base path: /api/v0. The first folder is the main workflow; all documented endpoints are grouped by Swagger tag.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Credit application workflow",
+      "description": "Run the requests in order. Repeat GET Application manually while asynchronous processing continues. Signing requires a manual cryptographic action; see README.",
+      "item": [
+        {
+          "name": "01 - Client login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/auth/login",
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{client_email}}\",\n  \"password\": \"{{client_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Вход",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains access_token\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"access_token\"); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set(\"client_token\", data.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 - Get companies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Мои компании",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is an array\", function () { pm.expect(pm.response.json()).to.be.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length && data[0].id) pm.environment.set(\"company_id\", data[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 - Get credit products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/credit-products",
+              "query": [
+                {
+                  "key": "purpose",
+                  "value": "",
+                  "description": "Цель кредитования",
+                  "disabled": true
+                },
+                {
+                  "key": "purpose_description",
+                  "value": "",
+                  "description": "Пояснение для цели other",
+                  "disabled": true
+                },
+                {
+                  "key": "amount_kopecks",
+                  "value": "",
+                  "description": "Сумма в копейках",
+                  "disabled": true
+                },
+                {
+                  "key": "term_months",
+                  "value": "",
+                  "description": "Срок аннуитетного кредита в месяцах; для овердрафта не используется",
+                  "disabled": true
+                },
+                {
+                  "key": "need_period_days",
+                  "value": "",
+                  "description": "Период отдельного транша овердрафта в днях; для аннуитетного кредита не используется",
+                  "disabled": true
+                },
+                {
+                  "key": "registration_date",
+                  "value": "",
+                  "description": "Дата регистрации бизнеса: YYYY-MM-DD; возраст рассчитывается по дате Europe/Moscow",
+                  "disabled": true
+                },
+                {
+                  "key": "collateral_mode",
+                  "value": "",
+                  "description": "required — с залогом, not_supported — без залога, optional — выбор ещё не сделан",
+                  "disabled": true
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Возвращает активные продукты, для которых не выявлено нарушений формальных условий. Все query-параметры необязательны: при неполных данных eligibility=needs_details, при полной проверке — eligible. Неподходящие продукты исключаются. Без параметров возвращается активный каталог с причинами недостающих данных; при отсутствии вариантов — []. Это предварительная проверка, а не кредитное решение.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is an array\", function () { pm.expect(pm.response.json()).to.be.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 - Create application",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{company_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Черновик от имени компании, в которой пользователь — представитель.\nПовтор с тем же Idempotency-Key и телом возвращает ту же заявку,\nс другим телом — 409 IDEMPOTENCY_CONFLICT.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications\")) { pm.environment.set(\"idempotency_key_post_applications\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications\")) { pm.environment.set(\"idempotency_key_post_applications\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains id, revision\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"id\"); pm.expect(data).to.have.property(\"revision\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.id) pm.environment.set(\"application_id\", data.id); if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 - Update application",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}},\n  \"request\": {\n    \"amount_kopecks\": 100000000,\n    \"term_months\": 12,\n    \"purpose\": \"working_capital\",\n    \"purpose_description\": \"Working capital\",\n    \"product_code\": \"working_capital\",\n    \"need_period\": {\n      \"unit\": \"months\",\n      \"value\": 12\n    },\n    \"collateral_mode\": \"none\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "В draft — любые поля запроса и залог, в info_requested — только из editable_fields,\nиначе 409 INVALID_STATE; поле вне editable_fields — 422 NOT_EDITABLE.\nНепереданное поле не меняется, null очищает значение. need_period и collateral\nзаменяются целиком; collateral — только при collateral_mode = pledged.\nproduct_details — поля «Старта», cash_plan — денежный план: заменяются целиком, null удаляет.\nПлан в черновике — только у «Старта» (kind = project); план ликвидности (liquidity) —\nпо запросу банка, у овердрафта плана нет. Правка содержимого снимает подтверждение;\nподтверждение — отдельной правкой {\"cash_plan\": {\"confirmed\": true}}, когда прогноз\nначинается со следующего месяца и покрывает весь срок кредита, иначе 422\nFORECAST_CONFIRMATION_REQUIRED. data_revision растёт, только если изменились данные.\nПолноту, бюджет «Старта» и условия продукта проверяет submit.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 - Fetch financials",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications_id_financials_fetch}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/financials/fetch",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Одна попытка источника не дольше таймаута (5 с). Успех — новый принятый снимок,\ndata_revision растёт при изменении данных. not_found, unavailable, invalid открывают\nрезервную ветку: CSV или отсутствие истории; прежний снимок цикла при неуспехе остаётся.\nВ draft или в info_requested, если банк открыл financials. demo_mode — только в демо.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications_id_financials_fetch\")) { pm.environment.set(\"idempotency_key_post_applications_id_financials_fetch\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 - Get financial step",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/financials",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Источник, принятый снимок текущего цикла, пригодность на бизнес-дату и доступность\nрезервной ветки (CSV, отсутствие истории).",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 - Submit application",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications_id_submit}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/submit",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "draft → submitted с новым запуском конвейера. Ответ — в submitted: этапы\nvalidation → enrichment → scoring → manual_review идут асинхронно, текущий статус —\nGET /applications/{id}. Неполный запрос или нарушение условий\nпродукта — 422 с полями, заявка остаётся draft. У «Старта» обязательны полные\nproduct_details (кредит + собственные средства = стоимость, собственных не меньше 30%)\nи подтверждённый cash_plan на срок кредита. Повтор с тем же Idempotency-Key\nи телом не создаёт второй отправки.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications_id_submit\")) { pm.environment.set(\"idempotency_key_post_applications_id_submit\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 - Check application",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Заявка своей компании в любом статусе, с залогом, полями проекта и планом.\nПосле отправки по ней видно, на каком этапе конвейера заявка.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 - Underwriter login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/auth/login",
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{underwriter_email}}\",\n  \"password\": \"{{underwriter_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Вход",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains access_token\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"access_token\"); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set(\"underwriter_token\", data.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 - Get underwriting queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications",
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Статус заявки",
+                  "disabled": true
+                },
+                {
+                  "key": "assignee",
+                  "value": "",
+                  "description": "me, none или id сотрудника",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "",
+                  "description": "От 1 до 100, по умолчанию 20",
+                  "disabled": true
+                },
+                {
+                  "key": "cursor",
+                  "value": "",
+                  "description": "next_cursor предыдущей страницы",
+                  "disabled": true
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Заявки на рассмотрении и после него, старые сверху. Черновики не показываются.\nassignee: me — мои, none — свободные, uuid — сотрудника.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12 - Get underwriting application",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications/{{application_id}}",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Заявка, проверки, скоринг, залог, запросы уточнений, решения и история.\ndecision_blockers — что мешает одобрить заявку на запрошенных условиях.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13 - Take application",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications/{{application_id}}/take",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Назначает заявку на текущего сотрудника. Повтор тем же сотрудником безопасен;\nзаявку другого сотрудника — 409 INVALID_STATE.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14 - Publish decision",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications/{{application_id}}/decision",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}},\n  \"outcome\": \"approved\",\n  \"terms\": {\n    \"agreement_term_months\": 12,\n    \"amount_kopecks\": 100000000,\n    \"annual_rate_bps\": 2290,\n    \"collateral_required\": false,\n    \"max_tranche_days\": 30,\n    \"product_code\": \"working_capital\",\n    \"term_months\": 12,\n    \"valid_until\": \"2026-11-30T23:59:59Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "approved — условия как в запросе (ставка не считается), counter_offer — изменён продукт,\nсумма, срок или обеспечение. Положительное решение требует готовых проверок, принятого\nзалога у обеспеченного продукта и, если нужен денежный план, подтверждённого клиентом и\nпринятого на этих условиях плана, который проходит расчёт; создаёт предложение и PDF\nдоговора. Предложение по плану действует не дольше 7 суток и до начала следующего месяца.\nПлатёж считает сервер.\nrejected — с reason_code и пояснениями для клиента.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "15 - Get offer",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/offer",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Текущее предложение",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains id\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"id\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.id) pm.environment.set(\"offer_id\", data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "16 - Get contract",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/contract",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Метаданные; файл — GET /documents/{id}/content с id договора.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains id\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"id\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.id) pm.environment.set(\"document_id\", data.id); if (data.offer_id) pm.environment.set(\"offer_id\", data.offer_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "17 - Prepare signing context",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/signing-context",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"expected_revision\": {{application_revision}},\n  \"offer_id\": \"{{offer_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "TTL до 5 минут, с учётом срока проверок. Контекст связан с пользователем, revision, Offer, Contract и SHA-256 исходного PDF. При неподтверждённом P14 — 503.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains context_id, document_id, offer_id\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"context_id\"); pm.expect(data).to.have.property(\"document_id\"); pm.expect(data).to.have.property(\"offer_id\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);",
+                  "if (data.context_id) pm.environment.set(\"signing_context_id\", data.context_id); if (data.document_id) pm.environment.set(\"document_id\", data.document_id); if (data.offer_id) pm.environment.set(\"offer_id\", data.offer_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "18 - Submit signature for verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications_id_sign}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/sign",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"context_id\": \"{{signing_context_id}}\",\n  \"signature\": \"{{signature}}\",\n  \"terms_accepted\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Backend проверяет подпись через esign-mock; PIN и сертификат от клиента не принимает. Атомарно сохраняет артефакт, accepted, signing и задачу выдачи pending. Повтор с тем же ключом и телом не создаёт новую операцию.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications_id_sign\")) { pm.environment.set(\"idempotency_key_post_applications_id_sign\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "19 - Get signature result",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/signature",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "JSON: подписанные данные, подпись, проверенный сертификат и хеш исходного PDF.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Applications",
+      "item": [
+        {
+          "name": "Заявки компании",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications",
+              "query": [
+                {
+                  "key": "company_id",
+                  "value": "",
+                  "description": "Компания",
+                  "disabled": false
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Статус",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "",
+                  "description": "До 100, по умолчанию 20",
+                  "disabled": true
+                },
+                {
+                  "key": "cursor",
+                  "value": "",
+                  "description": "next_cursor предыдущей страницы",
+                  "disabled": true
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Заявки компании, где пользователь — представитель, новые сверху; иначе 404.\nПосле отправки статус меняется по этапам конвейера асинхронно — список и карточка\nпоказывают текущий.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Новая заявка",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"{{company_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Черновик от имени компании, в которой пользователь — представитель.\nПовтор с тем же Idempotency-Key и телом возвращает ту же заявку,\nс другим телом — 409 IDEMPOTENCY_CONFLICT.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications\")) { pm.environment.set(\"idempotency_key_post_applications\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications\")) { pm.environment.set(\"idempotency_key_post_applications\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains id, revision\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"id\"); pm.expect(data).to.have.property(\"revision\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.id) pm.environment.set(\"application_id\", data.id); if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Заявка",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Заявка своей компании в любом статусе, с залогом, полями проекта и планом.\nПосле отправки по ней видно, на каком этапе конвейера заявка.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Изменить заявку",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}},\n  \"request\": {\n    \"amount_kopecks\": 100000000,\n    \"term_months\": 12,\n    \"purpose\": \"working_capital\",\n    \"purpose_description\": \"Working capital\",\n    \"product_code\": \"working_capital\",\n    \"need_period\": {\n      \"unit\": \"months\",\n      \"value\": 12\n    },\n    \"collateral_mode\": \"none\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "В draft — любые поля запроса и залог, в info_requested — только из editable_fields,\nиначе 409 INVALID_STATE; поле вне editable_fields — 422 NOT_EDITABLE.\nНепереданное поле не меняется, null очищает значение. need_period и collateral\nзаменяются целиком; collateral — только при collateral_mode = pledged.\nproduct_details — поля «Старта», cash_plan — денежный план: заменяются целиком, null удаляет.\nПлан в черновике — только у «Старта» (kind = project); план ликвидности (liquidity) —\nпо запросу банка, у овердрафта плана нет. Правка содержимого снимает подтверждение;\nподтверждение — отдельной правкой {\"cash_plan\": {\"confirmed\": true}}, когда прогноз\nначинается со следующего месяца и покрывает весь срок кредита, иначе 422\nFORECAST_CONFIRMATION_REQUIRED. data_revision растёт, только если изменились данные.\nПолноту, бюджет «Старта» и условия продукта проверяет submit.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Договор к предложению",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/contract",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Метаданные; файл — GET /documents/{id}/content с id договора.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains id\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"id\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.id) pm.environment.set(\"document_id\", data.id); if (data.offer_id) pm.environment.set(\"offer_id\", data.offer_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отказаться от предложения",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications_id_decline}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/decline",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Переводит заявку из approved или counter_offer в cancelled. Повтор с тем же Idempotency-Key и expected_revision возвращает тот же результат.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications_id_decline\")) { pm.environment.set(\"idempotency_key_post_applications_id_decline\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Запросы банка",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/info-requests",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Запросы банка",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is an array\", function () { pm.expect(pm.response.json()).to.be.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length && data[data.length - 1].id) pm.environment.set(\"info_request_id\", data[data.length - 1].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ответить на запрос банка",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/info-requests/{{info_request_id}}/answer",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"answer\": \"Счёт поставщика приложили, стоимость 3 млн\",\n  \"expected_revision\": {{application_revision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Поля из editable_fields правятся через PATCH заявки; после ответов на все запросы — resubmit.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Текущее предложение",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/offer",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Текущее предложение",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains id\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"id\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.id) pm.environment.set(\"offer_id\", data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить повторно",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications_id_resubmit}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/resubmit",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "info_requested → submitted после ответов на все запросы банка; запрос проверяется\nкак при отправке. Новый запуск конвейера: этапы идут асинхронно, как после submit. Если банк открыл cash_plan, план должен быть подтверждён на срок кредита.\nПовтор с тем же Idempotency-Key и телом не создаёт второй отправки.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications_id_resubmit\")) { pm.environment.set(\"idempotency_key_post_applications_id_resubmit\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Проверить криптографическую подпись договора",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications_id_sign}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/sign",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"context_id\": \"{{signing_context_id}}\",\n  \"signature\": \"{{signature}}\",\n  \"terms_accepted\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Backend проверяет подпись через esign-mock; PIN и сертификат от клиента не принимает. Атомарно сохраняет артефакт, accepted, signing и задачу выдачи pending. Повтор с тем же ключом и телом не создаёт новую операцию.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications_id_sign\")) { pm.environment.set(\"idempotency_key_post_applications_id_sign\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Скачать артефакт подписи",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/signature",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "JSON: подписанные данные, подпись, проверенный сертификат и хеш исходного PDF.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подготовить контекст подписи договора",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/signing-context",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"expected_revision\": {{application_revision}},\n  \"offer_id\": \"{{offer_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "TTL до 5 минут, с учётом срока проверок. Контекст связан с пользователем, revision, Offer, Contract и SHA-256 исходного PDF. При неподтверждённом P14 — 503.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains context_id, document_id, offer_id\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"context_id\"); pm.expect(data).to.have.property(\"document_id\"); pm.expect(data).to.have.property(\"offer_id\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);",
+                  "if (data.context_id) pm.environment.set(\"signing_context_id\", data.context_id); if (data.document_id) pm.environment.set(\"document_id\", data.document_id); if (data.offer_id) pm.environment.set(\"offer_id\", data.offer_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Отправить заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications_id_submit}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/submit",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "draft → submitted с новым запуском конвейера. Ответ — в submitted: этапы\nvalidation → enrichment → scoring → manual_review идут асинхронно, текущий статус —\nGET /applications/{id}. Неполный запрос или нарушение условий\nпродукта — 422 с полями, заявка остаётся draft. У «Старта» обязательны полные\nproduct_details (кредит + собственные средства = стоимость, собственных не меньше 30%)\nи подтверждённый cash_plan на срок кредита. Повтор с тем же Idempotency-Key\nи телом не создаёт второй отправки.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications_id_submit\")) { pm.environment.set(\"idempotency_key_post_applications_id_submit\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Записать банковскую проверку залога",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications/{{application_id}}/collateral-review",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accepted_value_kopecks\": 1,\n  \"comment\": \"Checked\",\n  \"expected_revision\": {{application_revision}},\n  \"result\": \"accepted\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Только назначенный активный underwriter/admin в manual_review или info_requested. Неизменяемое заключение сохраняет версию заявки, версию и SHA-256 залога. Для accepted нужны положительная оценка и внутренний comment. Актуальность — 30 суток включительно. Изменение суммы кредита только пересчитывает покрытие 70%.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Financials",
+      "item": [
+        {
+          "name": "Финансовый шаг заявки",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/financials",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Источник, принятый снимок текущего цикла, пригодность на бизнес-дату и доступность\nрезервной ветки (CSV, отсутствие истории).",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Загрузить финансы из CSV",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications_id_financials_csv}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/financials/csv",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "expected_revision",
+                  "type": "text",
+                  "value": "{{application_revision}}",
+                  "description": "Ожидаемая revision",
+                  "disabled": false
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "value": "",
+                  "description": "CSV",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "description": "Резервная ветка: только после not_found, unavailable или invalid автоматического источника\nи без принятого снимка текущего цикла, иначе 409 CSV_NOT_ALLOWED. UTF-8 (BOM допустим),\nразделитель запятая или точка с запятой; колонки inn,month,income,expenses,taxes,\nowner_withdrawals и необязательная free_cash; суммы в рублях с точкой, до двух знаков;\nзавершённые месяцы не раньше регистрации, до 120 строк, файл до 5 МиБ. Ошибка любой строки —\n422 INVALID_CSV со всеми найденными ошибками (file.rows[N].колонка), файл не принимается.\nПринятый CSV оставляет заявку на ручном рассмотрении.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications_id_financials_csv\")) { pm.environment.set(\"idempotency_key_post_applications_id_financials_csv\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Получить финансы автоматически",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications_id_financials_fetch}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/financials/fetch",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Одна попытка источника не дольше таймаута (5 с). Успех — новый принятый снимок,\ndata_revision растёт при изменении данных. not_found, unavailable, invalid открывают\nрезервную ветку: CSV или отсутствие истории; прежний снимок цикла при неуспехе остаётся.\nВ draft или в info_requested, если банк открыл financials. demo_mode — только в демо.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications_id_financials_fetch\")) { pm.environment.set(\"idempotency_key_post_applications_id_financials_fetch\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "История финансовых снимков заявки",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/financials/history",
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "",
+                  "description": "До 100, по умолчанию 20",
+                  "disabled": true
+                },
+                {
+                  "key": "cursor",
+                  "value": "",
+                  "description": "next_cursor предыдущей страницы",
+                  "disabled": true
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Неизменяемые принятые снимки всех финансовых циклов, новые сверху.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подтвердить отсутствие финансовой истории",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotency_key_post_applications_id_financials_no_history}}",
+                "description": "Ключ повтора, до 255 символов",
+                "type": "text",
+                "disabled": false
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/financials/no-history",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirmed\": true,\n  \"expected_revision\": {{application_revision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Только в резервной ветке без принятых данных, иначе 409 INVALID_STATE; confirmed=true\nобязательно. Отправить заявку без фактов можно только по «Старту». Принятый позже CSV\nснимает отметку.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.environment.get(\"idempotency_key_post_applications_id_financials_no_history\")) { pm.environment.set(\"idempotency_key_post_applications_id_financials_no_history\", pm.variables.replaceIn(\"{{$guid}}\")); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.revision !== undefined) pm.environment.set(\"application_revision\", data.revision);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Шаблон CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/applications/{{application_id}}/financials/template",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Колонки и месяцы окна расчёта с ИНН компании, суммы пустые: незаполненный шаблон не принимается.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Финансовый профиль компании",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies/{{company_id}}/financials",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Последний принятый снимок по заявкам компании с источником, датой и периодом; нет — null.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Client login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/auth/login",
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{client_email}}\",\n  \"password\": \"{{client_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Вход",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains access_token\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"access_token\"); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set(\"client_token\", data.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Выход",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/auth/logout",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Выход",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Текущий пользователь",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/auth/me",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Возвращает id и роль владельца токена.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Underwriter login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/auth/login",
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{underwriter_email}}\",\n  \"password\": \"{{underwriter_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Вход",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains access_token\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"access_token\"); });",
+                  "const data = pm.response.json();",
+                  "pm.environment.set(\"underwriter_token\", data.access_token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Companies",
+      "item": [
+        {
+          "name": "Мои компании",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Мои компании",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is an array\", function () { pm.expect(pm.response.json()).to.be.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length && data[0].id) pm.environment.set(\"company_id\", data[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Подключение компании",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challenge_id\": \"{{challenge_id}}\",\n  \"signature\": \"{{company_signature}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Шаг 2 из 2. Проверяет подпись заявления и сверяет владельца сертификата\nс руководителем по ЕГРЮЛ или с ИНН ИП по ЕГРИП. Пользователь становится\nceo (ЮЛ) или owner (ИП) с правом подписи. Заявление тратится при любом исходе.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains id\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"id\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.id) pm.environment.set(\"company_id\", data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Заявление о подключении компании",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies/challenges",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"inn\": \"{{company_inn}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Шаг 1 из 2. Возвращает текст заявления (data), который руководитель\nподписывает КЭП в esign-mock: POST /v1/sign. Заявление одноразовое, живёт 5 минут.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains challenge_id\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"challenge_id\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.challenge_id) pm.environment.set(\"challenge_id\", data.challenge_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Карточка компании из реестра",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies/lookup",
+              "query": [
+                {
+                  "key": "inn",
+                  "value": "",
+                  "description": "ИНН: 10 цифр ЮЛ или 12 цифр ИП",
+                  "disabled": false
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Ищет ЮЛ в ЕГРЮЛ или ИП в ЕГРИП по ИНН. Ничего не сохраняет.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Компания",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies/{{company_id}}",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Компания",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Загрузка финансовой отчётности из CSV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies/{{company_id}}/financials",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "value": "",
+                  "description": "CSV в UTF-8 с разделителем запятая; суммы в копейках",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "description": "Только для client, состоящего в компании. Передайте один CSV в поле file. Максимальный размер всего multipart-запроса — 2 МиБ. Заголовок: inn,month,income,expenses,taxes,owner_withdrawals. Все суммы — неотрицательные целые копейки, месяц — YYYY-MM. ИНН каждой строки должен совпадать с компанией, месяцы не должны повторяться. free_cash = income - expenses - taxes - owner_withdrawals. Файл проверяется полностью до записи. Загрузка заменяет сохранённый финансовый отчёт компании; реестр и БКИ сохраняются. Ответ содержит сохранённый отчёт, месяцы отсортированы. Повторная загрузка не создаёт отдельную строку overview.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Представители компании",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies/{{company_id}}/members",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Представители компании",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is an array\", function () { pm.expect(pm.response.json()).to.be.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Приглашение сотрудника",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies/{{company_id}}/members",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{new_client_email}}\",\n  \"position\": \"cfo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Руководитель добавляет зарегистрированного клиента по email, без права подписи.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Удаление представителя",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies/{{company_id}}/members/{{user_id}}",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Руководитель удаляет сотрудника, сотрудник может удалить себя сам. Руководителя удалить нельзя.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Сводка по бизнесу из реестра, БКИ и финансовой отчётности",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/companies/{{company_id}}/overview",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Только для client, состоящего в компании. Источники запрашиваются параллельно по ИНН из БД. Если источник не вернул данные, берётся сохранённый блок той же компании. Если в финансах нет последнего завершённого календарного месяца по Europe/Moscow, недостающие месяцы добавляются из БД; для совпадающих месяцев приоритет у мока. При наличии данных status=ok; без данных сохраняется not_found или unavailable и data=null. Если и в БД нет нужного месяца, отсутствующие данные не выдумываются: возвращается доступный отчёт. Отсутствие снимка не является ошибкой; ошибка чтения БД даёт 500. GET ничего не сохраняет. Денежные суммы передаются в целых копейках.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Credit Products",
+      "item": [
+        {
+          "name": "Подбор кредитных продуктов",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/credit-products",
+              "query": [
+                {
+                  "key": "purpose",
+                  "value": "",
+                  "description": "Цель кредитования",
+                  "disabled": true
+                },
+                {
+                  "key": "purpose_description",
+                  "value": "",
+                  "description": "Пояснение для цели other",
+                  "disabled": true
+                },
+                {
+                  "key": "amount_kopecks",
+                  "value": "",
+                  "description": "Сумма в копейках",
+                  "disabled": true
+                },
+                {
+                  "key": "term_months",
+                  "value": "",
+                  "description": "Срок аннуитетного кредита в месяцах; для овердрафта не используется",
+                  "disabled": true
+                },
+                {
+                  "key": "need_period_days",
+                  "value": "",
+                  "description": "Период отдельного транша овердрафта в днях; для аннуитетного кредита не используется",
+                  "disabled": true
+                },
+                {
+                  "key": "registration_date",
+                  "value": "",
+                  "description": "Дата регистрации бизнеса: YYYY-MM-DD; возраст рассчитывается по дате Europe/Moscow",
+                  "disabled": true
+                },
+                {
+                  "key": "collateral_mode",
+                  "value": "",
+                  "description": "required — с залогом, not_supported — без залога, optional — выбор ещё не сделан",
+                  "disabled": true
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Возвращает активные продукты, для которых не выявлено нарушений формальных условий. Все query-параметры необязательны: при неполных данных eligibility=needs_details, при полной проверке — eligible. Неподходящие продукты исключаются. Без параметров возвращается активный каталог с причинами недостающих данных; при отсутствии вариантов — []. Это предварительная проверка, а не кредитное решение.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is an array\", function () { pm.expect(pm.response.json()).to.be.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "Файл документа",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/documents/{{document_id}}/content",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{client_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Клиенту — документы заявок своей компании, сотруднику — любые.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Underwriting",
+      "item": [
+        {
+          "name": "Очередь заявок",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications",
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Статус заявки",
+                  "disabled": true
+                },
+                {
+                  "key": "assignee",
+                  "value": "",
+                  "description": "me, none или id сотрудника",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "",
+                  "description": "От 1 до 100, по умолчанию 20",
+                  "disabled": true
+                },
+                {
+                  "key": "cursor",
+                  "value": "",
+                  "description": "next_cursor предыдущей страницы",
+                  "disabled": true
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Заявки на рассмотрении и после него, старые сверху. Черновики не показываются.\nassignee: me — мои, none — свободные, uuid — сотрудника.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Карточка заявки",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications/{{application_id}}",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Заявка, проверки, скоринг, залог, запросы уточнений, решения и история.\ndecision_blockers — что мешает одобрить заявку на запрошенных условиях.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Заключение по денежному плану",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications/{{application_id}}/cash-plan-review",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}},\n  \"result\": \"accepted\",\n  \"comment\": \"Checked\",\n  \"public_comment\": \"Cash plan accepted\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Неизменяемая версия заключения в manual_review или info_requested: accepted, needs_info\nили rejected с внутренним comment о предпосылках. accepted — с validated_reserve_kopecks\nот 0 до заявленного резерва: кредитные средства и деньги бюджета проекта в него не входят.\nterms — условия проверки, по умолчанию из запроса; сумма не больше запрошенной. Принять план\nможно, только если клиент подтвердил его на срок условий, а у «Старта» сумма сходится с\nбюджетом, — иначе 422: сначала новая ревизия клиента. Заключение действует, пока не\nизменились план, условия и data_revision заявки; revision + 1, data_revision не меняется.\nneeds_info сам вопрос клиенту не создаёт — для этого request-info.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Опубликовать решение",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications/{{application_id}}/decision",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}},\n  \"outcome\": \"approved\",\n  \"terms\": {\n    \"agreement_term_months\": 12,\n    \"amount_kopecks\": 100000000,\n    \"annual_rate_bps\": 2290,\n    \"collateral_required\": false,\n    \"max_tranche_days\": 30,\n    \"product_code\": \"working_capital\",\n    \"term_months\": 12,\n    \"valid_until\": \"2026-11-30T23:59:59Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "approved — условия как в запросе (ставка не считается), counter_offer — изменён продукт,\nсумма, срок или обеспечение. Положительное решение требует готовых проверок, принятого\nзалога у обеспеченного продукта и, если нужен денежный план, подтверждённого клиентом и\nпринятого на этих условиях плана, который проходит расчёт; создаёт предложение и PDF\nдоговора. Предложение по плану действует не дольше 7 суток и до начала следующего месяца.\nПлатёж считает сервер.\nrejected — с reason_code и пояснениями для клиента.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Запросить уточнения",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications/{{application_id}}/request-info",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"editable_fields\": [\n    \"collateral\",\n    \"product_details\"\n  ],\n  \"expected_revision\": {{application_revision}},\n  \"message\": \"Уточните стоимость оборудования и приложите счёт поставщика\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Создаёт запрос клиенту и переводит заявку в info_requested.\neditable_fields — поля черновика, которые клиент сможет поправить.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();",
+                  "if (Array.isArray(data.info_requests) && data.info_requests.length) pm.environment.set(\"info_request_id\", data.info_requests[data.info_requests.length - 1].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Повторить проверки",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications/{{application_id}}/retry-checks",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}},\n  \"sources\": [\n    \"registry\",\n    \"credit_bureau\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Перезапрашивает источники в manual_review; результат придёт асинхронно с новой\nrevision: новые снимки, стоп-правило P06 (может дать rejected) и пересчёт модели.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Пересчитать скоринг",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications/{{application_id}}/retry-scoring",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Пересчитывает модель в manual_review на текущих снимках реестра и БКИ и принятых\nфинансах — например, после оценки failed. Результат придёт асинхронно с новой revision.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Взять заявку",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/underwriter/applications/{{application_id}}/take",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"expected_revision\": {{application_revision}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Назначает заявку на текущего сотрудника. Повтор тем же сотрудником безопасен;\nзаявку другого сотрудника — 409 INVALID_STATE.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "const data = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Создание клиента",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v0/users",
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{new_client_email}}\",\n  \"first_name\": \"Иван\",\n  \"last_name\": \"Петров\",\n  \"middle_name\": \"Сергеевич\",\n  \"password\": \"{{new_client_password}}\",\n  \"phone\": \"+79991234567\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Заводит пользователя с ролью client и статусом active, сессию не открывает.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Response is a JSON object\", function () { pm.expect(pm.response.json()).to.be.an(\"object\").and.not.an(\"array\"); });",
+                  "pm.test(\"Response contains id\", function () { const data = pm.response.json(); pm.expect(data).to.have.property(\"id\"); });",
+                  "const data = pm.response.json();",
+                  "if (data.id) pm.environment.set(\"user_id\", data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Удаление пользователя",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/users/{{user_id}}",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Ставит статус deleted, запись остаётся в БД. Только для admin.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Бан пользователя",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/users/{{user_id}}/ban",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Ставит статус banned. Только для admin.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Восстановление пользователя",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v0/users/{{user_id}}/reset",
+              "query": []
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{underwriter_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Возвращает статус active после бана или удаления. Только для admin.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,14 +1,21 @@
 COMPOSE := docker compose
 PROJECT := $(notdir $(CURDIR))
 E2E_BASE ?= http://localhost:3000
+METRICS_URL ?= http://localhost:8080/metrics
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up ready down ps logs db seed seed-staff db-reset events lag \
+.PHONY: help loadsim metrics up ready down ps logs db seed seed-staff db-reset events lag \
         install dev build start lint typecheck test-backend test e2e check
 
 help: ## Список целей
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
+
+loadsim: ## Нагрузка: -applications N (10), -workers N (2), -timeout D (90s); LOADTEST_BASE_URL/EMAIL/PASSWORD; make metrics
+	cd backend && go run ./loadsim $(LOADSIM_ARGS)
+
+metrics: ## Показать метрики Prometheus backend (METRICS_URL=http://localhost:8080/metrics)
+	curl -fsS $(METRICS_URL)
 
 up: ## Поднять всё: backend, моки, базы, миграции, сиды и frontend (:3000)
 	@test -f .env.docker || cp .env.example .env.docker
