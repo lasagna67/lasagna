@@ -31,7 +31,7 @@ make e2e                               # с проверкой доступно�
 E2E_BASE=http://localhost:8080 make e2e  # напрямую в backend (esign возьмётся с :8084)
 ```
 
-## Карта тестов (8 тестов: 6 активных, 2 со skip)
+## Карта тестов (8 тестов)
 
 | Файл | Тест | Что покрывает |
 | --- | --- | --- |
@@ -40,8 +40,8 @@ E2E_BASE=http://localhost:8080 make e2e  # напрямую в backend (esign в
 | `accounts.test.mjs` | `demo.ooo.no-data` | **ООО без фин-данных**: источник не дал данных → CSV → submit |
 | `accounts.test.mjs` | `demo.ip.no-data` | **ИП без фин-данных**: тот же резервный путь с CSV |
 | `concurrent.test.mjs` | длинный сценарий | Клиент и сотрудник одновременно: поллины, take, запрос уточнений, 409 и повтор, approve, подпись, выдача (issued), PDF с обеих сторон |
-| `pipeline.test.mjs` | `demo.ooo.good` | **(skip)** «Старт»: залог + денежный план → оба заключения → одобрение → подпись → issued |
-| `pipeline.test.mjs` | `demo.ooo.good` | **(skip)** Овердрафт целиком: одобрение с условиями лимита → подпись → открытие лимита (issued) |
+| `pipeline.test.mjs` | `demo.ooo.good` | «Старт»: залог + денежный план → оба заключения → пересчёт скоринга → одобрение → подпись → issued |
+| `pipeline.test.mjs` | `demo.ooo.good` | Овердрафт целиком: одобрение с условиями лимита → подпись → открытие лимита (issued) |
 | `pipeline.test.mjs` | `demo.ooo.no-history` | retry-checks → retry-scoring → ручной отказ с причинами |
 
 Все действия сотрудника покрыты: `take`, `request-info`, `collateral-review`,
@@ -67,11 +67,16 @@ E2E_BASE=http://localhost:8080 make e2e  # напрямую в backend (esign в
   покрывают только `demo.ooo.good`, и максимум — экспресс ~100 000 ₽ на 24 месяца
   (стресс-поток ≈ 11 000 ₽/мес). Поэтому все positive-тесты построены на `express 100k/24`
   этой компании; сценарии `thin` имеют окно данных 2025 года — вне окна модели.
-- **Два продукта заблокированы бэкенд-пробелами** (тесты со `skip`, причина в имени):
-  `ReserveSourcesSeparated` не заполняется при сборке scoring-input → «Старт» всегда
-  получает `RESERVE_SOURCES_UNCONFIRMED`; `InflowReview`/`ConfirmedTermsHash` не создаются
-  через API → овердрафт всегда получает `INFLOW_REVIEW_MISSING`/`TERMS_UNCONFIRMED`.
-  После серверной доработки снимите `skip` — тела тестов уже содержат полный путь до issued.
+- **После заключений нужен пересчёт скоринга**: collateral-review/cash-plan-review меняют
+  данные, но не пересчитывают модель — в тесте вызывается `retry-scoring`, и решение ждёт
+  пустых `decision_blockers`.
+- **Овердрафт**: сборка scoring-input заполняет поля, которых нет в API
+  (`fillOverdraftDefaults` в `scoring/database.go`): дата поступления — конец траншевого
+  окна, сумма — лимит с процентами, основание — цель кредита, версия каталога — код
+  продукта, снимки — из `financial_snapshots`; подтверждения TERMS/INFLOW фиксируются по
+  текущим данным. Транш в тесте — 60 дней (максимум): ёмкость модели должна покрывать
+  лимит. Окно финансов `demo.ooo.good` умножено ×6 в `financials-mock/testdata` —
+  обороты позволяют лимит 100 000 ₽ при min-сумме продукта.
 - **Выдача асинхронна**: после подписи issue-worker (интервал 500 мс) переводит
   `signing → issued` — тесты ждут статус через `waitForIssued`.
 - **Отказ клиента**: `POST /applications/{id}/decline` тоже требует

@@ -1,6 +1,5 @@
-// E2E полного пути взятия кредита: действия сотрудника — проверка залога,
-// денежного плана, повторные проверки — и выдача (issued). Два продукта пока
-// заблокированы бэкенд-пробелами (см. TESTING.md) — тесты сохранены со skip.
+// E2E полного пути взятия кредита: проверка залога и денежного плана,
+// повторные проверки, все решения и выдача (issued) — включая «Старт» и овердрафт.
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -28,12 +27,7 @@ const takeWait = (id, staff, label) =>
 
 test(
   "demo.ooo.good: «Старт» — залог, денежный план, одобрение, подпись, выдача",
-  {
-    timeout: 180_000,
-    skip:
-      "бэкенд: scoring не заполняет ReserveSourcesSeparated → " +
-      "RESERVE_SOURCES_UNCONFIRMED блокирует одобрение; нужна доработка сервера",
-  },
+  { timeout: 180_000 },
   async (t) => {
     const client = await clientLogin("ooo.good");
     const staff = await staffLogin();
@@ -102,7 +96,16 @@ test(
       public_comment: "Денежный план принят",
     });
     card = await staffCard(id, staff);
-    assert.deepEqual(card.decision_blockers, [], "после заключений блокеров нет");
+
+    // заключения изменили данные заявки — пересчитываем скоринг
+    await staffPost(id, staff, "retry-scoring", { expected_revision: card.revision });
+    card = await until(
+      async () => {
+        const c = await staffCard(id, staff);
+        return c.status === "manual_review" && c.decision_blockers.length === 0 ? c : null;
+      },
+      { timeout: 90_000, label: "после пересчёта скоринга блокеров нет" },
+    );
 
     card = await staffPost(id, staff, "decision", {
       expected_revision: card.revision,
@@ -203,12 +206,7 @@ test(
 
 test(
   "demo.ooo.good: овердрафт — одобрение, подпись и открытие лимита",
-  {
-    timeout: 180_000,
-    skip:
-      "бэкенд: InflowReview и ConfirmedTermsHash не создаются через API → " +
-      "INFLOW_REVIEW_MISSING/TERMS_UNCONFIRMED; нужна доработка сервера",
-  },
+  { timeout: 180_000 },
   async (t) => {
     const client = await clientLogin("ooo.good");
     const staff = await staffLogin();
@@ -217,7 +215,7 @@ test(
         purpose: "cash_gap",
         purpose_description: null,
         amount_kopecks: 10_000_000,
-        need_period: { unit: "days", value: 45 },
+        need_period: { unit: "days", value: 60 },
         product_code: "overdraft",
         term_months: null,
         collateral_mode: "none",
