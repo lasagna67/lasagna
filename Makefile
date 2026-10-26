@@ -71,7 +71,7 @@ lint: ## Проверка стилей frontend
 	cd frontend && npm run lint
 
 typecheck: ## Проверка типов frontend
-	cd frontend && npx tsc --noEmit
+	cd frontend && npm run typecheck
 
 test-backend: ## Go-тесты бэкенда в docker
 	docker run --rm -v $(CURDIR)/backend:/src -w /src golang:1.27.1-alpine go test ./...

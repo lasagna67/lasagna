@@ -1,0 +1,92 @@
+name: frontend
+
+# Фронтенд и E2E: типы, стили, сборка и полный сценарий против поднятого стека.
+# E2E гоняется и на бэкенд-коммитах: контракт API — часть проверки.
+on:
+  push:
+    branches: [main, "frontend/**"]
+    paths:
+      - "frontend/**"
+      - "e2e/**"
+      - "backend/**"
+      - "docker-compose.yaml"
+      - "docker-compose.local.yaml"
+      - ".env.example"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - "e2e/**"
+      - "backend/**"
+      - "docker-compose.yaml"
+      - "docker-compose.local.yaml"
+      - ".env.example"
+      - ".github/workflows/frontend.yml"
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck / lint / build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Stack up (backend + frontend)
+        run: |
+          cp .env.example .env.docker
+          docker compose up -d --build
+
+      - name: Wait for migrations and demo data
+        run: |
+          docker compose wait demo-seed
+          docker compose ps demo-seed --format '{{.Status}}' | grep -q "Exited (0)"
+
+      - name: Frontend is reachable
+        run: curl --retry 30 --retry-delay 3 --retry-connrefused -sf -o /dev/null http://localhost:3000/login
+
+      - name: Run E2E
+        run: node --test e2e/
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose logs --tail 300
+
+      - name: Down
+        if: always()
+        run: docker compose down -v

@@ -17,7 +17,7 @@ import { ApplicationTour } from "@/components/tour/application-tour";
 import { AppHeader } from "@/components/ui/app-header";
 import { ErrorBanner } from "@/components/ui/error-banner";
 
-const POLL = new Set<AppStatus>(["submitted", "validation", "enrichment", "scoring"]);
+const POLL = new Set<AppStatus>(["submitted", "validation", "enrichment", "scoring", "signing"]);
 const WITH_OFFER = new Set<AppStatus>(["approved", "counter_offer", "signing", "issued"]);
 const TERMINAL = new Set<AppStatus>(["rejected", "cancelled", "expired"]);
 const WAITING = new Set<AppStatus>([

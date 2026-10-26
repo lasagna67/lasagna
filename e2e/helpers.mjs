@@ -162,6 +162,17 @@ export function months(from, count) {
   });
 }
 
+// После подписи issue-worker асинхронно переводит заявку в issued — ждём.
+export async function waitForIssued(client, id) {
+  return until(
+    async () => {
+      const a = await reqOk(`/applications/${id}`, { token: client });
+      return a.status === "issued" ? a : null;
+    },
+    { timeout: 90_000, label: "issued" },
+  );
+}
+
 // Последний завершёншийся месяц (для CSV: незавершённые не принимаются).
 export function lastCompletedMonth() {
   const prev = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1);

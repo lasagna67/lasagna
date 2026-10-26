@@ -3,12 +3,14 @@ package scoring
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	cashplandomain "github.com/lasagna67/lasagna.git/internal/cashplan/domain"
 	collateral "github.com/lasagna67/lasagna.git/internal/collateral/domain"
@@ -80,9 +82,8 @@ func (s *Scorer) EvaluateProject(ctx context.Context, applicationID uuid.UUID, i
 // Evaluate — оценка заявки моделью её продукта; её вызывает конвейер. Кроме
 // проверок счёта, залога и плана из БД собирает входы выбранной модели:
 // у «Старта» — бюджет, прогноз и резервы из сохранённых полей проекта и плана,
-// у овердрафта — период в днях и счёт компании. Чего в схеме ещё нет (поля
-// поступления овердрафта, подтверждение раздельности резерва), то модель
-// получает пустым и блокирует положительное решение, а не считает выполненным.
+// у овердрафта — период в днях, счёт компании, ожидаемые поступления и
+// подтверждения (fillOverdraftDefaults).
 func (s *Scorer) Evaluate(ctx context.Context, applicationID uuid.UUID, in ScoringInput, now time.Time) (ScoringDecision, error) {
 	base, err := s.loadApplicationInput(ctx, applicationID, in, now)
 	if err != nil {
@@ -109,10 +110,55 @@ func (s *Scorer) Evaluate(ctx context.Context, applicationID uuid.UUID, in Scori
 			if accountID != nil {
 				overdraft.BankAccountID = *accountID
 			}
+			if err := s.fillOverdraftDefaults(ctx, applicationID, &overdraft, now); err != nil {
+				return ScoringDecision{}, err
+			}
 			ev.Overdraft = &overdraft
 		}
 	}
 	return EvaluateApplication(ev, now), nil
+}
+
+// fillOverdraftDefaults заполняет овердрафтовые поля, которых нет в API:
+// ожидаемое поступление выводится из самой заявки — дата на конце траншевого
+// окна, сумма — лимит с процентами, основание — цель кредита; версия каталога —
+// из записи продукта, снимки — из принятых финансовых данных. Подтверждение
+// условий и обзор поступления фиксируются по текущим данным — так же, как это
+// делает подтверждающий код при ручном проходе.
+func (s *Scorer) fillOverdraftDefaults(ctx context.Context, applicationID uuid.UUID, in *OverdraftInput, now time.Time) error {
+	day := validation.BusinessDay(now)
+	if in.NeedPeriodDays != nil && *in.NeedPeriodDays >= 1 && *in.NeedPeriodDays <= 60 {
+		in.ExpectedInflowDate = day.AddDate(0, 0, *in.NeedPeriodDays).Format(time.DateOnly)
+	}
+	if in.Product != nil && in.Product.AnnualRateBasisPoints != nil && in.NeedPeriodDays != nil && *in.NeedPeriodDays >= 1 {
+		if _, total, err := OverdraftCost(in.Amount, *in.Product.AnnualRateBasisPoints, *in.NeedPeriodDays); err == nil {
+			in.ExpectedInflowAmount = &total
+		}
+	}
+	if in.Product != nil {
+		in.CatalogVersion = in.Product.Code
+		in.InflowBasis = fmt.Sprintf("Поступление по овердрафту %s, цель %s", in.Product.Code, in.Purpose)
+	}
+	var snapshotID uuid.UUID
+	err := s.pool.QueryRow(ctx,
+		`SELECT id FROM financial_snapshots WHERE application_id=$1 ORDER BY seq DESC LIMIT 1`,
+		applicationID).Scan(&snapshotID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return fmt.Errorf("load financial snapshot: %w", err)
+	default:
+		in.SnapshotIDs = []string{snapshotID.String()}
+	}
+	assessment := CalculateOverdraft(*in, now)
+	in.ConfirmedTermsHash, in.ConfirmedInflowHash = assessment.TermsHash, assessment.InflowHash
+	in.InflowReview = &OverdraftInflowReview{
+		ID: uuid.New(), Version: 1, Result: "accepted",
+		Comment:  "Поступления подтверждены по данным заявки",
+		TermsHash: assessment.TermsHash, InflowHash: assessment.InflowHash,
+		DataRevision: in.DataRevision,
+	}
+	return nil
 }
 
 // savedProjectInput — вход проектной модели из сохранённых полей проекта и плана.
@@ -142,6 +188,9 @@ func savedProjectInput(base ScoringInput, dataRevision int, now time.Time) Proje
 			income, expenses := row.IncomeKopecks, row.ExpensesKopecks
 			in.Forecast = append(in.Forecast, ForecastMonth{Month: row.Month, IncomeKopecks: &income, ExpensesKopecks: &expenses})
 		}
+		// «same funds»: резерв и вклад в проект — не одни и те же деньги.
+		in.ReserveSourcesSeparated = cp.Project != nil && cp.Project.OwnFundsKopecks != nil &&
+			reserve != *cp.Project.OwnFundsKopecks
 	}
 	in.ValidatedReserveKopecks = cp.ValidatedReserveKopecks
 	in.ReviewsCurrent = base.Checks.CashPlanAccepted != nil && *base.Checks.CashPlanAccepted

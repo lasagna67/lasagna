@@ -6,51 +6,51 @@
         "monthly_data": [
             {
                 "month": "2026-04",
-                "income": 8500000,
-                "expenses": 5440000,
-                "taxes": 510000,
-                "owner_withdrawals": 700000,
-                "free_cash": 1850000
+                "income": 51000000,
+                "expenses": 32640000,
+                "taxes": 3060000,
+                "owner_withdrawals": 4200000,
+                "free_cash": 11100000
             },
             {
                 "month": "2026-05",
-                "income": 8925000,
-                "expenses": 5712000,
-                "taxes": 535500,
-                "owner_withdrawals": 700000,
-                "free_cash": 1977500
+                "income": 53550000,
+                "expenses": 34272000,
+                "taxes": 3213000,
+                "owner_withdrawals": 4200000,
+                "free_cash": 11865000
             },
             {
                 "month": "2026-06",
-                "income": 8755000,
-                "expenses": 5603200,
-                "taxes": 525300,
-                "owner_withdrawals": 700000,
-                "free_cash": 1926500
+                "income": 52530000,
+                "expenses": 33619200,
+                "taxes": 3151800,
+                "owner_withdrawals": 4200000,
+                "free_cash": 11559000
             },
             {
                 "month": "2026-07",
-                "income": 9180000,
-                "expenses": 5875200,
-                "taxes": 550800,
-                "owner_withdrawals": 700000,
-                "free_cash": 2054000
+                "income": 55080000,
+                "expenses": 35251200,
+                "taxes": 3304800,
+                "owner_withdrawals": 4200000,
+                "free_cash": 12324000
             },
             {
                 "month": "2026-08",
-                "income": 9520000,
-                "expenses": 6092800,
-                "taxes": 571200,
-                "owner_withdrawals": 700000,
-                "free_cash": 2156000
+                "income": 57120000,
+                "expenses": 36556800,
+                "taxes": 3427200,
+                "owner_withdrawals": 4200000,
+                "free_cash": 12936000
             },
             {
                 "month": "2026-09",
-                "income": 9350000,
-                "expenses": 5984000,
-                "taxes": 561000,
-                "owner_withdrawals": 700000,
-                "free_cash": 2105000
+                "income": 56100000,
+                "expenses": 35904000,
+                "taxes": 3366000,
+                "owner_withdrawals": 4200000,
+                "free_cash": 12630000
             }
         ],
         "period": {
