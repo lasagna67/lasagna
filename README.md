@@ -125,10 +125,10 @@ cp .env.example .env.docker                        # только при пер�
 docker compose up -d --build
 
 # 2. тесты (из корня репозитория; frontend уже поднят)
-node --test e2e/
+node --test e2e/*.test.mjs
 ```
 
-Если frontend работает на другом порту — укажите базовый адрес: `E2E_BASE=http://localhost:3100 node --test e2e/`. Есть и точечные переопределения: `E2E_API` (путь API) и `E2E_ESIGN` (путь esign-mock). Против backend напрямую, без frontend: `E2E_BASE=http://localhost:8080 node --test e2e/` (для этого адреса esign берётся с `:8084`).
+Если frontend работает на другом порту — укажите базовый адрес: `E2E_BASE=http://localhost:3100 node --test e2e/*.test.mjs`. Есть и точечные переопределения: `E2E_API` (путь API) и `E2E_ESIGN` (путь esign-mock). Против backend напрямую, без frontend: `E2E_BASE=http://localhost:8080 node --test e2e/*.test.mjs` (для этого адреса esign берётся с `:8084`).
 
 Сценарии:
 

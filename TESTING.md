@@ -13,7 +13,7 @@ make check
 | Типы | `cd frontend && npx tsc --noEmit` | TypeScript-контракты фронтенда |
 | Стили | `cd frontend && npm run lint` | ESLint: React-хуки, импорты, мусор |
 | Бэкенд | `docker run … golang:1.27.1-alpine go test ./...` | Go-тесты бэкенда в изолированном контейнере |
-| E2E | `node --test e2e/` | Весь путь заявки через HTTP, как в браузере |
+| E2E | `node --test e2e/*.test.mjs` | Весь путь заявки через HTTP, как в браузере |
 
 ## E2E: философия
 
@@ -25,7 +25,7 @@ make check
 Запуск по отдельности:
 
 ```sh
-node --test e2e/                       # все 8 (нужны стек и frontend на :3000)
+node --test e2e/*.test.mjs                       # все 8 (нужны стек и frontend на :3000)
 node --test --test-name-pattern="Старт" e2e/pipeline.test.mjs
 make e2e                               # с проверкой доступности frontend
 E2E_BASE=http://localhost:8080 make e2e  # напрямую в backend (esign возьмётся с :8084)

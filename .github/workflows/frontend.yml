@@ -81,7 +81,7 @@ jobs:
         run: curl --retry 30 --retry-delay 3 --retry-connrefused -sf -o /dev/null http://localhost:3000/login
 
       - name: Run E2E
-        run: node --test e2e/
+        run: node --test e2e/*.test.mjs
 
       - name: Stack logs on failure
         if: failure()

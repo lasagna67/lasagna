@@ -99,6 +99,6 @@ ifndef E2E_API
 		exit 1; \
 	fi
 endif
-	node --test e2e/
+	node --test e2e/*.test.mjs
 
 check: typecheck lint test-backend e2e ## Все проверки: типы, стили, Go-тесты, e2e
