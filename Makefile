@@ -5,7 +5,7 @@ METRICS_URL ?= http://localhost:8080/metrics
 
 .DEFAULT_GOAL := help
 
-.PHONY: help loadsim metrics up ready down ps logs db seed seed-staff db-reset events lag \
+.PHONY: help loadsim metrics prometheus grafana up ready down ps logs db seed seed-staff db-reset events lag \
         install dev build start lint typecheck test-backend test e2e check
 
 help: ## Список целей
@@ -17,7 +17,13 @@ loadsim: ## Нагрузка: -applications N (10), -workers N (2), -timeout D (
 metrics: ## Показать метрики Prometheus backend (METRICS_URL=http://localhost:8080/metrics)
 	curl -fsS $(METRICS_URL)
 
-up: ## Поднять всё: backend, моки, базы, миграции, сиды и frontend (:3000)
+prometheus: ## Поднять Prometheus (:9090)
+	$(COMPOSE) up -d prometheus
+
+grafana: ## Поднять Grafana (:3002) и Prometheus
+	$(COMPOSE) up -d grafana
+
+up: ## Поднять всё: backend, моки, базы, миграции, сиды, мониторинг и frontend (:3000)
 	@test -f .env.docker || cp .env.example .env.docker
 	$(COMPOSE) up -d --build
 

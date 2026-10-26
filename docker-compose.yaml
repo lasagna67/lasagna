@@ -2,6 +2,7 @@
 # Поднимает backend-стек (включая локальный override без порта postgres) и frontend.
 include:
   - path: backend/docker-compose.yaml
+  - path: backend/docker-compose.monitoring.yaml
   - path: docker-compose.local.yaml
 
 services:

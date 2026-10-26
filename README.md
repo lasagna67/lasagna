@@ -12,7 +12,7 @@
 docker compose up -d --build
 ```
 
-Одна команда поднимает весь проект: базы и моки, backend с миграциями, демо-данные и frontend на `http://localhost:3000` (сборка из `frontend/Dockerfile`, прокси `/api` и `/esign` внутри compose-сети). Одноразовый сервис `demo-seed` дождётся готовности API и создаст 12 демо-аккаунтов с подключёнными компаниями: по шесть сценариев для ООО и ИП. Повторный запуск переиспользует существующие записи. Локальный override (`docker-compose.local.yaml`) убран в корневой файл: порт postgres на хост не публикуется.
+Одна команда поднимает весь проект: базы и моки, backend с миграциями, демо-данные, Prometheus, Grafana и frontend на `http://localhost:3000` (сборка из `frontend/Dockerfile`, прокси `/api` и `/esign` внутри compose-сети). Одноразовый сервис `demo-seed` дождётся готовности API и создаст 12 демо-аккаунтов с подключёнными компаниями: по шесть сценариев для ООО и ИП. Повторный запуск переиспользует существующие записи. Локальный override (`docker-compose.local.yaml`) убран в корневой файл: порт postgres на хост не публикуется.
 
 Дождаться окончания заполнения:
 
@@ -64,17 +64,21 @@ docker compose run --rm --no-deps staff-seed
 
 ## Метрики Prometheus
 
-Backend экспортирует метрики на том же порту, что и API: `GET http://localhost:8080/metrics` в стандартном формате Prometheus (`client_golang` + `promhttp`, код — `backend/pkg/server/metrics.go` и `backend/internal/pipeline/service/metrics.go`). Сервиса Prometheus в compose нет — scrape настраивается снаружи:
+Backend экспортирует метрики на том же порту, что и API: `GET http://localhost:8080/metrics` в стандартном формате Prometheus (`client_golang` + `promhttp`, код — `backend/pkg/server/metrics.go` и `backend/internal/pipeline/service/metrics.go`). Prometheus и Grafana входят в общий Docker Compose. Их также можно запустить отдельно:
 
-```yaml
-scrape_configs:
-  - job_name: lasagna-backend
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["localhost:8080"]
+```sh
+make prometheus # Prometheus и backend
+make grafana    # Grafana, Prometheus и backend
 ```
 
-Быстрая проверка: `curl -s http://localhost:8080/metrics | grep -E "^(http_|pipeline_)"`.
+Prometheus доступен на `http://localhost:9090`. На странице `Status → Target health` цель `lasagna-backend` должна иметь состояние `UP`. Пример запроса PromQL для проверки: `sum(rate(http_requests_total[1m]))`.
+
+Grafana доступна на `http://localhost:3002` (при первом запуске стандартный вход: `admin` / `admin`). Datasource Prometheus и два дашборда загружаются автоматически через provisioning:
+
+- `Lasagna — HTTP Overview` — RPS, latency, HTTP-ошибки, активные запросы и Go heap;
+- `Lasagna — Credit Pipeline` — этапы конвейера, ошибки и скорость обработки заявок.
+
+Быстрая проверка сырых метрик backend: `curl -s http://localhost:8080/metrics | grep -E "^(http_|pipeline_)"`. Порты Prometheus и Grafana привязаны только к `127.0.0.1` и не публикуются во внешнюю сеть.
 
 | Метрика | Метки | Что показывает |
 | --- | --- | --- |
