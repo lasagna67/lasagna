@@ -19,15 +19,19 @@ type Workers struct {
 	pipeline config.PipelineConfig
 	relay    *outbox.Relay
 	handle   kafka.Handler
+	issue    func(context.Context) (bool, error)
+	expire   func(context.Context, time.Time) (bool, error)
 	logger   *logger.Logger
 }
 
-func NewWorkers(cfg config.Config, infra *Infra, services *Service, logger *logger.Logger) *Workers {
+func NewWorkers(cfg config.Config, infra *Infra, repo *Repo, services *Service, logger *logger.Logger) *Workers {
 	return &Workers{
 		kafka:    cfg.Kafka,
 		pipeline: cfg.Pipeline,
 		relay:    outbox.NewRelay(infra.Postgres().Pool(), infra.KafkaProducer(), logger.Named("outbox"), cfg.Pipeline.OutboxInterval, cfg.Pipeline.OutboxBatch, cfg.Pipeline.OutboxRetention),
 		handle:   services.Pipeline.Handle,
+		issue:    repo.Sign.CompletePendingIssue,
+		expire:   repo.Offers.ExpireNext,
 		logger:   logger,
 	}
 }
@@ -35,6 +39,54 @@ func NewWorkers(cfg config.Config, infra *Infra, services *Service, logger *logg
 // RunRelay публикует события outbox до отмены ctx.
 func (w *Workers) RunRelay(ctx context.Context) error {
 	return w.relay.Run(ctx)
+}
+
+// RunIssue завершает созданные после подписи задачи выдачи до отмены ctx.
+func (w *Workers) RunIssue(ctx context.Context) error {
+	return w.runJobs(ctx, "issue-worker", w.issue)
+}
+
+// RunExpiry переводит предложения с наступившим valid_until в expired.
+func (w *Workers) RunExpiry(ctx context.Context) error {
+	return w.runJobs(ctx, "offer-expiry-worker", func(ctx context.Context) (bool, error) {
+		return w.expire(ctx, time.Now())
+	})
+}
+
+func (w *Workers) runJobs(ctx context.Context, name string, work func(context.Context) (bool, error)) error {
+	log := w.logger
+	if log != nil {
+		log = log.Named(name)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		processed, err := work(ctx)
+		if ctx.Err() != nil {
+			return nil
+		}
+		if err == nil && processed {
+			continue
+		}
+		delay := w.pipeline.OutboxInterval
+		if err != nil {
+			if log != nil {
+				log.Error("background job failed", slog.Any("error", err))
+			}
+			delay = w.pipeline.RestartDelay
+		}
+		t := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return nil
+		case <-t.C:
+		}
+	}
 }
 
 // RunPipeline читает события конвейера до отмены ctx. Сбой обработки (БД,

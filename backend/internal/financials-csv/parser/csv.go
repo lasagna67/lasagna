@@ -15,7 +15,7 @@ import (
 	companyerrors "github.com/lasagna67/lasagna.git/internal/company/errors"
 )
 
-// ParseCSV читает финансовый отчёт одной компании. Все суммы — целые копейки.
+// ParseCSV читает финансовый отчёт одной компании. Суммы в CSV указываются в рублях с двумя знаками после точки.
 // Файл проверяется целиком до сохранения; повторяющиеся месяцы отклоняются.
 func ParseCSV(input io.Reader, inn string) (d.FinancialReport, error) {
 	r := csv.NewReader(input)
@@ -56,9 +56,9 @@ func ParseCSV(input io.Reader, inn string) (d.FinancialReport, error) {
 		months[row[1]] = true
 		var amounts [4]int64
 		for i := range amounts {
-			amount, err := strconv.ParseInt(row[i+2], 10, 64)
+			amount, err := parseRubles(row[i+2])
 			if err != nil || amount < 0 {
-				return d.FinancialReport{}, invalidCSV(fmt.Sprintf("Строка %d: %s должно быть неотрицательным целым числом копеек", line, header[i+2]))
+				return d.FinancialReport{}, invalidCSV(fmt.Sprintf("Строка %d: %s должно быть неотрицательной суммой в рублях с двумя знаками после точки", line, header[i+2]))
 			}
 			amounts[i] = amount
 		}
@@ -79,6 +79,22 @@ func ParseCSV(input io.Reader, inn string) (d.FinancialReport, error) {
 	last, _ := time.Parse("2006-01", report.MonthlyData[len(report.MonthlyData)-1].Month)
 	report.Period = &d.Period{From: first.Format(time.DateOnly), To: last.AddDate(0, 1, -1).Format(time.DateOnly)}
 	return report, nil
+}
+
+func parseRubles(value string) (int64, error) {
+	rubles, kopecks, ok := strings.Cut(value, ".")
+	if !ok || rubles == "" || len(kopecks) != 2 {
+		return 0, strconv.ErrSyntax
+	}
+	whole, err := strconv.ParseInt(rubles, 10, 64)
+	if err != nil || whole < 0 {
+		return 0, strconv.ErrSyntax
+	}
+	fraction, err := strconv.ParseInt(kopecks, 10, 64)
+	if err != nil || fraction < 0 || whole > (math.MaxInt64-fraction)/100 {
+		return 0, strconv.ErrRange
+	}
+	return whole*100 + fraction, nil
 }
 
 func invalidCSV(message string) error {

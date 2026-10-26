@@ -202,6 +202,7 @@ const (
 	OperationCreate           Operation = "create_application"
 	OperationSubmit           Operation = "submit_application"
 	OperationResubmit         Operation = "resubmit_application"
+	OperationDecline          Operation = "decline_application"
 	OperationFetchFinancials  Operation = "fetch_financials"
 	OperationUploadCSV        Operation = "upload_financials_csv"
 	OperationDeclareNoHistory Operation = "declare_no_history"

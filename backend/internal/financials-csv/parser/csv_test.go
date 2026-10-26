@@ -31,7 +31,7 @@ func TestParseCSVExample(t *testing.T) {
 }
 
 func TestParseCSVSortAndZeroValues(t *testing.T) {
-	input := "\ufeff" + csvHeader + testINN + ",2024-02,0,1,0,0\n" + testINN + ",2024-01,9007199254740993,0,0,0\n"
+	input := "\ufeff" + csvHeader + testINN + ",2024-02,0.00,0.01,0.00,0.00\n" + testINN + ",2024-01,90071992547409.93,0.00,0.00,0.00\n"
 	got, err := ParseCSV(strings.NewReader(input), testINN)
 	if err != nil {
 		t.Fatal(err)
@@ -45,17 +45,17 @@ func TestParseCSVRejectsInvalidData(t *testing.T) {
 	for _, tc := range []struct{ name, input string }{
 		{"empty", ""}, {"header only", csvHeader},
 		{"bad header", "inn,month,total\n"},
-		{"missing column", csvHeader + testINN + ",2026-09,1,0,0\n"},
-		{"other company", csvHeader + "7810969607,2026-09,1,0,0,0\n"},
-		{"mixed companies", csvHeader + testINN + ",2026-08,1,0,0,0\n7810969607,2026-09,1,0,0,0\n"},
-		{"bad month", csvHeader + testINN + ",2026-13,1,0,0,0\n"},
-		{"duplicate month", csvHeader + testINN + ",2026-09,1,0,0,0\n" + testINN + ",2026-09,2,0,0,0\n"},
-		{"negative amount", csvHeader + testINN + ",2026-09,-1,0,0,0\n"},
-		{"not a number", csvHeader + testINN + ",2026-09,NaN,0,0,0\n"},
-		{"fractional kopecks", csvHeader + testINN + ",2026-09,1.10,0,0,0\n"},
-		{"empty amount", csvHeader + testINN + ",2026-09,,0,0,0\n"},
-		{"overflow", csvHeader + testINN + ",2026-09,9223372036854775808,0,0,0\n"},
-		{"free cash overflow", csvHeader + testINN + ",2026-09,0,9223372036854775807,2,0\n"},
+		{"missing column", csvHeader + testINN + ",2026-09,1.00,0.00,0.00\n"},
+		{"other company", csvHeader + "7810969607,2026-09,1.00,0.00,0.00,0.00\n"},
+		{"mixed companies", csvHeader + testINN + ",2026-08,1.00,0.00,0.00,0.00\n7810969607,2026-09,1.00,0.00,0.00,0.00\n"},
+		{"bad month", csvHeader + testINN + ",2026-13,1.00,0.00,0.00,0.00\n"},
+		{"duplicate month", csvHeader + testINN + ",2026-09,1.00,0.00,0.00,0.00\n" + testINN + ",2026-09,2.00,0.00,0.00,0.00\n"},
+		{"negative amount", csvHeader + testINN + ",2026-09,-1.00,0.00,0.00,0.00\n"},
+		{"not a number", csvHeader + testINN + ",2026-09,NaN,0.00,0.00,0.00\n"},
+		{"wrong decimal places", csvHeader + testINN + ",2026-09,1.1,0.00,0.00,0.00\n"},
+		{"empty amount", csvHeader + testINN + ",2026-09,,0.00,0.00,0.00\n"},
+		{"overflow", csvHeader + testINN + ",2026-09,92233720368547758.08,0.00,0.00,0.00\n"},
+		{"free cash overflow", csvHeader + testINN + ",2026-09,0.00,92233720368547758.07,0.02,0.00\n"},
 		{"malformed quote", csvHeader + testINN + ",2026-09,\"1,0,0,0\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

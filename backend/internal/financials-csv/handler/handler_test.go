@@ -97,15 +97,15 @@ func TestUploadHTTP(t *testing.T) {
 		repoErr           error
 		status            int
 	}{
-		{"success", "file", csvHeader + testINN + ",2026-09,100,20,10,5\n", auth.RoleClient, nil, 200},
+		{"success", "file", csvHeader + testINN + ",2026-09,1.00,0.20,0.10,0.05\n", auth.RoleClient, nil, 200},
 		{"bad CSV", "file", "invalid", auth.RoleClient, nil, 400},
-		{"wrong INN", "file", csvHeader + "7810969607,2026-09,100,0,0,0\n", auth.RoleClient, nil, 400},
+		{"wrong INN", "file", csvHeader + "7810969607,2026-09,1.00,0.00,0.00,0.00\n", auth.RoleClient, nil, 400},
 		{"missing file", "", "", auth.RoleClient, nil, 400},
 		{"wrong field", "upload", "text", auth.RoleClient, nil, 400},
 		{"no token", "file", "text", "", nil, 401},
 		{"admin", "file", "text", auth.RoleAdmin, nil, 403},
 		{"not member", "file", "text", auth.RoleClient, companyerrors.ErrCompanyNotFound, 404},
-		{"database error", "file", csvHeader + testINN + ",2026-09,100,0,0,0\n", auth.RoleClient, errors.New("private database detail"), 500},
+		{"database error", "file", csvHeader + testINN + ",2026-09,1.00,0.00,0.00,0.00\n", auth.RoleClient, errors.New("private database detail"), 500},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &repoStub{member: d.Membership{Company: d.Company{ID: id, INN: testINN}}}
@@ -162,7 +162,7 @@ func TestUploadCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	r := &repoStub{member: d.Membership{Company: d.Company{INN: testINN}}}
-	_, err := financialscsvservice.New(r).Upload(ctx, uuid.New(), uuid.New(), strings.NewReader(csvHeader+testINN+",2026-09,100,0,0,0\n"))
+	_, err := financialscsvservice.New(r).Upload(ctx, uuid.New(), uuid.New(), strings.NewReader(csvHeader+testINN+",2026-09,1.00,0.00,0.00,0.00\n"))
 	if !errors.Is(err, context.Canceled) || len(r.saved) != 0 {
 		t.Fatalf("err=%v saved=%+v", err, r.saved)
 	}
@@ -170,7 +170,7 @@ func TestUploadCanceled(t *testing.T) {
 
 func TestUploadHTTPLimitsEntireBody(t *testing.T) {
 	r := &repoStub{member: d.Membership{Company: d.Company{INN: testINN}}}
-	req := multipartRequest(t, "/api/v0/companies/"+uuid.NewString()+"/financials", "file", csvHeader+testINN+",2026-09,100,0,0,0\n")
+	req := multipartRequest(t, "/api/v0/companies/"+uuid.NewString()+"/financials", "file", csvHeader+testINN+",2026-09,1.00,0.00,0.00,0.00\n")
 	req.Body = io.NopCloser(io.MultiReader(req.Body, strings.NewReader(strings.Repeat("x", 2*1024*1024))))
 	req.ContentLength = -1
 	rec := httptest.NewRecorder()

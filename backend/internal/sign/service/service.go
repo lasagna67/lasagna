@@ -311,10 +311,6 @@ func validateReview(r underwritingdomain.Review, req signdto.PrepareRequest, now
 	if o.Terms.CollateralRequired && (r.Collateral == nil || r.CollateralReview == nil || !r.CollateralReview.Current(*r.Collateral, now) || !collateraldomain.CollateralCovers(o.Terms.AmountKopecks, r.CollateralReview.AcceptedValueKopecks)) {
 		return ErrSourceRecheckRequired
 	}
-	// Для этих продуктов ещё нет сохранённых версий календарных проверок P14/P12.
-	if o.Terms.ProductCode == "overdraft" || o.Terms.ProductCode == "start" {
-		return ErrSourceRecheckRequired
-	}
 	return nil
 }
 

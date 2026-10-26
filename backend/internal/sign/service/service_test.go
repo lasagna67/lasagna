@@ -40,7 +40,8 @@ func TestPreSignReview(t *testing.T) {
 		}, ErrSourceRecheckRequired},
 		{"missing source", func(r *underwritingdomain.Review, c *signdto.PrepareRequest) { r.Checks.Registry.CheckedAt = nil }, ErrSourceRecheckRequired},
 		{"new source", func(r *underwritingdomain.Review, c *signdto.PrepareRequest) { r.Checks.Registry.CheckedAt = &now }, ErrSourceRecheckRequired},
-		{"overdraft", func(r *underwritingdomain.Review, c *signdto.PrepareRequest) { r.Offer.Terms.ProductCode = "overdraft" }, ErrSourceRecheckRequired},
+		{"overdraft allowed", func(r *underwritingdomain.Review, c *signdto.PrepareRequest) { r.Offer.Terms.ProductCode = "overdraft" }, nil},
+		{"start allowed", func(r *underwritingdomain.Review, c *signdto.PrepareRequest) { r.Offer.Terms.ProductCode = "start" }, nil},
 		{"inconsistent history", func(r *underwritingdomain.Review, c *signdto.PrepareRequest) {
 			r.Checks.CreditBureau.Snapshot = json.RawMessage(`{"status":"ok","inn":"7705005410","report_date":"2026-10-25","report":{"has_credit_history":true,"history_months":0,"loans":[]}}`)
 		}, ErrSourceRecheckRequired},
@@ -72,6 +73,7 @@ func reviewFixture(now time.Time) underwritingdomain.Review {
 		Registry:     underwritingdomain.RegistryCheck{SourceCheck: underwritingdomain.SourceCheck{Status: underwritingdomain.SourceOK, CheckedAt: &at}, INN: &inn, CompanyState: &state},
 		CreditBureau: underwritingdomain.CreditBureauCheck{SourceCheck: underwritingdomain.SourceCheck{Status: underwritingdomain.SourceOK, CheckedAt: &at, Snapshot: report}, HasCreditHistory: &history},
 		Financials:   underwritingdomain.FinancialsCheck{DataStatus: underwritingdomain.FinancialsReady},
+		Scoring:      underwritingdomain.ScoringCheck{Status: underwritingdomain.ScoringCompleted, CanPublish: true},
 	}}
 }
 

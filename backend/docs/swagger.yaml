@@ -1321,6 +1321,12 @@ definitions:
         example: 1
         type: integer
     type: object
+  offerdto.DeclineRequest:
+    properties:
+      expected_revision:
+        example: 7
+        type: integer
+    type: object
   offerdto.OfferResponse:
     properties:
       agreement_term_months:
@@ -2333,6 +2339,66 @@ paths:
       security:
       - BearerAuth: []
       summary: Договор к предложению
+      tags:
+      - applications
+  /applications/{id}/decline:
+    post:
+      consumes:
+      - application/json
+      description: Переводит заявку из approved или counter_offer в cancelled. Повтор
+        с тем же Idempotency-Key и expected_revision возвращает тот же результат.
+      parameters:
+      - description: Заявка
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ключ повтора, до 255 символов
+        in: header
+        name: Idempotency-Key
+        required: true
+        type: string
+      - description: Ожидаемая revision
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/offerdto.DeclineRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/applicationdto.ApplicationResponse'
+        "400":
+          description: INVALID_REQUEST
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "401":
+          description: UNAUTHENTICATED
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "403":
+          description: не клиент
+          schema:
+            $ref: '#/definitions/swagger.HTTPError'
+        "404":
+          description: NOT_FOUND
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "409":
+          description: REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+        "500":
+          description: INTERNAL_ERROR
+          schema:
+            $ref: '#/definitions/applicationdto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Отказаться от предложения
       tags:
       - applications
   /applications/{id}/financials:

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationdto "github.com/lasagna67/lasagna.git/internal/application/dto"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	authdomain "github.com/lasagna67/lasagna.git/internal/auth/domain"
@@ -17,6 +18,7 @@ import (
 
 type Service interface {
 	Offer(ctx context.Context, userID, applicationID uuid.UUID) (*offerdomain.Decision, error)
+	Decline(ctx context.Context, userID, applicationID uuid.UUID, expectedRevision int, idempotencyKey string) (applicationdomain.ApplicationDetails, error)
 }
 
 type Handler struct {
@@ -33,6 +35,7 @@ func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, clientOnly echo.
 	client := api.Group("/applications", authenticate, clientOnly)
 	client.GET("/:id/offer", h.offer)
 	client.GET("/:id/contract", h.contract)
+	client.POST("/:id/decline", h.decline)
 }
 
 // offer godoc
@@ -86,6 +89,41 @@ func (h *Handler) contract(c *echo.Context) error {
 	return c.JSON(http.StatusOK, offerdto.NewContract(offer.Contract))
 }
 
+// decline godoc
+//
+//	@Summary		Отказаться от предложения
+//	@Description	Переводит заявку из approved или counter_offer в cancelled. Повтор с тем же Idempotency-Key и expected_revision возвращает тот же результат.
+//	@Tags			applications
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id					path		string					true	"Заявка"	format(uuid)
+//	@Param			Idempotency-Key	header		string					true	"Ключ повтора, до 255 символов"
+//	@Param			request			body		offerdto.DeclineRequest	true	"Ожидаемая revision"
+//	@Success		200				{object}	applicationdto.ApplicationResponse
+//	@Failure		400				{object}	applicationdto.ErrorResponse	"INVALID_REQUEST"
+//	@Failure		401				{object}	applicationdto.ErrorResponse	"UNAUTHENTICATED"
+//	@Failure		403				{object}	swagger.HTTPError			"не клиент"
+//	@Failure		404				{object}	applicationdto.ErrorResponse	"NOT_FOUND"
+//	@Failure		409				{object}	applicationdto.ErrorResponse	"REVISION_CONFLICT, INVALID_STATE, IDEMPOTENCY_CONFLICT"
+//	@Failure		500				{object}	applicationdto.ErrorResponse	"INTERNAL_ERROR"
+//	@Router			/applications/{id}/decline [post]
+func (h *Handler) decline(c *echo.Context) error {
+	userID, id, err := clientTarget(c)
+	if err != nil {
+		return h.fail(c, err)
+	}
+	var req offerdto.DeclineRequest
+	if err = c.Bind(&req); err != nil || req.ExpectedRevision == nil {
+		return h.fail(c, &applicationerrors.RequestError{Message: "Передайте expected_revision"})
+	}
+	result, err := h.service.Decline(c.Request().Context(), userID, id, *req.ExpectedRevision, c.Request().Header.Get("Idempotency-Key"))
+	if err != nil {
+		return h.fail(c, err)
+	}
+	return c.JSON(http.StatusOK, applicationdto.NewApplicationResponse(result))
+}
+
 //============================================================================================
 
 var errUnauthenticated = errors.New("unauthenticated")
@@ -107,11 +145,23 @@ func clientTarget(c *echo.Context) (uuid.UUID, uuid.UUID, error) {
 // fail переводит ошибку сервиса в ответ общего формата. 5xx логируются,
 // клиенту уходит только общий текст.
 func (h *Handler) fail(c *echo.Context, err error) error {
+	var requestErr *applicationerrors.RequestError
+	var revisionErr *applicationerrors.RevisionConflictError
 	switch {
 	case errors.Is(err, errUnauthenticated):
 		return h.respond(c, http.StatusUnauthorized, "UNAUTHENTICATED", "Требуется авторизация")
+	case errors.As(err, &requestErr):
+		return h.respond(c, http.StatusBadRequest, "INVALID_REQUEST", requestErr.Message)
 	case errors.Is(err, applicationerrors.ErrNotFound):
 		return h.respond(c, http.StatusNotFound, "NOT_FOUND", "Заявка не найдена")
+	case errors.As(err, &revisionErr):
+		resp := applicationdto.NewErrorResponse("REVISION_CONFLICT", "Заявка уже изменилась", requestID(c), nil)
+		resp.Error.CurrentRevision = &revisionErr.Current
+		return c.JSON(http.StatusConflict, resp)
+	case errors.Is(err, applicationerrors.ErrInvalidState):
+		return h.respond(c, http.StatusConflict, "INVALID_STATE", "Отказ от предложения в текущем статусе недоступен")
+	case errors.Is(err, applicationerrors.ErrIdempotencyConflict):
+		return h.respond(c, http.StatusConflict, "IDEMPOTENCY_CONFLICT", "Idempotency-Key уже использован с другим запросом")
 	default:
 		h.logger.Error("offer request failed",
 			"err", err,

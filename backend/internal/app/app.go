@@ -34,7 +34,7 @@ func NewApp(cfg config.Config, logger *logger.Logger) (*App, error) {
 		return nil, err
 	}
 	delivery := NewDelivery(cfg, services, logger.Named("delivery"))
-	workers := NewWorkers(cfg, infra, services, logger.Named("workers"))
+	workers := NewWorkers(cfg, infra, repo, services, logger.Named("workers"))
 
 	return &App{
 		delivery:       delivery,
@@ -62,6 +62,8 @@ func (app *App) Run(ctx context.Context) error {
 
 	g.Go(func() error { return app.workers.RunRelay(ctx) })
 	g.Go(func() error { return app.workers.RunPipeline(ctx) })
+	g.Go(func() error { return app.workers.RunIssue(ctx) })
+	g.Go(func() error { return app.workers.RunExpiry(ctx) })
 
 	g.Go(func() error {
 		err := app.delivery.Start()

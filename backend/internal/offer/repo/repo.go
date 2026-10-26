@@ -5,6 +5,7 @@ package offerrepo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
+	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	applicationrepo "github.com/lasagna67/lasagna.git/internal/application/repo"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 )
@@ -40,6 +42,59 @@ func (r *Repo) Current(ctx context.Context, applicationID uuid.UUID) (*offerdoma
 		return nil, nil
 	}
 	return &decisions[0], nil
+}
+
+// Decline сохраняет отказ клиента и переход заявки в cancelled одной транзакцией.
+func (r *Repo) Decline(ctx context.Context, cmd applicationdomain.UpdateCommand) (bool, error) {
+	return applicationrepo.Update(ctx, r.pool, cmd, func(tx pgx.Tx, a *applicationdomain.Application) (applicationrepo.History, error) {
+		transition, err := a.Decline()
+		if err != nil {
+			return applicationrepo.History{}, err
+		}
+		result, err := tx.Exec(ctx, `UPDATE credit_decisions
+			SET client_response='declined',responded_at=clock_timestamp()
+			WHERE id=(SELECT id FROM credit_decisions WHERE application_id=$1 ORDER BY version DESC LIMIT 1)
+			AND outcome IN('approved','counter_offer') AND client_response IS NULL`, a.ID)
+		if err != nil {
+			return applicationrepo.History{}, fmt.Errorf("decline decision: %w", err)
+		}
+		if result.RowsAffected() != 1 {
+			return applicationrepo.History{}, applicationerrors.ErrInvalidState
+		}
+		return applicationrepo.History{Transitions: []applicationdomain.Transition{transition}}, nil
+	})
+}
+
+// ExpireNext завершает одно неподписанное предложение с наступившим valid_until.
+func (r *Repo) ExpireNext(ctx context.Context, now time.Time) (bool, error) {
+	var appID uuid.UUID
+	var revision int
+	var validUntil time.Time
+	err := r.pool.QueryRow(ctx, `SELECT a.id,a.revision,d.valid_until
+		FROM applications a
+		JOIN LATERAL (SELECT outcome,valid_until FROM credit_decisions WHERE application_id=a.id ORDER BY version DESC LIMIT 1) d ON true
+		WHERE a.status IN('approved','counter_offer') AND d.outcome IN('approved','counter_offer')
+		AND d.valid_until IS NOT NULL AND d.valid_until<=$1
+		ORDER BY d.valid_until,a.id LIMIT 1`, now).Scan(&appID, &revision, &validUntil)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("find expired offer: %w", err)
+	}
+
+	cmd := applicationdomain.UpdateCommand{ID: appID, ExpectedRevision: revision}
+	_, err = applicationrepo.Update(ctx, r.pool, cmd, func(_ pgx.Tx, a *applicationdomain.Application) (applicationrepo.History, error) {
+		transition, err := a.Expire(&validUntil, now)
+		if err != nil {
+			return applicationrepo.History{}, err
+		}
+		return applicationrepo.History{Transitions: []applicationdomain.Transition{transition}}, nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 //============================================================================================

@@ -44,7 +44,7 @@ func readyChecks() underwritingdomain.CheckSummary {
 		Registry:     underwritingdomain.RegistryCheck{SourceCheck: underwritingdomain.SourceCheck{Status: underwritingdomain.SourceOK}, INN: ptr(companyINN), CompanyState: ptr("active")},
 		CreditBureau: underwritingdomain.CreditBureauCheck{SourceCheck: underwritingdomain.SourceCheck{Status: underwritingdomain.SourceOK}, HasCreditHistory: ptr(true)},
 		Financials:   underwritingdomain.FinancialsCheck{DataStatus: underwritingdomain.FinancialsReady, SourceType: ptr("automatic"), Coverage: ptr("complete"), Rows: rows},
-		Scoring:      underwritingdomain.ScoringCheck{Status: underwritingdomain.ScoringNotConfigured},
+		Scoring:      underwritingdomain.ScoringCheck{Status: underwritingdomain.ScoringCompleted, CanPublish: true},
 	}
 }
 

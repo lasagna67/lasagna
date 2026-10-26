@@ -7,6 +7,10 @@ import (
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
 )
 
+type DeclineRequest struct {
+	ExpectedRevision *int `json:"expected_revision" example:"7"`
+}
+
 // OfferResponse — окончательное предложение. У овердрафта term_months и
 // monthly_payment_kopecks — null, заданы agreement_term_months и max_tranche_days.
 type OfferResponse struct {

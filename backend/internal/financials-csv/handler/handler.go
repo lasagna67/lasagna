@@ -31,13 +31,13 @@ func (h *Handler) RegisterRoutes(api *echo.Group, authenticate, clientOnly echo.
 
 // upload принимает и проверяет CSV целиком, затем сохраняет финансовый отчёт.
 // @Summary Загрузка финансовой отчётности из CSV
-// @Description Только для client, состоящего в компании. Передайте один CSV в поле file. Максимальный размер всего multipart-запроса — 2 МиБ. Заголовок: inn,month,income,expenses,taxes,owner_withdrawals. Все суммы — неотрицательные целые копейки, месяц — YYYY-MM. ИНН каждой строки должен совпадать с компанией, месяцы не должны повторяться. free_cash = income - expenses - taxes - owner_withdrawals. Файл проверяется полностью до записи. Загрузка заменяет сохранённый финансовый отчёт компании; реестр и БКИ сохраняются. Ответ содержит сохранённый отчёт, месяцы отсортированы. Повторная загрузка не создаёт отдельную строку overview.
+// @Description Только для client, состоящего в компании. Передайте один CSV в поле file. Максимальный размер всего multipart-запроса — 2 МиБ. Заголовок: inn,month,income,expenses,taxes,owner_withdrawals. Все суммы — неотрицательные рубли с двумя знаками после точки, месяц — YYYY-MM. ИНН каждой строки должен совпадать с компанией, месяцы не должны повторяться. free_cash = income - expenses - taxes - owner_withdrawals. Файл проверяется полностью до записи. Загрузка заменяет сохранённый финансовый отчёт компании; реестр и БКИ сохраняются. Ответ содержит сохранённый отчёт, месяцы отсортированы. Повторная загрузка не создаёт отдельную строку overview.
 // @Tags companies
 // @Accept multipart/form-data
 // @Produce json
 // @Security BearerAuth
 // @Param id path string true "ID компании" format(uuid)
-// @Param file formData file true "CSV в UTF-8 с разделителем запятая; суммы в копейках"
+// @Param file formData file true "CSV в UTF-8 с разделителем запятая; суммы в рублях с двумя знаками после точки"
 // @Success 200 {object} companydomain.FinancialReport
 // @Failure 400 {object} swagger.HTTPError "Некорректный CSV, ИНН, ID компании или отсутствие файла"
 // @Failure 401 {object} swagger.HTTPError

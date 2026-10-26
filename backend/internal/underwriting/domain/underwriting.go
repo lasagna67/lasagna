@@ -299,8 +299,6 @@ type CheckSummary struct {
 }
 
 // Blockers — что мешает положительному решению по продукту productCode.
-// Скоринг не блокирует: без настроенной модели решает сотрудник. reorganizing
-// тоже не блокирует — это повод для ручного рассмотрения, а не отказа.
 func (c CheckSummary) Blockers(productCode, companyINN string) []applicationerrors.FieldError {
 	var errs []applicationerrors.FieldError
 	reg := c.Registry
@@ -309,8 +307,12 @@ func (c CheckSummary) Blockers(productCode, companyINN string) []applicationerro
 		errs = append(errs, applicationerrors.FieldError{Field: "checks.registry", Code: "CHECK_NOT_READY", Message: "Нет ответа реестра — повторите проверку"})
 	case reg.INN == nil || *reg.INN != companyINN:
 		errs = append(errs, applicationerrors.FieldError{Field: "checks.registry", Code: "INN_MISMATCH", Message: "ИНН в ответе реестра не совпадает с ИНН компании"})
+	case reg.CompanyState == nil:
+		errs = append(errs, applicationerrors.FieldError{Field: "checks.registry", Code: "CHECK_NOT_READY", Message: "В ответе реестра нет статуса компании"})
 	case reg.CompanyState != nil && *reg.CompanyState == "terminated":
 		errs = append(errs, applicationerrors.FieldError{Field: "checks.registry", Code: "BUSINESS_TERMINATED", Message: "Деятельность компании прекращена"})
+	case *reg.CompanyState != "active":
+		errs = append(errs, applicationerrors.FieldError{Field: "checks.registry", Code: "BUSINESS_REORGANIZING", Message: "Положительное решение недоступно до завершения реорганизации"})
 	}
 	if c.CreditBureau.Status != SourceOK {
 		errs = append(errs, applicationerrors.FieldError{Field: "checks.credit_bureau", Code: "CHECK_NOT_READY", Message: "Нет отчёта БКИ — повторите проверку"})
@@ -324,6 +326,15 @@ func (c CheckSummary) Blockers(productCode, companyINN string) []applicationerro
 		}
 	default:
 		errs = append(errs, applicationerrors.FieldError{Field: "financials", Code: "DATA_MISSING", Message: "Нет принятых финансовых данных"})
+	}
+	if c.Scoring.Status != ScoringCompleted {
+		errs = append(errs, applicationerrors.FieldError{Field: "checks.scoring", Code: "CHECK_NOT_READY", Message: "Скоринг не завершён — запустите пересчёт"})
+	} else if !c.Scoring.CanPublish {
+		message := "Скоринг блокирует положительное решение"
+		if len(c.Scoring.PositiveBlockers) > 0 {
+			message += ": " + strings.Join(c.Scoring.PositiveBlockers, ", ")
+		}
+		errs = append(errs, applicationerrors.FieldError{Field: "checks.scoring", Code: "POSITIVE_DECISION_BLOCKED", Message: message})
 	}
 	return errs
 }

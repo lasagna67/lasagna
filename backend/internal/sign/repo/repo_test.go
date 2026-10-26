@@ -141,6 +141,26 @@ func TestContractAcceptAtomicAndIdempotent(t *testing.T) {
 	if revision != 13 || status != "signing" || jobs != 1 || history != 1 || response != "accepted" {
 		t.Fatalf("partial or repeated effects: revision=%d status=%s jobs=%d history=%d response=%s", revision, status, jobs, history, response)
 	}
+	processed, err := r.CompletePendingIssue(ctx)
+	if err != nil || !processed {
+		t.Fatalf("complete issue: processed=%v err=%v", processed, err)
+	}
+	var jobStatus string
+	if err = r.pool.QueryRow(ctx, `SELECT revision,status FROM applications WHERE id=$1`, c.ApplicationID).Scan(&revision, &status); err != nil {
+		t.Fatal(err)
+	}
+	if err = r.pool.QueryRow(ctx, `SELECT status FROM application_issue_jobs WHERE application_id=$1`, c.ApplicationID).Scan(&jobStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err = r.pool.QueryRow(ctx, `SELECT count(*) FROM application_status_history WHERE application_id=$1 AND to_status='issued'`, c.ApplicationID).Scan(&history); err != nil {
+		t.Fatal(err)
+	}
+	if revision != 14 || status != "issued" || jobStatus != "completed" || history != 1 {
+		t.Fatalf("issue not completed: revision=%d status=%s job=%s history=%d", revision, status, jobStatus, history)
+	}
+	if processed, err = r.CompletePendingIssue(ctx); err != nil || processed {
+		t.Fatalf("completed issue processed again: processed=%v err=%v", processed, err)
+	}
 	key.RequestHash = strings.Repeat("c", 64)
 	if _, err = r.Replay(ctx, key); !errors.Is(err, applicationerrors.ErrIdempotencyConflict) {
 		t.Fatalf("body conflict: %v", err)

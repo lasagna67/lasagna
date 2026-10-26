@@ -36,7 +36,7 @@ func (r *repoStub) SaveOverview(_ context.Context, o d.Overview) error {
 func TestUpload(t *testing.T) {
 	id, user := uuid.New(), uuid.New()
 	r := &repoStub{member: d.Membership{Company: d.Company{ID: id, INN: testINN}}}
-	got, err := New(r).Upload(context.Background(), id, user, strings.NewReader(csvHeader+testINN+",2026-09,100,20,10,5\n"))
+	got, err := New(r).Upload(context.Background(), id, user, strings.NewReader(csvHeader+testINN+",2026-09,1.00,0.20,0.10,0.05\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,8 +60,8 @@ func TestUploadErrors(t *testing.T) {
 		want                   error
 	}{
 		{"not member", companyerrors.ErrCompanyNotFound, nil, "invalid CSV", companyerrors.ErrCompanyNotFound},
-		{"invalid CSV", nil, nil, csvHeader + testINN + ",2026-09,100,0,0,0\nwrong,2026-10,1,0,0,0\n", nil},
-		{"save failure", nil, want, csvHeader + testINN + ",2026-09,100,0,0,0\n", want},
+		{"invalid CSV", nil, nil, csvHeader + testINN + ",2026-09,1.00,0.00,0.00,0.00\nwrong,2026-10,1.00,0.00,0.00,0.00\n", nil},
+		{"save failure", nil, want, csvHeader + testINN + ",2026-09,1.00,0.00,0.00,0.00\n", want},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &repoStub{member: d.Membership{Company: d.Company{INN: testINN}}, membershipErr: tc.membershipErr, saveErr: tc.saveErr}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
+	applicationdomain "github.com/lasagna67/lasagna.git/internal/application/domain"
 	applicationerrors "github.com/lasagna67/lasagna.git/internal/application/errors"
 	authdomain "github.com/lasagna67/lasagna.git/internal/auth/domain"
 	offerdomain "github.com/lasagna67/lasagna.git/internal/offer/domain"
@@ -26,12 +27,22 @@ var (
 )
 
 type fakeService struct {
-	offer *offerdomain.Decision
-	err   error
+	offer       *offerdomain.Decision
+	err         error
+	declined    applicationdomain.ApplicationDetails
+	declineUser uuid.UUID
+	declineApp  uuid.UUID
+	declineRev  int
+	declineKey  string
 }
 
 func (f *fakeService) Offer(context.Context, uuid.UUID, uuid.UUID) (*offerdomain.Decision, error) {
 	return f.offer, f.err
+}
+
+func (f *fakeService) Decline(_ context.Context, userID, applicationID uuid.UUID, expectedRevision int, key string) (applicationdomain.ApplicationDetails, error) {
+	f.declineUser, f.declineApp, f.declineRev, f.declineKey = userID, applicationID, expectedRevision, key
+	return f.declined, f.err
 }
 
 // newTestServer подменяет middleware модуля auth: запрос идёт от caller.
@@ -59,6 +70,15 @@ func newTestServer(caller *authdomain.Claims, svc *fakeService) *echo.Echo {
 func get(e *echo.Echo, path string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v0"+path, nil))
+	return rec
+}
+
+func post(e *echo.Echo, path, body string) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0"+path, strings.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Set("Idempotency-Key", "decline-1")
+	e.ServeHTTP(rec, req)
 	return rec
 }
 
@@ -99,6 +119,20 @@ func TestOfferAndContract(t *testing.T) {
 	rec = get(e, "/applications/"+appID.String()+"/contract")
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || got["id"] != docID.String() || got["file_name"] != "contract-1000-v2.pdf" {
 		t.Errorf("contract = %d %s", rec.Code, rec.Body)
+	}
+}
+
+func TestDecline(t *testing.T) {
+	svc := &fakeService{declined: applicationdomain.ApplicationDetails{Application: applicationdomain.Application{
+		ID: appID, Revision: 8, Status: applicationdomain.StatusCancelled,
+	}}}
+	rec := post(newTestServer(client, svc), "/applications/"+appID.String()+"/decline", `{"expected_revision":7}`)
+	if rec.Code != http.StatusOK || svc.declineUser != client.UserID || svc.declineApp != appID || svc.declineRev != 7 || svc.declineKey != "decline-1" {
+		t.Fatalf("decline = %d %s, call user=%s app=%s revision=%d key=%s", rec.Code, rec.Body, svc.declineUser, svc.declineApp, svc.declineRev, svc.declineKey)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || got["status"] != "cancelled" || got["revision"] != float64(8) {
+		t.Fatalf("decline response = %s, err=%v", rec.Body, err)
 	}
 }
 

@@ -216,3 +216,42 @@ func (r *Repo) Accept(ctx context.Context, c signdto.Context, signature string, 
 		return applicationrepo.History{Transitions: []applicationdomain.Transition{transition}}, nil
 	})
 }
+
+// CompletePendingIssue завершает одну ожидающую задачу выдачи и переводит
+// связанную заявку из signing в issued в той же транзакции.
+func (r *Repo) CompletePendingIssue(ctx context.Context) (bool, error) {
+	var appID uuid.UUID
+	var revision int
+	err := r.pool.QueryRow(ctx, `SELECT j.application_id,a.revision
+		FROM application_issue_jobs j JOIN applications a ON a.id=j.application_id
+		WHERE j.status='pending' ORDER BY j.created_at,j.application_id LIMIT 1`).Scan(&appID, &revision)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("find pending issue: %w", err)
+	}
+
+	cmd := applicationdomain.UpdateCommand{ID: appID, ExpectedRevision: revision}
+	_, err = applicationrepo.Update(ctx, r.pool, cmd, func(tx pgx.Tx, a *applicationdomain.Application) (applicationrepo.History, error) {
+		var status string
+		if err := tx.QueryRow(ctx, `SELECT status FROM application_issue_jobs WHERE application_id=$1 FOR UPDATE`, appID).Scan(&status); err != nil {
+			return applicationrepo.History{}, err
+		}
+		if status != "pending" {
+			return applicationrepo.History{}, fmt.Errorf("issue job is %s", status)
+		}
+		transition, err := a.Issue()
+		if err != nil {
+			return applicationrepo.History{}, err
+		}
+		if _, err = tx.Exec(ctx, `UPDATE application_issue_jobs SET status='completed' WHERE application_id=$1`, appID); err != nil {
+			return applicationrepo.History{}, err
+		}
+		return applicationrepo.History{Transitions: []applicationdomain.Transition{transition}}, nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}

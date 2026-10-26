@@ -32,7 +32,7 @@ func readyChecks() CheckSummary {
 		Registry:     RegistryCheck{SourceCheck: SourceCheck{Status: SourceOK}, INN: ptr(companyINN), CompanyState: ptr("active")},
 		CreditBureau: CreditBureauCheck{SourceCheck: SourceCheck{Status: SourceOK}, HasCreditHistory: ptr(false)},
 		Financials:   FinancialsCheck{DataStatus: FinancialsReady},
-		Scoring:      ScoringCheck{Status: ScoringNotConfigured},
+		Scoring:      ScoringCheck{Status: ScoringCompleted, CanPublish: true},
 	}
 }
 
@@ -203,12 +203,17 @@ func TestDecideBlockedByChecks(t *testing.T) {
 	}{
 		{"реестр недоступен", func(c *CheckSummary) { c.Registry.Status = SourceUnavailable }, []string{"checks.registry:CHECK_NOT_READY"}},
 		{"ИНН реестра не совпал", func(c *CheckSummary) { c.Registry.INN = ptr("7810969607") }, []string{"checks.registry:INN_MISMATCH"}},
+		{"нет статуса компании", func(c *CheckSummary) { c.Registry.CompanyState = nil }, []string{"checks.registry:CHECK_NOT_READY"}},
 		{"деятельность прекращена", func(c *CheckSummary) { c.Registry.CompanyState = ptr("terminated") }, []string{"checks.registry:BUSINESS_TERMINATED"}},
 		{"нет отчёта БКИ", func(c *CheckSummary) { c.CreditBureau.Status = SourceNotFound }, []string{"checks.credit_bureau:CHECK_NOT_READY"}},
 		{"нет финансовых данных", func(c *CheckSummary) { c.Financials.DataStatus = FinancialsMissing }, []string{"financials:DATA_MISSING"}},
 		{"без истории не start", func(c *CheckSummary) { c.Financials.DataStatus = FinancialsNoHistory }, []string{"financials:HISTORY_REQUIRED"}},
-		{"реорганизация не блокирует", func(c *CheckSummary) { c.Registry.CompanyState = ptr("reorganizing") }, nil},
-		{"скоринг упал — решает сотрудник", func(c *CheckSummary) { c.Scoring.Status = ScoringFailed }, nil},
+		{"реорганизация блокирует", func(c *CheckSummary) { c.Registry.CompanyState = ptr("reorganizing") }, []string{"checks.registry:BUSINESS_REORGANIZING"}},
+		{"скоринг не завершён", func(c *CheckSummary) { c.Scoring.Status = ScoringFailed }, []string{"checks.scoring:CHECK_NOT_READY"}},
+		{"скоринг запрещает положительное решение", func(c *CheckSummary) {
+			c.Scoring.CanPublish = false
+			c.Scoring.PositiveBlockers = []string{"score_below_600"}
+		}, []string{"checks.scoring:POSITIVE_DECISION_BLOCKED"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
