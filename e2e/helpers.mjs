@@ -138,19 +138,35 @@ export async function staffPost(id, staffToken, action, body = {}) {
 }
 
 // Полный цикл подписи клиентом: контекст → esign-mock → подпись в банк.
+// При OFFER_CHANGED (разовая гонка при параллельной нагрузке) обновляем
+// offer/contract/revision и повторяем один раз — как это делает UI.
 export async function signLoan(client, id, { revision, offerId, documentId }) {
-  const ctx = await reqOk(`/applications/${id}/signing-context`, {
-    method: "POST",
-    token: client,
-    body: { expected_revision: revision, offer_id: offerId, document_id: documentId },
-  });
-  const signed = await esignSign(ctx.certificate_serial, ctx.data);
-  return reqOk(`/applications/${id}/sign`, {
-    method: "POST",
-    token: client,
-    idempotencyKey: idem(),
-    body: { context_id: ctx.context_id, signature: signed.signature, terms_accepted: true },
-  });
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      const ctx = await reqOk(`/applications/${id}/signing-context`, {
+        method: "POST",
+        token: client,
+        body: { expected_revision: revision, offer_id: offerId, document_id: documentId },
+      });
+      const signed = await esignSign(ctx.certificate_serial, ctx.data);
+      return await reqOk(`/applications/${id}/sign`, {
+        method: "POST",
+        token: client,
+        idempotencyKey: idem(),
+        body: { context_id: ctx.context_id, signature: signed.signature, terms_accepted: true },
+      });
+    } catch (e) {
+      if (attempt > 0 || !String(e.message).includes("OFFER_CHANGED")) throw e;
+      const [app, offer, contract] = await Promise.all([
+        reqOk(`/applications/${id}`, { token: client }),
+        reqOk(`/applications/${id}/offer`, { token: client }),
+        reqOk(`/applications/${id}/contract`, { token: client }),
+      ]);
+      revision = app.revision;
+      offerId = offer.id;
+      documentId = contract.id;
+    }
+  }
 }
 
 // N месяцев подряд начиная с "YYYY-MM" — для прогноза денежного плана.
